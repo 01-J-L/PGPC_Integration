@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Faculty System</title>
+    
+    <!-- Prevents Flash of Unstyled Content (FOUC) -->
+    <script>
+        if (localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class', 
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4f46e5',
+                        secondary: '#8b5cf6'
+                    },
+                    borderRadius: {
+                        'none': '0px', 'sm': '4px', DEFAULT: '8px', 'md': '12px', 'lg': '16px', 'xl': '24px', '2xl': '32px', 'full': '9999px'
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.min.css">
+    
+    <!-- Custom Styles -->
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+        }
+        .logo-title {
+            font-family: 'Poppins', sans-serif;
+            font-weight: 600;
+        }
+        /* FIX: Simple fade animation to hide layout glitches on load */
+        .fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+            opacity: 0; /* Start invisible */
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    </style>
+
+    <!-- Alpine.js for interactivity -->
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+</head>
+
+<body 
+    class="bg-slate-50 dark:bg-slate-900 dark:bg-[radial-gradient(circle_at_top,_#222a45,_#111827)] text-slate-800 dark:text-slate-300 min-h-screen" 
+    x-data="{ 
+        isSidebarOpen: false,
+        theme: localStorage.getItem('color-theme') || 'light',
+        toggleTheme() {
+            this.theme = this.theme === 'light' ? 'dark' : 'light';
+            localStorage.setItem('color-theme', this.theme);
+            document.documentElement.classList.toggle('dark', this.theme === 'dark');
+        },
+        init() {
+            this.theme = localStorage.getItem('color-theme') ? localStorage.getItem('color-theme') : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        }
+    }"
+    x-init="init()">
+
+    <div class="flex">
+        <!-- Sidebar Overlay (for mobile) -->
+        <div x-show="isSidebarOpen" @click="isSidebarOpen = false" class="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden"></div>
+
+        <!-- Base Sidebar Structure (shared between roles) -->
+        {% macro sidebar_base(role_class="") %}
+            <!-- 
+               FIX: Added 'contain: layout paint;' to isolate rendering layers.
+               Removed shadow to prevent bleed.
+            -->
+            <aside 
+                class="w-64 h-[calc(100vh-2rem)] fixed top-4 left-4 flex flex-col
+                       bg-white/70 dark:bg-slate-900/90 backdrop-blur-2xl 
+                       border-r border-y border-l border-slate-200/80 dark:border-white/10
+                       rounded-xl
+                       transform -translate-x-full md:translate-x-0 
+                       transition-transform duration-300 md:transition-none 
+                       z-50 overflow-x-hidden {{ role_class }}"
+                style="contain: layout paint;"
+                :class="{'translate-x-0': isSidebarOpen}">
+                
+                {{ caller() }}
+            </aside>
+        {% endmacro %}
+
+        <!-- Navigation Link Macro -->
+        {% macro nav_link(endpoint, icon, text) %}
+            {% set is_active = request.endpoint.startswith(endpoint.split('.')[0] + '.' + endpoint.split('.')[1]) %}
+            {% set show_badge = (text == 'Notifications' and unread_notif_count > 0) %}
+            
+             <a href="{{ url_for(endpoint) }}" 
+               class="relative flex items-center px-6 py-3 mx-3 my-1 rounded-lg transition-colors duration-200
+                      text-slate-600 dark:text-slate-300 
+                      hover:bg-black/5 dark:hover:bg-white/10
+                      {{ 'nav-link-active' if is_active else '' }}">
+                
+                {% if is_active %}
+                <span class="absolute inset-y-2 left-0 w-1 bg-indigo-500 rounded-r-full"></span>
+                {% endif %}
+                
+                <div class="relative mr-4">
+                    <i class="{{ icon }} text-lg w-5 text-center"></i>
+                    <!-- RED BADGE -->
+                    {% if show_badge %}
+                    <span class="absolute -top-1 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-white dark:ring-slate-900">
+                        {{ unread_notif_count if unread_notif_count < 9 else '9+' }}
+                    </span>
+                    {% endif %}
+                </div>
+                
+                <span class="font-medium {{ 'text-indigo-600 dark:text-white' if is_active else '' }}">{{ text }}</span>
+            </a>
+        {% endmacro %}
+
+        <!-- DEAN'S SIDEBAR -->
+        {% if current_user.role|lower == 'dean' %}
+            {% call sidebar_base() %}
+                <div class="sidebar-header p-6 flex items-center space-x-3">
+                    <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Logo" class="h-8 w-8 rounded-full">
+                    <h1 class="text-xl logo-title text-primary dark:text-indigo-400">Faculty System</h1>
+                </div>
+                <nav class="flex-grow overflow-y-auto">
+                    <div class="px-6 py-2 text-xs uppercase text-slate-400 dark:text-slate-500 font-semibold">Main Menu</div>
+                    {{ nav_link('faculty_main.dashboard', 'ri-dashboard-line', 'Dashboard') }}
+                    {{ nav_link('faculty_main.user_management', 'ri-group-line', 'User Management') }}
+                    {{ nav_link('faculty_main.scheduling', 'ri-calendar-todo-line', 'Scheduling') }}
+                    {{ nav_link('faculty_main.manage_section_schedule_hub', 'ri-group-2-line', 'Section Schedule') }}
+                    {{ nav_link('faculty_main.room_schedule', 'ri-building-line', 'Room Utilization') }}
+                    {{ nav_link('faculty_main.view_notifications', 'ri-notification-3-line', 'Notifications') }}
+                    
+                    <div class="px-6 py-2 mt-4 text-xs uppercase text-slate-400 dark:text-slate-500 font-semibold">Administration</div>
+                    {{ nav_link('faculty_main.pending_approvals', 'ri-user-add-line', 'Pending Approvals') }}
+                    {{ nav_link('faculty_main.manage_programs', 'ri-book-2-line', 'Manage Programs') }}
+                    {{ nav_link('faculty_main.manage_rooms', 'ri-building-4-line', 'Manage Rooms') }}
+                    {{ nav_link('faculty_main.absence_reports_list', 'ri-user-unfollow-line', 'Absence Reports') }}
+                    {{ nav_link('faculty_main.system_settings', 'ri-settings-3-line', 'System Settings') }}
+                    {{ nav_link('faculty_main.analytics', 'ri-bar-chart-2-line', 'Analytics') }}
+                    {{ nav_link('faculty_main.school_year_analytics', 'ri-calendar-event-line', 'S.Y. Analytics') }}
+                </nav>
+            {% endcall %}
+        
+        <!-- FACULTY SIDEBAR -->
+        {% else %}
+            {% call sidebar_base(role_class="faculty-sidebar") %}
+                <div class="flex flex-col items-center text-center p-6">
+                    <div class="w-24 h-24 rounded-full bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center mb-4 ring-4 ring-white/80 dark:ring-slate-800/50 backdrop-blur-sm">
+                        <i class="ri-user-line text-5xl text-slate-400 dark:text-slate-500"></i>
+                    </div>
+                    <h2 class="text-lg font-semibold text-slate-800 dark:text-white">{{ current_user.full_name }}</h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 truncate w-full">{{ current_user.email }}</p>
+                </div>
+                <nav class="flex-grow mt-2">
+                    <div class="px-6 py-2 text-xs uppercase text-slate-400 dark:text-slate-500 font-semibold">Main Menu</div>
+                    {{ nav_link('faculty_main.dashboard', 'ri-dashboard-line', 'Dashboard') }}
+                    {{ nav_link('faculty_main.my_schedule', 'ri-calendar-check-line', 'My Schedule') }}
+                    {{ nav_link('faculty_main.my_analytics', 'ri-line-chart-line', 'My Analytics') }}
+                    {{ nav_link('faculty_main.my_salary', 'ri-money-dollar-circle-line', 'My Salary') }}
+                    {{ nav_link('faculty_main.view_notifications', 'ri-notification-3-line', 'Notifications') }}
+                </nav>
+                <div class="p-4 mt-auto">
+                    <a href="{{ url_for('faculty_auth.logout') }}" class="flex items-center w-full px-4 py-2 text-sm rounded-lg text-slate-600 dark:text-slate-300 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:bg-rose-500/20 dark:hover:text-rose-400 transition-colors duration-200">
+                        <i class="ri-logout-box-line mr-3"></i>Logout
+                    </a>
+                </div>
+            {% endcall %}
+        {% endif %}
+
+        <!-- Main Content Area -->
+        <!-- FIX: Added 'fade-in' to smooth out the initial rendering glitches -->
+        <div class="flex-1 md:pl-72 fade-in">
+            <header class="h-20 flex items-center justify-between px-6 sticky top-4 z-20">
+                <!-- Mobile Menu Button -->
+                <button @click="isSidebarOpen = true" class="md:hidden text-slate-600 dark:text-slate-300 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10">
+                    <i class="ri-menu-line text-2xl"></i>
+                </button>
+                <div class="flex-1"></div>
+
+                <!-- Header Actions -->
+                <div class="flex items-center space-x-2 p-2 rounded-full bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-slate-200/80 dark:border-white/10">
+                    <button @click="toggleTheme()" class="w-10 h-10 flex items-center justify-center rounded-full text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+                        <i class="ri-sun-line text-xl" x-show="theme === 'light'" style="display:none;"></i>
+                        <i class="ri-moon-line text-xl" x-show="theme === 'dark'" style="display:none;"></i>
+                    </button>
+
+                    {% if current_user.role|lower == 'dean' %}
+                        <div class="relative" x-data="{ isOpen: false }">
+                            <button @click="isOpen = !isOpen" class="flex items-center space-x-2 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10">
+                                <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center"><i class="ri-user-line text-slate-600 dark:text-slate-400"></i></div>
+                                <div class="hidden sm:block text-sm font-medium text-slate-700 dark:text-slate-300 pr-2">Hi, {{ current_user.full_name.split(' ')[0] }}!</div>
+                            </button>
+                            <div x-show="isOpen" @click.away="isOpen = false" class="absolute right-0 mt-2 w-48 bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg border border-slate-200 dark:border-white/10 rounded-lg shadow-xl py-1 z-50" style="display: none;">
+                                <a href="{{ url_for('faculty_auth.logout') }}" class="flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20">
+                                    <i class="ri-logout-box-line mr-2"></i>Logout
+                                </a>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </header>
+            
+            <main class="p-6">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div x-data="{ show: true }" x-init="setTimeout(() => show = false, 5000)" x-show="show" x-transition:leave="transition ease-in duration-300" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="mb-4 space-y-2">
+                            {% for category, message in messages %}
+                                <div class="
+                                    {% if category == 'success' %} bg-green-100 border-green-400 text-green-700 dark:bg-green-900/50 dark:border-green-700 dark:text-green-300
+                                    {% elif category == 'error' %} bg-red-100 border-red-400 text-red-700 dark:bg-red-900/50 dark:border-red-700 dark:text-red-300
+                                    {% elif category == 'info' %} bg-blue-100 border-blue-400 text-blue-700 dark:bg-blue-900/50 dark:border-blue-700 dark:text-blue-300
+                                    {% elif category == 'warning' %} bg-yellow-100 border-yellow-400 text-yellow-700 dark:bg-yellow-900/50 dark:border-yellow-700 dark:text-yellow-300
+                                    {% else %} bg-slate-100 border-slate-400 text-slate-700 dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-300
+                                    {% endif %}
+                                    border px-4 py-3 rounded-md relative shadow" role="alert">
+                                    <span class="block sm:inline">{{ message }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+                
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,31 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">Request a Substitution</h1>
+        <p class="text-gray-600 dark:text-gray-400 mt-1">Select one of your classes scheduled for today to find a substitute.</p>
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+        <div class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for class in todays_classes %}
+            <div class="p-4 flex justify-between items-center hover:bg-gray-50 dark:hover:bg-slate-700/50">
+                <div>
+                    <p class="font-semibold text-primary dark:text-indigo-400">{{ class.time_start.strftime('%I:%M %p') }} - {{ class.time_end.strftime('%I:%M %p') }}</p>
+                    <p class="font-medium text-gray-800 dark:text-white mt-1">{{ class.course_code }} - {{ class.section }}</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ class.course_description }}</p>
+                </div>
+                <a href="{{ url_for('faculty_main.create_substitution_request', teaching_load_id=class.id) }}" class="bg-primary text-white font-medium py-2 px-4 rounded-button text-sm hover:bg-primary/90 transition-colors">
+                    Find Sub
+                </a>
+            </div>
+            {% else %}
+            <div class="p-8 text-center text-gray-500 dark:text-gray-400">
+                <p>You have no classes scheduled for today.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

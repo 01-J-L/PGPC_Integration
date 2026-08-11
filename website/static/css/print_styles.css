@@ -1,0 +1,101 @@
+/* app/static/css/print_styles.css */
+
+body {
+    font-family: 'Arial', sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+.print-container {
+    width: 100%;
+    margin: 0 auto;
+}
+
+.college-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.college-header h1 {
+    font-size: 14px;
+    font-weight: bold;
+    margin: 0;
+}
+
+/* This is the container for each faculty's name and table */
+.faculty-block {
+    margin-bottom: 25px; /* Adds space between faculty schedules */
+    page-break-inside: avoid; /* Tries to keep a faculty's table from splitting across pages */
+}
+
+.faculty-name {
+    font-size: 11px;
+    font-weight: normal;
+    margin-bottom: 3px;
+}
+
+.schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 2px solid black;
+}
+
+.schedule-table th,
+.schedule-table td {
+    border: 1px solid black;
+    padding: 2px 4px;
+    text-align: center;
+    vertical-align: top; /* Align content to the top of the cell */
+    height: 40px; /* Reduced height for a more compact look */
+}
+
+.schedule-table th {
+    font-weight: normal;
+    font-size: 10px;
+}
+
+.time-col {
+    width: 18%; /* Adjusted width for the time column */
+}
+
+.time-cell {
+    font-size: 9px;
+    text-align: center;
+    vertical-align: middle;
+    padding: 2px;
+}
+
+.schedule-entry {
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+.non-standard-time {
+    font-size: 9px;
+    font-weight: normal;
+    margin-top: 2px;
+}
+
+/* --- CRITICAL PRINT-SPECIFIC STYLES --- */
+@page {
+    size: letter portrait; /* Changed from landscape to portrait */
+    margin: 0.75in;
+}
+
+@media print {
+    body {
+        background-color: #fff;
+    }
+    .faculty-block:last-child {
+        margin-bottom: 0;
+    }
+}
+
+/* Hides the print layout when viewing on screen */
+@media screen {
+    .print-container {
+        max-width: 800px;
+        padding: 20px;
+        background-color: #f0f2f5;
+    }
+}

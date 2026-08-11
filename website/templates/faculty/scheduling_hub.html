@@ -1,0 +1,70 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+        <h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">Faculty Scheduling</h1>
+        <a href="{{ url_for('faculty_main.print_all_schedules', department=selected_department) }}" target="_blank" class="bg-indigo-600 text-white font-medium py-2 px-5 rounded-lg text-sm hover:bg-indigo-500 transition-colors flex items-center">
+            <i class="ri-printer-line mr-2"></i>Print All Schedules
+        </a>
+    </div>
+
+    <div class="relative z-10 bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 rounded-xl shadow-lg p-4 mb-6">
+        <form method="GET" action="{{ url_for('faculty_main.scheduling') }}" class="flex items-end flex-wrap gap-4">
+            
+            <!-- Custom Dropdown for Department Filter -->
+            <div>
+                <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Filter by Department</label>
+                {% set selected_dept = namespace(value=request.args.get('department', ''), label='All Departments') %}
+                {% for value, label in filter_form.department.choices %}
+                    {% if value == selected_dept.value %}{% set selected_dept.label = label %}{% endif %}
+                {% endfor %}
+                <div x-data="{ open: false, selectedValue: '{{ selected_dept.value }}', selectedLabel: '{{ selected_dept.label }}' }" class="relative w-64">
+                    <input type="hidden" name="department" x-model="selectedValue">
+                    <button @click="open = !open" type="button" class="relative w-full pl-4 pr-10 py-2 text-left bg-black/5 dark:bg-white/5 border border-slate-300 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:text-sm rounded-lg text-slate-800 dark:text-white">
+                        <span x-text="selectedLabel"></span>
+                        <i class="ri-arrow-down-s-line absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    </button>
+                    <!-- ***** FIX: Increased background opacity for better readability ***** -->
+                    <div x-show="open" 
+                         @click.away="open = false" 
+                         x-transition 
+                         class="absolute z-50 mt-2 w-full bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-lg shadow-xl" 
+                         style="display: none;">
+                        <ul class="py-1 max-h-60 overflow-y-auto">
+                            {% for value, label in filter_form.department.choices %}
+                            <li><a href="#" @click.prevent="selectedValue = '{{ value }}'; selectedLabel = '{{ label }}'; open = false;" class="block px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20">{{ label }}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 transition-colors">Filter</button>
+            <a href="{{ url_for('faculty_main.scheduling') }}" class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:underline py-2">Reset to My Department</a>
+        </form>
+    </div>
+
+    <!-- Faculty List -->
+    <div class="bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 rounded-xl shadow-lg">
+        <div class="p-4 border-b border-slate-200/80 dark:border-white/10">
+            <h2 class="text-lg font-semibold text-slate-800 dark:text-white">Active Faculty Members</h2>
+        </div>
+        <div class="divide-y divide-slate-200/80 dark:divide-white/10">
+            {% for faculty in faculty_list %}
+            <div class="p-4 flex justify-between items-center hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                <div>
+                    <div class="text-sm font-medium text-slate-800 dark:text-white">{{ faculty.full_name }}</div>
+                    <div class="text-sm text-slate-500 dark:text-slate-400">{{ faculty.email }}</div>
+                </div>
+                <a href="{{ url_for('faculty_main.schedule_dispatcher', faculty_id=faculty.id) }}" class="bg-indigo-600 text-white font-medium py-2 px-4 rounded-lg text-sm hover:bg-indigo-500 transition-colors">
+                    Manage Schedule
+                </a>
+            </div>
+            {% else %}
+            <div class="p-6 text-center text-slate-500 dark:text-slate-400">
+                No active faculty members found in this department.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endblock %}

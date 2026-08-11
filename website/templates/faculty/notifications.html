@@ -1,0 +1,101 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+    <!-- Page Header -->
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">My Notifications</h1>
+        
+        {% if notifications %}
+        <form action="{{ url_for('faculty_main.clear_all_notifications') }}" method="post" onsubmit="return confirm('Are you sure you want to delete ALL notifications?');">
+            <button type="submit" class="text-sm text-red-500 hover:text-red-700 dark:hover:text-red-400 font-medium transition-colors flex items-center">
+                <i class="ri-delete-bin-line mr-1"></i> Delete All
+            </button>
+        </form>
+        {% endif %}
+    </div>
+
+    <!-- Notifications List -->
+    <div class="bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 rounded-xl shadow-lg overflow-hidden">
+        <ul class="divide-y divide-slate-200/80 dark:divide-white/10">
+            {% for notification in notifications %}
+                <!-- Dynamic Class: Dim if Read, Bright if Unread -->
+                <li class="p-4 transition-colors relative group 
+                    {% if notification.is_read %} 
+                        bg-slate-50/50 dark:bg-black/20 text-slate-500 dark:text-slate-400
+                    {% else %} 
+                        bg-white dark:bg-slate-800 text-slate-800 dark:text-white border-l-4 border-indigo-500 
+                    {% endif %}">
+                    
+                    <div class="flex items-start justify-between">
+                        
+                        <!-- Main Content -->
+                        <div class="flex items-start space-x-4 flex-1">
+                            <!-- Icon -->
+                            <div class="flex-shrink-0 pt-1">
+                                <div class="rounded-full h-10 w-10 flex items-center justify-center 
+                                    {% if notification.is_read %} bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400
+                                    {% else %} bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 {% endif %}">
+                                    <i class="ri-notification-3-line text-xl"></i>
+                                </div>
+                            </div>
+
+                            <!-- Text Content -->
+                            <div class="min-w-0 flex-1 pr-12">
+                                <p class="text-sm font-medium">
+                                    {% if notification.substitution_request %}Substitution Request{% else %}Notification{% endif %}
+                                </p>
+                                <p class="text-sm mt-1 {% if notification.is_read %} text-slate-500 dark:text-slate-500 {% else %} text-slate-600 dark:text-slate-300 {% endif %}">
+                                    {{ notification.message }}
+                                </p>
+
+                                <!-- Action Buttons for Faculty Substitution (Only if Pending) -->
+                                {% if current_user.role == 'faculty' and notification.substitution_request and notification.substitution_request.status == 'pending' %}
+                                <div class="mt-3">
+                                    <form action="{{ url_for('faculty_main.accept_substitution', notification_id=notification.id) }}" method="post">
+                                        <button type="submit" class="px-4 py-2 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition-colors shadow-md">
+                                            Accept Request
+                                        </button>
+                                    </form>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Right Side: Time & Actions -->
+                        <div class="flex flex-col items-end space-y-3 ml-4">
+                            <!-- Timestamp -->
+                            <div class="text-right">
+                                <p class="text-xs opacity-70">{{ notification.timestamp.strftime('%b %d') }}</p>
+                                <p class="text-[10px] opacity-60">{{ notification.timestamp.strftime('%I:%M %p') }}</p>
+                            </div>
+
+                            <!-- "Mark as Read" Button (Only shows if Unread) -->
+                            {% if not notification.is_read %}
+                            <form action="{{ url_for('faculty_main.mark_notification_read', notification_id=notification.id) }}" method="POST">
+                                <button type="submit" class="flex items-center text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium transition-colors bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1.5 rounded-full border border-indigo-100 dark:border-indigo-800">
+                                    <i class="ri-check-double-line mr-1"></i> Mark Read
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+
+                        <!-- Delete (Remove One by One) Button -->
+                        <form action="{{ url_for('faculty_main.delete_notification', notification_id=notification.id) }}" method="POST" class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button type="submit" class="text-slate-400 hover:text-red-500 dark:hover:text-red-400 p-1" title="Remove Notification">
+                                <i class="ri-close-line text-lg"></i>
+                            </button>
+                        </form>
+
+                    </div>
+                </li>
+            {% else %}
+                <li class="p-12 text-center text-slate-500 dark:text-slate-400 flex flex-col items-center">
+                    <div class="bg-slate-100 dark:bg-white/5 p-4 rounded-full mb-3">
+                        <i class="ri-notification-off-line text-3xl opacity-50"></i>
+                    </div>
+                    <p>You have no notifications.</p>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endblock %}

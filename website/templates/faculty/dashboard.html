@@ -1,0 +1,394 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+
+    {% if expiration_alert %}
+    <div class="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 mb-6 shadow-sm rounded-r-lg">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="p-2 bg-red-100 dark:bg-red-800 rounded-full mr-4">
+                    <i class="ri-alarm-warning-line text-xl text-red-600 dark:text-red-200"></i>
+                </div>
+                <div>
+                    <p class="font-bold text-red-700 dark:text-red-300">Academic Term Ended</p>
+                    <p class="text-sm text-red-600 dark:text-red-400">
+                        {{ expiration_alert }} <!-- Shows "Semester has ended" or "School Year has ended" -->
+                        {% if current_user.role == 'dean' %}
+                            Please update the System Settings.
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+            
+            {% if current_user.role == 'dean' %}
+            <a href="{{  url_for('faculty_main.system_settings') }}" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 transition-colors shadow-md whitespace-nowrap">
+                Update Now
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-slate-800 dark:text-slate-100 drop-shadow-lg">Dashboard Overview</h1>
+            <p class="text-slate-500 dark:text-slate-400 mt-1">Real-time faculty and schedule summary.</p>
+        </div>
+    </div>
+
+    <!-- START: ROLE-BASED CONTENT DISPLAY -->
+
+    {# --- DEAN'S VIEW (THEME-ADAPTIVE REDESIGN) --- #}
+    {% if current_user.role == 'dean' %}
+        <!-- START: DEPARTMENT FILTER -->
+        <div class="mb-8">
+            <form method="GET" action="{{  url_for('faculty_main.dashboard') }}" class="flex items-center space-x-4">
+                
+                <!-- START: CUSTOM DROPDOWN -->
+                {% set selected_choice = namespace(value=filter_form.department.data, label='Select Department') %}
+                {% for value, label in filter_form.department.choices %}
+                    {% if value == selected_choice.value %}
+                        {% set selected_choice.label = label %}
+                    {% endif %}
+                {% endfor %}
+
+                <div x-data="{ open: false, selectedValue: '{{ selected_choice.value }}', selectedLabel: '{{ selected_choice.label }}' }" class="relative w-64">
+                    <!-- Hidden input to hold the actual form value -->
+                    <input type="hidden" name="department" x-model="selectedValue">
+                    
+                    <!-- Dropdown Button -->
+                    <button @click="open = !open" type="button" class="relative w-full pl-10 pr-10 py-2 text-left bg-white/50 dark:bg-white/5 backdrop-blur-sm border border-slate-200 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:text-sm rounded-lg text-slate-800 dark:text-white">
+                        <i class="ri-filter-3-line absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <span x-text="selectedLabel"></span>
+                        <i class="ri-arrow-down-s-line absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    </button>
+                    
+                    <!-- Dropdown Panel -->
+                    <div x-show="open" 
+                         @click.away="open = false" 
+                         x-transition:enter="transition ease-out duration-100"
+                         x-transition:enter-start="opacity-0 scale-95"
+                         x-transition:enter-end="opacity-100 scale-100"
+                         x-transition:leave="transition ease-in duration-75"
+                         x-transition:leave-start="opacity-100 scale-100"
+                         x-transition:leave-end="opacity-0 scale-95"
+                         class="absolute z-10 mt-2 w-full bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg border border-slate-200 dark:border-white/10 rounded-lg shadow-xl"
+                         style="display: none;">
+                        <ul class="py-1">
+                            {% for value, label in filter_form.department.choices %}
+                            <li>
+                                <a href="#" @click.prevent="selectedValue = '{{ value }}'; selectedLabel = '{{ label }}'; open = false;"
+                                   class="block px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20">
+                                    {{ label }}
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                <!-- END: CUSTOM DROPDOWN -->
+
+                <button type="submit" class="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 transition-colors duration-300">Filter</button>
+                <a href="{{  url_for('faculty_main.dashboard') }}" class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:underline transition-colors py-2">Reset to My Department</a>
+            </form>
+        </div>
+        <!-- END: DEPARTMENT FILTER -->
+
+        <!-- Script tag for chart data -->
+        <script id="dashboard-chart-data" type="application/json">{{ chart_data | tojson }}</script>
+
+        <!-- Main Dashboard Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Left Column: KPIs and Lists -->
+            <div class="lg:col-span-1 flex flex-col gap-6">
+                <!-- Stat Cards -->
+                <div class="grid grid-cols-2 gap-6">
+                    <!-- Total Faculty -->
+                    <div class="relative bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 p-5 rounded-xl shadow-lg transition-all duration-300 hover:border-indigo-500/50 hover:-translate-y-1">
+                        <div class="absolute -top-3 -right-3 w-16 h-16 bg-indigo-400/30 blur-2xl"></div>
+                        <div class="flex items-center justify-center w-12 h-12 rounded-lg bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 mb-4"><i class="ri-group-line text-2xl"></i></div>
+                        <p class="text-sm font-medium text-slate-500 dark:text-slate-400">Total Faculty</p>
+                        <h3 class="text-3xl font-bold text-slate-800 dark:text-white mt-1">{{ total_faculty }}</h3>
+                    </div>
+                    <!-- Active Schedules -->
+                    <div class="relative bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 p-5 rounded-xl shadow-lg transition-all duration-300 hover:border-emerald-500/50 hover:-translate-y-1">
+                        <div class="absolute -top-3 -right-3 w-16 h-16 bg-emerald-400/30 blur-2xl"></div>
+                        <div class="flex items-center justify-center w-12 h-12 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 mb-4"><i class="ri-calendar-check-line text-2xl"></i></div>
+                        <p class="text-sm font-medium text-slate-500 dark:text-slate-400">Active Schedules</p>
+                        <h3 class="text-3xl font-bold text-slate-800 dark:text-white mt-1">{{ active_schedules }}</h3>
+                    </div>
+                    <!-- Pending Approvals -->
+                    <div class="relative bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 p-5 rounded-xl shadow-lg transition-all duration-300 hover:border-amber-500/50 hover:-translate-y-1">
+                         <div class="absolute -top-3 -right-3 w-16 h-16 bg-amber-400/30 blur-2xl"></div>
+                        <div class="flex items-center justify-center w-12 h-12 rounded-lg bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-300 mb-4"><i class="ri-user-add-line text-2xl"></i></div>
+                        <p class="text-sm font-medium text-slate-500 dark:text-slate-400">Pending</p>
+                        <h3 class="text-3xl font-bold text-amber-500 dark:text-amber-400 mt-1">{{ pending_approvals }}</h3>
+                    </div>
+                    <!-- Absence Reports -->
+                    <div class="relative bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 p-5 rounded-xl shadow-lg transition-all duration-300 hover:border-rose-500/50 hover:-translate-y-1">
+                         <div class="absolute -top-3 -right-3 w-16 h-16 bg-rose-400/30 blur-2xl"></div>
+                        <div class="flex items-center justify-center w-12 h-12 rounded-lg bg-rose-500/10 dark:bg-rose-500/20 text-rose-600 dark:text-rose-300 mb-4"><i class="ri-user-unfollow-line text-2xl"></i></div>
+                        <p class="text-sm font-medium text-slate-500 dark:text-slate-400">Absences</p>
+                        <h3 class="text-3xl font-bold text-rose-500 dark:text-rose-400 mt-1">{{ absence_reports }}</h3>
+                    </div>
+                </div>
+
+                <!-- Pending Approvals List -->
+                <div class="bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 rounded-xl shadow-lg flex-grow">
+                    <div class="p-4 border-b border-slate-200/80 dark:border-white/10"><h3 class="text-lg font-semibold text-slate-800 dark:text-white">Pending Approvals</h3></div>
+                    <ul class="divide-y divide-slate-200/80 dark:divide-white/10 px-2 max-h-48 overflow-y-auto">
+                        {% for user in pending_approvals_list %}
+                        <li class="p-3 flex justify-between items-center transition-colors duration-200 hover:bg-slate-500/10 rounded-lg">
+                            <p class="font-medium text-slate-700 dark:text-slate-300">{{ user.full_name }}</p>
+                            <form action="{{  url_for('faculty_main.approve_faculty', user_id=user.id) }}" method="post"><button type="submit" class="px-3 py-1 bg-emerald-500/80 text-white text-xs font-semibold rounded-full hover:bg-emerald-600 transition-colors">Approve</button></form>
+                        </li>
+                        {% else %}<li class="p-6 text-center text-slate-500 dark:text-slate-400">No pending approvals.</li>{% endfor %}
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Right Column: Charts and Main Lists -->
+            <div class="lg:col-span-2 flex flex-col gap-6">
+                <!-- Charts Section -->
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
+                    <div class="md:col-span-3 bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 p-6 rounded-xl shadow-lg">
+                        <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4">Classes per Day</h3>
+                        <div class="h-64"><canvas id="schedulesDayChart"></canvas></div>
+                    </div>
+                    <div class="md:col-span-2 bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 p-6 rounded-xl shadow-lg">
+                        <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4">Faculty by Dept.</h3>
+                        <div class="h-64"><canvas id="facultyDeptChart"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- Available Faculty & Recent Absences -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow">
+                    <div class="bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 rounded-xl shadow-lg">
+                        <div class="p-4 border-b border-slate-200/80 dark:border-white/10">
+                            <h3 class="text-lg font-semibold text-slate-800 dark:text-white">Available Faculty Now</h3>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">As of {{ current_time_str }}</p>
+                        </div>
+                        <ul class="divide-y divide-slate-200/80 dark:divide-white/10 px-2 max-h-60 overflow-y-auto">
+                            {% for faculty in available_faculty %}
+                            <li class="p-3 flex items-center space-x-3 transition-colors duration-200 hover:bg-slate-500/10 rounded-lg">
+                                <div class="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></div>
+                                <span class="font-medium text-slate-700 dark:text-slate-300">{{ faculty.full_name }}</span>
+                            </li>
+                            {% else %}<li class="p-6 text-center text-slate-500 dark:text-slate-400">No faculty available.</li>{% endfor %}
+                        </ul>
+                    </div>
+                    <div class="bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 rounded-xl shadow-lg">
+                        <div class="p-4 border-b border-slate-200/80 dark:border-white/10"><h3 class="text-lg font-semibold text-slate-800 dark:text-white">Recent Absence Reports</h3></div>
+                        <ul class="divide-y divide-slate-200/80 dark:divide-white/10 px-2 max-h-60 overflow-y-auto">
+                             {% for sub in recent_sub_requests %}
+                            <li class="p-3 transition-colors duration-200 hover:bg-slate-500/10 rounded-lg">
+                                <p class="font-medium text-slate-700 dark:text-slate-300">{{ sub.teaching_load.course_code }}</p>
+                            </li>
+                             {% else %}<li class="p-6 text-center text-slate-500 dark:text-slate-400">No active absence reports.</li>{% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alpine.js for custom dropdown interactivity -->
+        <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+
+        <!-- Chart.js Script with Redesigned Options -->
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                const chartData = JSON.parse(document.getElementById('dashboard-chart-data').textContent);
+                const isDarkMode = () => document.documentElement.classList.contains('dark');
+                
+                const getChartConfig = (ctx, gradientColors, axis = 'x') => {
+                    const chartColors = {
+                        dark: {
+                            gradient: gradientColors.dark,
+                            grid: 'rgba(255, 255, 255, 0.1)',
+                            ticks: '#94a3b8',
+                            tooltipBg: 'rgba(15, 23, 42, 0.8)',
+                            tooltipText: '#cbd5e1',
+                            tooltipBorder: 'rgba(255,255,255,0.2)'
+                        },
+                        light: {
+                            gradient: gradientColors.light,
+                            grid: 'rgba(0, 0, 0, 0.08)',
+                            ticks: '#475569',
+                            tooltipBg: 'rgba(255, 255, 255, 0.8)',
+                            tooltipText: '#334155',
+                            tooltipBorder: 'rgba(0,0,0,0.1)'
+                        }
+                    };
+
+                    const theme = isDarkMode() ? 'dark' : 'light';
+                    const colors = chartColors[theme];
+
+                    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+                    gradient.addColorStop(0, colors.gradient[0]);
+                    gradient.addColorStop(1, colors.gradient[1]);
+
+                    return {
+                        backgroundColor: gradient,
+                        borderColor: colors.gradient[0],
+                        borderWidth: 2,
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        tension: 0.4,
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            indexAxis: axis,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    enabled: true,
+                                    backgroundColor: colors.tooltipBg,
+                                    backdropFilter: 'blur(4px)',
+                                    titleColor: colors.tooltipText,
+                                    bodyColor: colors.tooltipText,
+                                    borderColor: colors.tooltipBorder,
+                                    borderWidth: 1,
+                                    padding: 10,
+                                    caretSize: 0,
+                                    displayColors: false
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    border: { display: false },
+                                    grid: { color: axis === 'x' ? colors.grid : 'transparent' },
+                                    ticks: { color: colors.ticks, precision: 0 }
+                                },
+                                x: {
+                                    border: { display: false },
+                                    grid: { color: axis === 'y' ? colors.grid : 'transparent' },
+                                    ticks: { color: colors.ticks }
+                                }
+                            }
+                        }
+                    };
+                };
+
+                if (document.getElementById('facultyDeptChart') && chartData.dept_labels.length > 0) {
+                    const facultyCtx = document.getElementById('facultyDeptChart').getContext('2d');
+                    const colors = {
+                        dark: ['rgba(165, 180, 252, 0.8)', 'rgba(124, 58, 237, 0.8)'],
+                        light: ['rgba(129, 140, 248, 0.9)', 'rgba(99, 102, 241, 0.9)']
+                    };
+                    const config = getChartConfig(facultyCtx, colors, 'y');
+                    new Chart(facultyCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: chartData.dept_labels,
+                            datasets: [{
+                                data: chartData.dept_counts,
+                                ...config
+                            }]
+                        },
+                        options: config.options
+                    });
+                }
+                
+                if (document.getElementById('schedulesDayChart') && chartData.day_labels.length > 0) {
+                    const schedulesCtx = document.getElementById('schedulesDayChart').getContext('2d');
+                    const colors = {
+                        dark: ['rgba(139, 92, 246, 0.8)', 'rgba(79, 70, 229, 0.8)'],
+                        light: ['rgba(129, 140, 248, 0.9)', 'rgba(99, 102, 241, 0.9)']
+                    };
+                    const config = getChartConfig(schedulesCtx, colors, 'x');
+                    new Chart(schedulesCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: chartData.day_labels.map(l => l.substring(0, 3)),
+                            datasets: [{
+                                data: chartData.day_counts,
+                                ...config
+                            }]
+                        },
+                        options: config.options
+                    });
+                }
+            });
+        </script>
+    
+    {# --- FACULTY VIEW (UNCHANGED) --- #}
+    {% else %}
+        <!-- (The entire faculty 'else' block remains exactly as it was) -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div class="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Your Classes (Current Sem)</p>
+                        <h3 class="text-3xl font-bold text-gray-800 dark:text-white mt-2">{{ total_classes }}</h3>
+                    </div>
+                    <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary"><i class="ri-book-open-line text-2xl"></i></div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Your Units (Current Sem)</p>
+                        <h3 class="text-3xl font-bold text-gray-800 dark:text-white mt-2">{{ total_units }}</h3>
+                    </div>
+                    <div class="w-12 h-12 rounded-full bg-green-100 dark:bg-green-500/20 flex items-center justify-center text-green-600 dark:text-green-400"><i class="ri-time-line text-2xl"></i></div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Substitution Requests</p>
+                        <h3 class="text-3xl font-bold text-yellow-500 mt-2">{{ pending_sub_requests }}</h3>
+                    </div>
+                    <div class="w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-500/20 flex items-center justify-center text-yellow-600 dark:text-yellow-400"><i class="ri-notification-3-line text-2xl"></i></div>
+                </div>
+                <a href="{{  url_for('faculty_main.view_notifications') }}" class="text-sm text-primary dark:text-indigo-400 hover:underline mt-4 inline-block">View Notifications</a>
+            </div>
+        </div>
+        <div class="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2">
+                <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                    <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center">
+                        <h3 class="text-lg font-semibold text-gray-800 dark:text-white">Today's Schedule</h3>
+                        <a href="{{  url_for('faculty_main.my_schedule') }}" class="text-sm text-primary dark:text-indigo-400 hover:underline">View Full Schedule</a>
+                    </div>
+                    <div class="divide-y divide-gray-100 dark:divide-gray-700">
+                        {% for class in today_schedule %}
+                            <div class="p-4 flex items-center space-x-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                <div class="text-center w-20">
+                                    <p class="font-semibold text-primary dark:text-indigo-400 text-sm">{{ class.time.split(' - ')[0] }}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">to {{ class.time.split(' - ')[1] }}</p>
+                                </div>
+                                <div class="w-1 bg-gray-200 dark:bg-gray-700 h-10 rounded-full"></div>
+                                <div>
+                                    <p class="font-semibold text-gray-800 dark:text-white">{{ class.course }} - {{ class.section }}</p>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">Location: {{ class.room }}</p>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="p-6 text-center text-gray-500 dark:text-gray-400">
+                                <i class="ri-cup-line text-4xl text-green-500 mb-2"></i>
+                                <p>No more classes for today. Enjoy your break!</p>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="space-y-6">
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-sm">
+                    <h3 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">Quick Actions</h3>
+                    <div class="space-y-3">
+                    <a href="{{  url_for('faculty_main.request_substitution') }}" class="w-full flex items-center p-3 bg-primary/10 dark:bg-primary/20 text-primary dark:text-indigo-300 rounded-lg hover:bg-primary hover:text-white dark:hover:bg-primary dark:hover:text-white transition-colors duration-200"><i class="ri-swap-line w-5 h-5 mr-3"></i><span>Request a Substitution</span></a>
+                    <a href="{{  url_for('faculty_main.my_schedule') }}" class="w-full flex items-center p-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-slate-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"><i class="ri-calendar-line w-5 h-5 mr-3"></i><span>View Full Schedule</span></a>
+                </div>
+                </div>
+                <div class="bg-primary text-white p-6 rounded-lg shadow-sm bg-gradient-to-br from-primary to-secondary">
+                     <h2 class="text-xl font-semibold mb-2">Welcome to the Faculty System!</h2>
+                     <p class="text-sm opacity-90">You can manage your schedule and view notifications using the links in the sidebar.</p>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    <!-- END: ROLE-BASED CONTENT DISPLAY -->
+{% endblock %}

@@ -1,0 +1,105 @@
+{% extends "faculty/auth_base.html" %}
+
+{% block content %}
+<div class="flex flex-col items-center justify-center min-h-screen py-12 px-4">
+    <div class="mb-8">
+        <h1 class="text-4xl font-['Pacifico'] text-primary">Faculty System</h1>
+    </div>
+    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-3xl">
+        <h2 class="text-2xl font-bold text-center text-gray-800 mb-8">Create a Faculty Account</h2>
+        <form action="" method="post" x-data="{ expertiseType: '{{ form.expertise_type.data or '' }}' }">
+            {{ form.hidden_tag() }}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                <!-- Account Info -->
+                <div class="md:col-span-2"><h3 class="text-lg font-semibold border-b pb-2 mb-4 text-gray-700">Account Information</h3></div>
+                <div>
+                    {{ form.full_name.label(class="block text-gray-700 text-sm font-medium mb-1") }}
+                    {{ form.full_name(class="w-full px-3 py-2 bg-gray-50 border rounded-md focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.full_name.errors else "border-gray-300 focus:ring-primary")) }}
+                    {% for error in form.full_name.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+                </div>
+                
+                <!-- NEW: Contact Number -->
+                <div>
+                    {{ form.contact_number.label(class="block text-gray-700 text-sm font-medium mb-1") }}
+                    {{ form.contact_number(class="w-full px-3 py-2 bg-gray-50 border rounded-md focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.contact_number.errors else "border-gray-300 focus:ring-primary"), placeholder="09123456789") }}
+                    {% for error in form.contact_number.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+                </div>
+
+                <div>
+                    {{ form.email.label(class="block text-gray-700 text-sm font-medium mb-1") }}
+                    {{ form.email(class="w-full px-3 py-2 bg-gray-50 border rounded-md focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.email.errors else "border-gray-300 focus:ring-primary")) }}
+                    {% for error in form.email.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+                </div>
+                
+                <div class="hidden md:block"></div> <!-- Spacer -->
+
+                <div>
+                    {{ form.password.label(class="block text-gray-700 text-sm font-medium mb-1") }}
+                    {{ form.password(class="w-full px-3 py-2 bg-gray-50 border rounded-md focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.password.errors else "border-gray-300 focus:ring-primary")) }}
+                    {% for error in form.password.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+                </div>
+                <div>
+                    {{ form.password2.label(class="block text-gray-700 text-sm font-medium mb-1") }}
+                    {{ form.password2(class="w-full px-3 py-2 bg-gray-50 border rounded-md focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.password2.errors else "border-gray-300 focus:ring-primary")) }}
+                    {% for error in form.password2.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+                </div>
+
+                <!-- Professional & Educational Details -->
+                <div class="md:col-span-2 mt-6"><h3 class="text-lg font-semibold border-b pb-2 mb-4 text-gray-700">Professional & Educational Details</h3></div>
+                
+                <!-- UPDATED: Expertise Type -->
+                <div>
+                    {{ form.expertise_type.label(class="block text-gray-700 text-sm font-medium mb-1") }}
+                    {{ form.expertise_type(class="w-full px-3 py-2 bg-gray-50 border rounded-md focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.expertise_type.errors else "border-gray-300 focus:ring-primary"), **{'x-model': 'expertiseType'}) }}
+                    {% for error in form.expertise_type.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+                </div>
+                
+                <!-- UPDATED: Check for PROFED -->
+                <div class="md:col-span-2" x-show="expertiseType === 'PROFED'" x-transition>
+                    {{ form.major_program.label(class="block text-gray-700 text-sm font-medium mb-1") }}
+                    {{ form.major_program(class="w-full px-3 py-2 bg-gray-50 border rounded-md focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.major_program.errors else "border-gray-300 focus:ring-primary")) }}
+                    {% for error in form.major_program.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+                </div>
+
+                <div>
+                    {{ form.baccalaureate_degree.label(class="block text-gray-700 text-sm font-medium mb-1") }}
+                    {{ form.baccalaureate_degree(class="w-full px-3 py-2 bg-gray-50 border rounded-md focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.baccalaureate_degree.errors else "border-gray-300 focus:ring-primary")) }}
+                    {% for error in form.baccalaureate_degree.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+                </div>
+                <div>
+                    {{ form.baccalaureate_year_grad.label(class="block text-gray-700 text-sm font-medium mb-1") }}
+                    {{ form.baccalaureate_year_grad(class="w-full px-3 py-2 bg-gray-50 border rounded-md focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.baccalaureate_year_grad.errors else "border-gray-300 focus:ring-primary")) }}
+                    {% for error in form.baccalaureate_year_grad.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+                </div>
+                <div>
+                    {{ form.highest_edu_attainment.label(class="block text-gray-700 text-sm font-medium mb-1") }}
+                    {{ form.highest_edu_attainment(class="w-full px-3 py-2 bg-gray-50 border rounded-md focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.highest_edu_attainment.errors else "border-gray-300 focus:ring-primary")) }}
+                    {% for error in form.highest_edu_attainment.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+                </div>
+                <div>
+                    {{ form.highest_edu_year_grad.label(class="block text-gray-700 text-sm font-medium mb-1") }}
+                    {{ form.highest_edu_year_grad(class="w-full px-3 py-2 bg-gray-50 border rounded-md focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.highest_edu_year_grad.errors else "border-gray-300 focus:ring-primary")) }}
+                    {% for error in form.highest_edu_year_grad.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+                </div>
+                <div class="md:col-span-2">
+                    {{ form.industry_experience.label(class="block text-gray-700 text-sm font-medium mb-1") }}
+                    {{ form.industry_experience(class="w-full px-3 py-2 bg-gray-50 border rounded-md focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.industry_experience.errors else "border-gray-300 focus:ring-primary"), rows=3) }}
+                    {% for error in form.industry_experience.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+                </div>
+                <div>
+                    {{ form.is_licensed.label(class="block text-gray-700 text-sm font-medium mb-1") }}
+                    {{ form.is_licensed(class="w-full px-3 py-2 bg-gray-50 border rounded-md focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.is_licensed.errors else "border-gray-300 focus:ring-primary")) }}
+                    {% for error in form.is_licensed.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+                </div>
+            </div>
+
+            <div class="mt-8">
+                {{ form.submit(class="w-full bg-primary text-white font-bold py-3 px-4 rounded-button hover:bg-primary/90 cursor-pointer transition-colors") }}
+            </div>
+        </form>
+         <p class="text-center text-sm text-gray-600 mt-6">
+            Already have an account? <a href="{{ url_for('faculty_auth.login') }}" class="font-medium text-primary hover:text-primary/80">Sign In</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

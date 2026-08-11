@@ -1,0 +1,806 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Application{% endblock %}
+
+{% block style %}
+<style>
+  /* Styles from new_student.html for stepper and form layout */
+  :where([class^="ri-"])::before {
+    content: "\f3c2";
+  }
+
+  body {
+    background-color: #f9fafb;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  .scale-110 {
+    transform: scale(1.1);
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  header {
+    position: relative;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 15px 5%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 1000;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    background-color: #162938;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+  }
+
+  .header-left img {
+    width: 80px;
+    height: auto;
+  }
+
+  .header-left .logo {
+    font-size: 1.4em;
+    color: #fff;
+    margin-left: 15px;
+    white-space: nowrap;
+  }
+
+  .navigation a {
+    position: relative;
+    font-size: 1.1em;
+    color: #fff;
+    text-decoration: none;
+    font-weight: 500;
+    margin-left: 30px;
+  }
+
+  .navigation .btnLogin-popup {
+    background-color: #fff;
+    color: #162938;
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  .navigation .btnLogin-popup.btn-logout {
+    background-color: #d9534f;
+    color: #fff;
+  }
+
+  .menu-toggle {
+    display: none;
+    flex-direction: column;
+    justify-content: space-around;
+    width: 30px;
+    height: 25px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    z-index: 1100;
+    margin-left: 20px;
+  }
+
+  .menu-toggle span {
+    display: block;
+    width: 100%;
+    height: 3px;
+    background-color: #fff;
+    border-radius: 3px;
+    transition: all 0.3s ease-in-out;
+  }
+
+  @media (max-width: 992px) {
+    header {
+      padding: 10px 3%;
+    }
+
+    .header-left img {
+      width: 60px;
+    }
+
+    .header-left .logo {
+      font-size: 0.9em;
+      margin-left: 8px;
+    }
+
+    .navigation {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      width: 250px;
+      background-color: #162938;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+      flex-direction: column;
+      align-items: stretch;
+      display: none;
+      z-index: 1050;
+      border-top: 1px solid #2a3f54;
+      max-height: calc(100vh - 70px);
+      overflow-y: auto;
+    }
+
+    .navigation.active {
+      display: flex;
+    }
+
+    .navigation a {
+      display: block;
+      padding: 12px 20px;
+      margin-left: 0;
+      text-align: left;
+      color: #f0f0f0;
+      border-bottom: 1px solid #2a3f54;
+      text-decoration: none;
+    }
+
+    .menu-toggle {
+      display: flex;
+    }
+
+    .menu-toggle.active span:nth-child(1) {
+      transform: translateY(9px) rotate(45deg);
+    }
+
+    .menu-toggle.active span:nth-child(2) {
+      opacity: 0;
+    }
+
+    .menu-toggle.active span:nth-child(3) {
+      transform: translateY(-9px) rotate(-45deg);
+    }
+  }
+
+  .main-content-area {
+    padding-top: 100px;
+  }
+
+  @media (min-width: 993px) {
+    .main-content-area {
+      padding-top: 100px;
+    }
+  }
+
+  .validation-error-message {
+    color: #e53e3e;
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+  }
+
+  .border-red-500 {
+    border-color: #f56565 !important;
+  }
+
+  .ring-red-500 {
+    --tw-ring-color: #f56565 !important;
+  }
+
+  .current-file-info {
+    font-size: 0.8rem;
+    color: #4b5563;
+    background-color: #f3f4f6;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    margin-top: 0.5rem;
+    display: inline-block;
+  }
+</style>
+{% endblock %}
+
+{% block head %}
+<link rel="icon" href="{{ url_for('static', filename='logopgpc.png') }}" type="image/x-icon">
+<header>
+  <div class="header-left">
+    <img src="{{ url_for('static', filename='logopgpc.png') }}"
+        alt="Company Logo">
+    <h2 class="logo">Padre Garcia Polytechnic College</h2>
+  </div>
+  <button class="menu-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="main-navigation">
+    <span></span>
+    <span></span>
+    <span></span>
+  </button>
+  <nav class="navigation" id="main-navigation">
+    {% if student_logged_in %}
+    <a href="{{ url_for('views.application_status_page') }}">Application Status</a>
+    
+    {% else %}
+    <a href="{{ url_for('views.existing_or_not') }}" class="no-underline">
+      <button class="btnLogin-popup">Apply now</button>
+    </a>
+    {% endif %}
+  </nav>
+</header>
+{% endblock %}
+
+{% block body %}
+<div class="main-content-area">
+  <div class="min-h-screen flex flex-col">
+    <main class="flex-grow container mx-auto px-4 py-8">
+      <div class="max-w-5xl mx-auto bg-white rounded-lg shadow-md overflow-hidden">
+        <div class="p-6 border-b border-gray-200">
+          <div class="flex justify-between items-start">
+            <div>
+              <h2 class="text-2xl font-bold text-gray-800">Edit Admission Application Form</h2>
+              <p class="text-gray-600 mt-1">Update your application details below.</p>
+            </div>
+            <a href="{{ url_for('views.application_status_page') }}"
+              class="ml-auto bg-gray-100 text-gray-700 px-4 py-2 rounded-button whitespace-nowrap flex items-center text-sm hover:bg-gray-200 transition-colors">
+              <i class="ri-arrow-left-line mr-2"></i>Back to Status
+            </a>
+          </div>
+        </div>
+        <div class="px-6 py-4 border-b border-gray-200">
+          <div class="flex items-center">
+            <div class="flex flex-col items-center flex-1">
+              <div class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center relative z-10">
+                <i class="ri-user-line"></i></div>
+              <p class="text-sm font-medium text-primary mt-2">Personal Information</p>
+            </div>
+            <div class="h-1 bg-gray-200 flex-1 relative -mx-2">
+              <div class="absolute inset-0 bg-primary transform origin-left transition-transform duration-300"
+                style="transform: scaleX(0)"></div>
+            </div>
+            <div class="flex flex-col items-center flex-1">
+              <div
+                class="w-10 h-10 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center relative z-10">
+                <i class="ri-team-line"></i></div>
+              <p class="text-sm font-medium text-gray-500 mt-2">Family Details</p>
+            </div>
+            <div class="h-1 bg-gray-200 flex-1 relative -mx-2">
+              <div class="absolute inset-0 bg-primary transform origin-left transition-transform duration-300"
+                style="transform: scaleX(0)"></div>
+            </div>
+            <div class="flex flex-col items-center flex-1">
+              <div
+                class="w-10 h-10 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center relative z-10">
+                <i class="ri-book-open-line"></i></div>
+              <p class="text-sm font-medium text-gray-500 mt-2">Education & Documents</p>
+            </div>
+          </div>
+        </div>
+        <form action="{{ url_for('auth.edit_application_page', applicant_id=application.applicant_id) }}" method="POST"
+          enctype="multipart/form-data">
+          <div class="p-6">
+            <!-- STEP 1: PERSONAL INFORMATION -->            
+             <div id="step1" class="block">
+               <h3 class="text-lg font-semibold text-gray-800 mb-4">Personal Information</h3>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Column for form fields -->
+                <div class="md:col-span-2">
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="md:col-span-3">
+                      <label class="block text-gray-700 font-medium mb-2">Program (Course) <span
+                          class="text-red-500">*</span></label>
+                      <select name="program_choice"
+                        class="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                        required>
+                        <option value="">Select a Program</option>
+                        {% for program in programs %}
+                        <option value="{{ program.title }}" {% if program.title==application.program_choice %}selected{%
+                          endif %}>{{ program.title }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-1">Last Name <span
+                          class="text-red-500">*</span></label>
+                      <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="last_name"
+                        value="{{ application.last_name or '' }}" required />
+                    </div>
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-1">First Name <span
+                          class="text-red-500">*</span></label>
+                      <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="first_name"
+                        value="{{ application.first_name or '' }}" required />
+                    </div>
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-1">Middle Name</label>
+                      <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="middle_name"
+                        value="{{ application.middle_name or '' }}" />
+                    </div>
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-1">Date of Birth <span
+                          class="text-red-500">*</span></label>
+                      <input type="date" class="w-full px-4 py-2 border border-gray-300 rounded" name="date_of_birth"
+                        value="{{ application.date_of_birth.strftime('%Y-%m-%d') if application.date_of_birth else '' }}"
+                        required />
+                    </div>
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-1">Place of Birth <span
+                          class="text-red-500">*</span></label>
+                      <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="place_of_birth"
+                        value="{{ application.place_of_birth or '' }}" required />
+                    </div>
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-1">Sex <span
+                          class="text-red-500">*</span></label>
+                      <select name="sex" class="w-full px-4 py-2 border border-gray-300 rounded" required>
+                        <option value="Female" {% if application.sex=='Female' %}selected{% endif %}>Female</option>
+                        <option value="Male" {% if application.sex=='Male' %}selected{% endif %}>Male</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-1">Civil Status <span
+                          class="text-red-500">*</span></label>
+                      <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="civil_status"
+                        value="{{ application.civil_status or '' }}" required />
+                    </div>
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-1">Religion <span
+                          class="text-red-500">*</span></label>
+                      <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="religion"
+                        value="{{ application.religion or '' }}" required />
+                    </div>
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-1">Citizenship <span
+                          class="text-red-500">*</span></label>
+                      <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="citizenship"
+                        value="{{ application.citizenship or '' }}" required />
+                    </div>
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-1">Mobile No. <span
+                          class="text-red-500">*</span></label>
+                      <input type="tel" class="w-full px-4 py-2 border border-gray-300 rounded" name="mobile_number"
+                        value="{{ application.mobile_number or '' }}" required />
+                    </div>
+                    <div class="md:col-span-2">
+                      <label class="block text-gray-700 font-medium mb-1">Email Address <span
+                          class="text-red-500">*</span></label>
+                      <input type="email" class="w-full px-4 py-2 border border-gray-300 rounded" name="email_address"
+                        value="{{ application.email_address or '' }}" required />
+                    </div>
+                    <div class="md:col-span-3">
+                      <label class="block text-gray-700 font-medium mb-1">Permanent Address <span
+                          class="text-red-500">*</span></label>
+                      <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded mb-2"
+                        placeholder="Street, Barangay" name="permanent_address_street_barangay"
+                        value="{{ application.permanent_address_street_barangay or '' }}" required />
+                      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded"
+                          placeholder="City/Municipality" name="permanent_address_city_municipality"
+                          value="{{ application.permanent_address_city_municipality or '' }}" required />
+                        <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="Province"
+                          name="permanent_address_province" value="{{ application.permanent_address_province or '' }}"
+                          required />
+                        <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="Postal Code"
+                          name="permanent_address_postal_code"
+                          value="{{ application.permanent_address_postal_code or '' }}" required />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Column for Photo -->
+                <div class="md:col-span-1">
+                  <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 h-full flex flex-col items-center justify-start pt-12">
+                    <div id="photoPreviewContainer" class="w-32 h-32 bg-gray-200 border border-gray-300 rounded flex items-center justify-center mb-2 relative overflow-hidden">
+                        <img id="photoPreview" src="{{ url_for('auth.get_applicant_photo', applicant_id=application.applicant_id) }}" alt="Current Photo" class="w-full h-full object-cover" />
+                        <i id="photoPlaceholder" class="ri-user-line text-gray-400 text-4xl hidden"></i>
+                    </div>
+                    <p id="photoUploadStatus" class="text-sm text-gray-700 text-center mb-2">Current 2x2 Photo</p>
+                    <input type="file" id="photoInput" name="photo" accept="image/*" class="hidden" />
+                    <button type="button" id="uploadPhotoBtn" class="bg-primary text-white px-4 py-2 rounded-button text-sm whitespace-nowrap">Upload New Photo</button>
+                    <div id="photoToast" class="fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white text-sm z-50 transform transition-transform duration-300 translate-y-full hidden"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-8 flex justify-end">
+                <button type="button" id="nextToStep2"
+                  class="bg-primary text-white px-6 py-2 rounded-button font-medium whitespace-nowrap">Next: Family
+                  Details</button>
+              </div>
+            </div>
+
+            <!-- STEP 2: FAMILY DETAILS -->
+            <div id="step2" class="hidden">
+              <h3 class="text-lg font-semibold text-gray-800 mb-4">Family Details</h3>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <!-- Father -->
+                <div>
+                  <h4 class="font-medium text-gray-800 mb-4">Father's Information</h4>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">Father's Name</label><input
+                      type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="father_name"
+                      value="{{ application.father_name or '' }}"></div>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">Occupation</label><input type="text"
+                      class="w-full px-4 py-2 border border-gray-300 rounded" name="father_occupation"
+                      value="{{ application.father_occupation or '' }}"></div>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">Company & Address</label><input
+                      type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="father_company_address"
+                      value="{{ application.father_company_address or '' }}"></div>
+                  <div><label class="block text-gray-700 text-sm mb-2">Contact No.</label><input type="tel"
+                      class="w-full px-4 py-2 border border-gray-300 rounded" name="father_contact_number"
+                      value="{{ application.father_contact_number or '' }}"></div>
+                </div>
+                <!-- Mother -->
+                <div>
+                  <h4 class="font-medium text-gray-800 mb-4">Mother's Information</h4>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">Mother's Maiden Name</label><input
+                      type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="mother_maiden_name"
+                      value="{{ application.mother_maiden_name or '' }}"></div>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">Occupation</label><input type="text"
+                      class="w-full px-4 py-2 border border-gray-300 rounded" name="mother_occupation"
+                      value="{{ application.mother_occupation or '' }}"></div>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">Company & Address</label><input
+                      type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="mother_company_address"
+                      value="{{ application.mother_company_address or '' }}"></div>
+                  <div><label class="block text-gray-700 text-sm mb-2">Contact No.</label><input type="tel"
+                      class="w-full px-4 py-2 border border-gray-300 rounded" name="mother_contact_number"
+                      value="{{ application.mother_contact_number or '' }}"></div>
+                </div>
+                <!-- Guardian -->
+                <div>
+                  <h4 class="font-medium text-gray-800 mb-4">Guardian's Information (Optional)</h4>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">Guardian's Name</label><input
+                      type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="guardian_name"
+                      value="{{ application.guardian_name or '' }}"></div>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">Occupation</label><input type="text"
+                      class="w-full px-4 py-2 border border-gray-300 rounded" name="guardian_occupation"
+                      value="{{ application.guardian_occupation or '' }}"></div>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">Company & Address</label><input
+                      type="text" class="w-full px-4 py-2 border border-gray-300 rounded"
+                      name="guardian_company_address" value="{{ application.guardian_company_address or '' }}"></div>
+                  <div><label class="block text-gray-700 text-sm mb-2">Contact No.</label><input type="tel"
+                      class="w-full px-4 py-2 border border-gray-300 rounded" name="guardian_contact_number"
+                      value="{{ application.guardian_contact_number or '' }}"></div>
+                </div>
+              </div>
+              <div class="mt-8 flex justify-between">
+                <button type="button" id="backToStep1"
+                  class="border border-gray-300 text-gray-700 px-6 py-2 rounded-button font-medium whitespace-nowrap">Previous:
+                  Personal Information</button>
+                <button type="button" id="nextToStep3"
+                  class="bg-primary text-white px-6 py-2 rounded-button font-medium whitespace-nowrap">Next: Education &
+                  Documents</button>
+              </div>
+            </div>
+
+            <!-- STEP 3: EDUCATIONAL BACKGROUND & DOCUMENTS -->
+            <div id="step3" class="hidden">
+              <h3 class="text-lg font-semibold text-gray-800 mb-4">Educational Background</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <!-- SHS -->
+                <div>
+                  <h4 class="font-medium text-gray-800 mb-4">Senior High School</h4>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">SHS Name <span
+                        class="text-red-500">*</span></label><input type="text"
+                      class="w-full px-4 py-2 border border-gray-300 rounded" name="senior_high_school"
+                      value="{{ application.senior_high_school or '' }}" required></div>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">Address <span
+                        class="text-red-500">*</span></label><input type="text"
+                      class="w-full px-4 py-2 border border-gray-300 rounded" name="senior_high_school_address"
+                      value="{{ application.senior_high_school_address or '' }}" required></div>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">Strand <span
+                        class="text-red-500">*</span></label><input type="text"
+                      class="w-full px-4 py-2 border border-gray-300 rounded" name="senior_high_school_track_strand"
+                      value="{{ application.senior_high_school_track_strand or '' }}" required></div>
+                  <div>
+                    <label class="block text-gray-700 text-sm mb-2">Inclusive Dates (Year) <span
+                        class="text-red-500">*</span></label>
+                    <div class="grid grid-cols-2 gap-4"><input type="text"
+                        class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="From (Year)"
+                        name="senior_high_school_year_from" value="{{ application.senior_high_school_year_from or '' }}"
+                        required><input type="text" class="w-full px-4 py-2 border border-gray-300 rounded"
+                        placeholder="To (Year)" name="senior_high_school_year_to"
+                        value="{{ application.senior_high_school_year_to or '' }}" required></div>
+                  </div>
+                </div>
+                <!-- Tertiary -->
+                <div>
+                  <h4 class="font-medium text-gray-800 mb-4">College (if any) / ALS Graduate (Optional)</h4>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">School Name</label><input
+                      type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="tertiary_school"
+                      value="{{ application.tertiary_school or '' }}"></div>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">Address</label><input type="text"
+                      class="w-full px-4 py-2 border border-gray-300 rounded" name="tertiary_school_address"
+                      value="{{ application.tertiary_school_address or '' }}"></div>
+                  <div class="mb-4"><label class="block text-gray-700 text-sm mb-2">Program</label><input type="text"
+                      class="w-full px-4 py-2 border border-gray-300 rounded" name="tertiary_course"
+                      value="{{ application.tertiary_course or '' }}"></div>
+                  <div>
+                    <label class="block text-gray-700 text-sm mb-2">Inclusive Dates (Year)</label>
+                    <div class="grid grid-cols-2 gap-4"><input type="text"
+                        class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="From (Year)"
+                        name="tertiary_year_from" value="{{ application.tertiary_year_from or '' }}"><input type="text"
+                        class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="To (Year)"
+                        name="tertiary_year_to" value="{{ application.tertiary_year_to or '' }}"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-6 pt-6 border-t border-gray-200">
+                <h4 class="font-medium text-gray-800 mb-4">Update Documents</h4>
+                <p class="text-sm text-gray-600 mb-4">Upload a new file only to replace an existing one. Max 5MB per
+                  file.</p>
+                <div class="space-y-4">
+                  <div>
+                    <label class="block text-gray-700 text-sm font-medium mb-1">SHS Diploma (.pdf, .jpg,
+                      .png)</label>
+                    <input type="file" name="shs_diploma_file_input"
+                      class="w-full px-3 py-2 border border-gray-300 rounded" accept=".pdf,image/jpeg,image/png">
+                    <div class="current-file-info">Current: <a
+                        href="{{ url_for('auth.get_applicant_document', applicant_id=application.applicant_id, doc_type='diploma') }}"
+                        target="_blank" class="text-primary hover:underline font-semibold">{{
+                        application.shs_diploma_filename or 'No file uploaded' }}</a></div>
+                  </div>
+                  <div>
+                    <label class="block text-gray-700 text-sm font-medium mb-1">SHS Card/Form 138 (.pdf, .jpg,
+                      .png)</label>
+                    <input type="file" name="shs_card_file_input"
+                      class="w-full px-3 py-2 border border-gray-300 rounded" accept=".pdf,image/jpeg,image/png">
+                    <div class="current-file-info">Current: <a
+                        href="{{ url_for('auth.get_applicant_document', applicant_id=application.applicant_id, doc_type='card') }}"
+                        target="_blank" class="text-primary hover:underline font-semibold">{{
+                        application.shs_card_filename or 'No file uploaded' }}</a></div>
+                  </div>
+                  <div>
+                    <label class="block text-gray-700 text-sm font-medium mb-1">Birth Certificate (.pdf, .jpg,
+                      .png)</label>
+                    <input type="file" name="birth_certificate_file_input"
+                      class="w-full px-3 py-2 border border-gray-300 rounded" accept=".pdf,image/jpeg,image/png">
+                    <div class="current-file-info">Current: <a
+                        href="{{ url_for('auth.get_applicant_document', applicant_id=application.applicant_id, doc_type='birth_cert') }}"
+                        target="_blank" class="text-primary hover:underline font-semibold">{{
+                        application.birth_certificate_filename or 'No file uploaded' }}</a></div>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-8 flex justify-between">
+                <button type="button" id="backToStep2"
+                  class="border border-gray-300 text-gray-700 px-6 py-2 rounded-button font-medium whitespace-nowrap">Previous:
+                  Family Details</button>
+                <button id="submitApplication"
+                  class="bg-primary text-white px-6 py-2 rounded-button font-medium whitespace-nowrap"
+                  type="submit">Update Application</button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+  // --- START OF VALIDATION HELPER FUNCTIONS ---
+  function findFirstInvalidField(stepElement) {
+    const fields = stepElement.querySelectorAll('input[required], select[required], textarea[required]');
+    for (const field of fields) {
+      if (!field.offsetParent && field.type !== 'hidden') continue;
+      let isInvalid = false;
+      if (field.type === 'radio') {
+        if (field.required && !stepElement.querySelector(`input[name="${field.name}"]:checked`)) return field;
+      } else if (field.tagName.toLowerCase() === 'select') {
+        if (field.required && field.value === '') isInvalid = true;
+      } else if (field.type !== 'file') {
+        if (field.required && !field.value.trim()) isInvalid = true;
+      }
+      if (isInvalid) return field;
+    }
+    return null;
+  }
+
+  function showValidationError(field, message = "This field is required.") {
+    if (!field) return;
+    field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => field.focus({ preventScroll: true }), 100);
+    let fieldContainer = field.closest('.mb-6, .mb-4') || field.parentElement;
+    const existingErrorMsg = fieldContainer.querySelector('.validation-error-message');
+    if (existingErrorMsg) existingErrorMsg.remove();
+    field.classList.add('border-red-500', 'ring-2', 'ring-red-500');
+    const errorMsgElement = document.createElement('p');
+    errorMsgElement.className = 'validation-error-message text-red-500 text-xs mt-1';
+    errorMsgElement.textContent = message;
+    let parentWrapper = field.closest('.flex, .grid') || field.parentElement;
+    parentWrapper.parentElement.appendChild(errorMsgElement);
+    const clearError = () => {
+      field.classList.remove('border-red-500', 'ring-2', 'ring-red-500');
+      const msgToRemove = fieldContainer.querySelector('.validation-error-message');
+      if (msgToRemove) msgToRemove.remove();
+      field.removeEventListener('input', clearError);
+      field.removeEventListener('change', clearError);
+    };
+    field.addEventListener('input', clearError);
+    field.addEventListener('change', clearError);
+  }
+  // --- END OF VALIDATION HELPER FUNCTIONS ---
+
+  document.addEventListener("DOMContentLoaded", function () {
+    const step1 = document.getElementById("step1");
+    const step2 = document.getElementById("step2");
+    const step3 = document.getElementById("step3");
+    const nextToStep2 = document.getElementById("nextToStep2");
+    const backToStep1 = document.getElementById("backToStep1");
+    const nextToStep3 = document.getElementById("nextToStep3");
+    const backToStep2 = document.getElementById("backToStep2");
+    const form = document.querySelector('form[action*="edit_application_page"]');
+    const applicantId = "{{ application.applicant_id }}";
+
+    if (nextToStep2) nextToStep2.addEventListener("click", function (e) {
+      e.preventDefault();
+      const invalidField = findFirstInvalidField(step1);
+      if (invalidField) { showValidationError(invalidField); }
+      else { step1.classList.add("hidden"); step2.classList.remove("hidden"); window.scrollTo(0, 0); updateStepperUI(2); }
+    });
+    if (backToStep1) backToStep1.addEventListener("click", function (e) { e.preventDefault(); step2.classList.add("hidden"); step1.classList.remove("hidden"); window.scrollTo(0, 0); updateStepperUI(1); });
+
+    if (nextToStep3) nextToStep3.addEventListener("click", function (e) {
+      e.preventDefault();
+      const invalidField = findFirstInvalidField(step2);
+      if (invalidField) { showValidationError(invalidField); }
+      else { step2.classList.add("hidden"); step3.classList.remove("hidden"); window.scrollTo(0, 0); updateStepperUI(3); }
+    });
+    if (backToStep2) backToStep2.addEventListener("click", function (e) { e.preventDefault(); step3.classList.add("hidden"); step2.classList.remove("hidden"); window.scrollTo(0, 0); updateStepperUI(2); });
+
+    if (form) {
+      form.addEventListener('submit', function (event) {
+        const stepsToValidate = [
+          { el: step1, num: 1, name: "Personal Information" },
+          { el: step2, num: 2, name: "Family Details" },
+          { el: step3, num: 3, name: "Educational Background" }
+        ];
+        for (const stepInfo of stepsToValidate) {
+          const invalidField = findFirstInvalidField(stepInfo.el);
+          if (invalidField) {
+            event.preventDefault();
+            const currentVisibleStep = document.querySelector('#step1.block, #step2.block, #step3.block');
+            if (currentVisibleStep !== stepInfo.el) {
+              if (currentVisibleStep) currentVisibleStep.classList.add('hidden');
+              stepInfo.el.classList.remove('hidden');
+              updateStepperUI(stepInfo.num);
+            }
+            showValidationError(invalidField, `Please complete this required field in the "${stepInfo.name}" section.`);
+            return;
+          }
+        }
+      });
+    }
+
+    function updateStepperUI(activeStep) {
+      const stepperItems = document.querySelectorAll(".px-6.py-4.border-b .flex.items-center > div.flex.flex-col");
+      const progressBars = document.querySelectorAll(".px-6.py-4.border-b .h-1.bg-gray-200 > div");      
+      stepperItems.forEach((item, index) => {
+        const stepNumber = index + 1;
+        const circle = item.querySelector("div.w-10.h-10");
+        const text = item.querySelector("p");
+        if (stepNumber < activeStep) {
+          circle.classList.remove("bg-gray-200", "text-gray-500"); circle.classList.add("bg-primary", "text-white");
+          text.classList.remove("text-gray-500"); text.classList.add("text-primary");
+          if (progressBars[index]) progressBars[index].style.transform = "scaleX(1)";
+        } else if (stepNumber === activeStep) {
+          circle.classList.remove("bg-gray-200", "text-gray-500"); circle.classList.add("bg-primary", "text-white");
+          text.classList.remove("text-gray-500"); text.classList.add("text-primary");
+          if (index > 0 && progressBars[index - 1]) progressBars[index - 1].style.transform = "scaleX(1)";
+          if (progressBars[index]) progressBars[index].style.transform = "scaleX(0)";
+        } else {
+          circle.classList.remove("bg-primary", "text-white"); circle.classList.add("bg-gray-200", "text-gray-500");
+          text.classList.remove("text-primary"); text.classList.add("text-gray-500");
+          if (progressBars[index - 1]) progressBars[index - 1].style.transform = "scaleX(0)";
+        }
+      });
+      if (activeStep === 1 && progressBars[0]) progressBars[0].style.transform = "scaleX(0)";
+    }
+    updateStepperUI(1);
+
+    // --- PHOTO LOGIC (LIKE new_student.html) ---
+    const uploadPhotoBtn = document.getElementById("uploadPhotoBtn");
+    const photoInput = document.getElementById("photoInput");
+    const photoPreview = document.getElementById("photoPreview");
+    const photoPlaceholder = document.getElementById("photoPlaceholder");
+    const photoToast = document.getElementById("photoToast");
+    const photoStatusText = document.getElementById("photoUploadStatus");
+
+    function showPhotoToastGlobal(message, type) {
+        if (!photoToast) return;
+        photoToast.textContent = message;
+        photoToast.className = "fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white text-sm z-50 transform transition-transform duration-300"; // Reset classes
+        if (type === "success") photoToast.classList.add("bg-green-500");
+        else if (type === "error") photoToast.classList.add("bg-red-500");
+        else photoToast.classList.add("bg-blue-500");
+
+        photoToast.classList.remove("hidden", "translate-y-full");
+        photoToast.classList.add("translate-y-0");
+
+        setTimeout(() => {
+            photoToast.classList.remove("translate-y-0");
+            photoToast.classList.add("translate-y-full");
+            setTimeout(() => photoToast.classList.add("hidden"), 300);
+        }, 3000);
+    }
+
+    if (uploadPhotoBtn) {
+        uploadPhotoBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            photoInput.click();
+        });
+    }
+
+    if (photoInput) {
+        photoInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                if (!file.type.startsWith("image/")) {
+                    showPhotoToastGlobal("⚠️ Please select an image file", "error");
+                    photoInput.value = "";
+                    return;
+                }
+                const MAX_SIZE = 5 * 1024 * 1024;
+                if (file.size > MAX_SIZE) {
+                    showPhotoToastGlobal("⚠️ Photo is too large (max 5MB)", "error");
+                    photoInput.value = "";
+                    return;
+                }
+                
+                // Show local preview immediately
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    photoPreview.src = event.target.result;
+                    photoPreview.classList.remove("hidden");
+                    if (photoPlaceholder) {
+                      photoPlaceholder.classList.add("hidden");
+                    }
+                };
+                reader.readAsDataURL(file);
+
+                // --- NEW: Instant AJAX Upload ---
+                const formData = new FormData();
+                formData.append('photo', file);
+
+                try {
+                    const response = await fetch(`/edit-application/${applicantId}/update-photo`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+
+                    if(data.success) {
+                        showPhotoToastGlobal("✅ Photo updated successfully!", "success");
+                        uploadPhotoBtn.textContent = 'Change Photo';
+                        if (photoStatusText) {
+                           photoStatusText.innerHTML = '<span class="text-green-600 font-semibold">✓ Photo updated.</span>';
+                        }
+                        // Refresh image source from server with a timestamp to bust cache
+                        photoPreview.src = `/applicant-photo/${applicantId}?t=${new Date().getTime()}`;
+                    } else {
+                        throw new Error(data.message || 'Upload failed.');
+                    }
+                } catch (error) {
+                    showPhotoToastGlobal(`⚠️ ${error.message}`, "error");
+                    // Optionally revert preview to original if upload fails
+                    photoPreview.src = `/applicant-photo/${applicantId}`; 
+                }
+                // --- END: Instant AJAX Upload ---
+            }
+        });
+    }
+    // --- END PHOTO LOGIC ---
+
+  });
+
+  document.addEventListener('DOMContentLoaded', function () {
+    const menuToggle = document.querySelector('.menu-toggle');
+    const navigation = document.getElementById('main-navigation');
+    if (menuToggle && navigation) {
+      menuToggle.addEventListener('click', function () {
+        navigation.classList.toggle('active');
+        menuToggle.classList.toggle('active');
+      });
+    }
+  });
+</script>
+{% endblock %}

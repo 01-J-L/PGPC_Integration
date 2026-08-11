@@ -1,0 +1,89 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+    <!-- Page Header -->
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">My Analytics</h1>
+        <p class="text-gray-600 dark:text-gray-400 mt-1">An overview of your teaching workload history by school year.</p>
+    </div>
+
+    <!-- Analytics Cards Grid -->
+    <div class="space-y-8">
+        {% for school_year, semesters in workload_by_sy.items() %}
+            <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                <div class="p-4 border-b dark:border-gray-700">
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white">School Year: {{ school_year }}</h2>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200 dark:divide-gray-700">
+                    
+                    <!-- 1st Semester Card -->
+                    <div class="p-6">
+                        <h3 class="font-medium text-gray-500 dark:text-gray-400">1st Semester</h3>
+                        <div class="mt-2 flex items-baseline space-x-2">
+                            <!-- START: MODIFIED UNIT DISPLAY -->
+                            <span class="text-3xl font-bold text-primary dark:text-indigo-400">{{ semesters[1].units }}</span>
+                            <span class="text-gray-600 dark:text-gray-300">/ 30 Units</span>
+                            <!-- END: MODIFIED UNIT DISPLAY -->
+                        </div>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">{{ semesters[1].classes }} classes</p>
+                        
+                        {% set sem1_percentage = ([100, (semesters[1].units / 30) * 100]|min) %}
+                        {% if semesters[1].units > 30 %}
+                            {% set sem1_color = 'bg-red-500' %}
+                        {% elif sem1_percentage >= 90 %}
+                            {% set sem1_color = 'bg-yellow-500' %}
+                        {% else %}
+                            {% set sem1_color = 'bg-green-500' %}
+                        {% endif %}
+                        <div class="flex items-center">
+                            <div class="w-full bg-gray-200 dark:bg-slate-600 rounded-full h-2.5">
+                                <div class="{{ sem1_color }} h-2.5 rounded-full" style="width: {{ sem1_percentage }}%"></div>
+                            </div>
+                            <span class="ml-2 text-xs font-medium">{{ "%.0f"|format(sem1_percentage) }}%</span>
+                        </div>
+                    </div>
+
+                    <!-- 2nd Semester Card -->
+                    <div class="p-6">
+                        <h3 class="font-medium text-gray-500 dark:text-gray-400">2nd Semester</h3>
+                        <div class="mt-2 flex items-baseline space-x-2">
+                            <!-- START: MODIFIED UNIT DISPLAY -->
+                            <span class="text-3xl font-bold text-primary dark:text-indigo-400">{{ semesters[2].units }}</span>
+                            <span class="text-gray-600 dark:text-gray-300">/ 30 Units</span>
+                            <!-- END: MODIFIED UNIT DISPLAY -->
+                        </div>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">{{ semesters[2].classes }} classes</p>
+
+                        {% set sem2_percentage = ([100, (semesters[2].units / 30) * 100]|min) %}
+                        {% if semesters[2].units > 30 %}
+                            {% set sem2_color = 'bg-red-500' %}
+                        {% elif sem2_percentage >= 90 %}
+                            {% set sem2_color = 'bg-yellow-500' %}
+                        {% else %}
+                            {% set sem2_color = 'bg-green-500' %}
+                        {% endif %}
+                        <div class="flex items-center">
+                            <div class="w-full bg-gray-200 dark:bg-slate-600 rounded-full h-2.5">
+                                <div class="{{ sem2_color }} h-2.5 rounded-full" style="width: {{ sem2_percentage }}%"></div>
+                            </div>
+                            <span class="ml-2 text-xs font-medium">{{ "%.0f"|format(sem2_percentage) }}%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 dark:bg-slate-700/50 px-6 py-3">
+                    <p class="text-sm font-semibold text-gray-700 dark:text-slate-300">
+                        Total for S.Y. {{ school_year }}: 
+                        <span class="text-primary dark:text-indigo-400">{{ semesters[1].units + semesters[2].units }} Units</span> across 
+                        <span class="text-primary dark:text-indigo-400">{{ semesters[1].classes + semesters[2].classes }} Classes</span>
+                    </p>
+                </div>
+            </div>
+        {% else %}
+            <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-12 text-center">
+                <i class="ri-folder-info-line text-5xl text-gray-400 mb-4"></i>
+                <h3 class="text-lg font-semibold text-gray-700 dark:text-white">No Workload History Found</h3>
+                <p class="text-gray-500 dark:text-gray-400 mt-1">There is no schedule data associated with your account yet.</p>
+            </div>
+        {% endfor %}
+    </div>
+{% endblock %}

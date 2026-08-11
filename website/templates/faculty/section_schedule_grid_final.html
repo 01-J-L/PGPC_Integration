@@ -1,0 +1,551 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+
+<!-- Print Styles (Standard CSS only) -->
+<style>
+    @media print {
+        body > div > aside, 
+        body > div > div > header,
+        .screen-only {
+            display: none !important;
+        }
+        .md\:ml-64 { margin-left: 0 !important; }
+        .print-only { display: block !important; }
+        
+        @page {
+            size: landscape;
+            margin: 0.5cm;
+        }
+        
+        .print-table, .print-table th, .print-table td {
+            border: 1px solid #000;
+            padding: 2px;
+            font-size: 7pt;
+            text-align: center;
+            vertical-align: middle;
+        }
+        .print-table th { font-weight: bold; background-color: #f0f0f0 !important; -webkit-print-color-adjust: exact; }
+        .instructor-row td { border-top: none !important; padding-top: 1px; padding-bottom: 3px; }
+    }
+</style>
+
+<!-- 1. Pass Data to JS -->
+<script>
+    const ALL_ROOMS = {{ add_form.room.choices | tojson | safe }} || [];
+    const ALL_FACULTY = {{ add_form.faculty.choices | tojson | safe }} || [];
+    const SEMESTER = {{ semester }};
+    
+    // Map Course Codes to IDs
+    const COURSE_MAP = {};
+    {% for id, label in add_form.course.choices %}
+        COURSE_MAP['{{ label.split(" - ")[0] }}'] = '{{ id }}';
+    {% endfor %}
+</script>
+
+<!-- Wrapper for all screen-only content -->
+<div class="screen-only" x-data="sectionScheduleHandler()">
+    
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <a href="{{ url_for('faculty_main.manage_section_schedule_hub') }}" class="text-sm text-primary dark:text-indigo-400 hover:underline flex items-center">
+                <i class="ri-arrow-left-s-line mr-1"></i> Back to Section Hub
+            </a>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white mt-2">{{ title }}</h1>
+            <p class="text-gray-600 dark:text-gray-400">{{ '1st Semester' if semester == 1 else '2nd Semester' }}</p>
+        </div>
+        
+        <div class="flex items-center gap-3">
+            <!-- Save Button (Only if drafts exist) -->
+            {% if has_drafts %}
+            <form action="{{ url_for('faculty_main.publish_section_schedule', program_id=program.id, section_name=section_name, semester=semester) }}" method="POST">
+                <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center text-sm font-bold hover:bg-green-700 transition-colors shadow-md animate-pulse">
+                    <i class="ri-save-3-line w-4 h-4 mr-2"></i>
+                    Save & Notify Faculty
+                </button>
+            </form>
+            {% endif %}
+
+            <button onclick="window.print()" class="bg-slate-500/10 dark:bg-white/10 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-lg flex items-center text-sm font-medium hover:bg-slate-500/20 dark:hover:bg-white/20 transition-colors">
+                <i class="ri-printer-line w-4 h-4 mr-2"></i>
+                Print Schedule
+            </button>
+        </div>
+    </div>
+
+    <!-- Table Container -->
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[800px] table-fixed">
+                <thead class="bg-gray-50 dark:bg-slate-700">
+                    <tr class="divide-x divide-gray-200 dark:divide-gray-600">
+                        <th class="px-2 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-40">Time</th>
+                        {% for day in days %}
+                        <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{{ day }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for row in schedule_grid %}
+                    {% set ns = namespace(is_empty=true) %}
+                    {% for item in row.days %}{% if item %}{% set ns.is_empty = false %}{% endif %}{% endfor %}
+
+                    <tr class="divide-x divide-gray-200 dark:divide-gray-600 {{ 'bg-gray-50/50 dark:bg-slate-700/30' if ns.is_empty }}">
+                        <!-- Time Column -->
+                        <td class="px-2 py-2 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white align-top h-12">
+                            {{ row.display_time }}
+                        </td>
+                        
+                        <!-- Days Columns -->
+                        {% for item in row.days %}
+                            <td class="p-1 align-top text-center relative group h-28">
+                                {% if item %}
+                                    {% set schedule = item.schedule %}
+                                    <button 
+                                        type="button"
+                                        @click="openEditModal($event.currentTarget)"
+                                        data-schedule-id="{{ schedule.id }}"
+                                        data-course-code="{{ schedule.course_code }}"
+                                        data-room="{{ schedule.room }}"
+                                        data-teacher-id="{{ schedule.teacher.id }}"
+                                        data-day="{{ schedule.day }}" 
+                                        data-time-start="{{ schedule.time_start }}"
+                                        data-time-end="{{ schedule.time_end }}"
+                                        class="p-2 rounded-lg text-left h-full w-full transition-colors cursor-pointer flex flex-col shadow-sm text-xs justify-between border 
+                                        {% if schedule.is_published %}
+                                            bg-indigo-100 dark:bg-indigo-900/40 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-200 dark:hover:bg-indigo-900/60
+                                        {% else %}
+                                            bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 hover:bg-yellow-200 dark:hover:bg-yellow-900/60 ring-2 ring-yellow-400/50
+                                        {% endif %}">
+                                        
+                                        <div>
+                                            <p class="font-bold {% if schedule.is_published %}text-indigo-900 dark:text-indigo-200{% else %}text-yellow-900 dark:text-yellow-200{% endif %}">
+                                                {{ schedule.course_code }}
+                                                {% if not schedule.is_published %} <span class="text-[9px] uppercase bg-yellow-500 text-white px-1 rounded ml-1">Draft</span> {% endif %}
+                                            </p>
+                                            
+                                            <p class="{% if schedule.is_published %}text-indigo-700 dark:text-indigo-300{% else %}text-yellow-800 dark:text-yellow-300{% endif %} truncate">{{ schedule.course_description }}</p>
+                                            <p class="mt-1 font-mono text-[10px] {% if schedule.is_published %}text-indigo-600 dark:text-indigo-400{% else %}text-yellow-700 dark:text-yellow-400{% endif %}">Rm: {{ schedule.room }}</p>
+                                            <p class="font-bold mt-1 {% if schedule.is_published %}text-indigo-800 dark:text-white{% else %}text-yellow-900 dark:text-white{% endif %}">
+                                                {{ schedule.teacher.full_name }}
+                                            </p>
+                                            <p class="text-[10px] mt-1">{{ schedule.time_start.strftime('%I:%M') }} - {{ schedule.time_end.strftime('%I:%M %p') }}</p>
+                                        </div>
+                                    </button>
+                                {% else %}
+                                    <button @click="openAddModal('{{ days[loop.index0] }}', '{{ row.form_start }}', '{{ row.form_end }}')"
+                                            class="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-600 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-500 dark:hover:text-blue-400 transition-colors">
+                                        <i class="ri-add-line text-2xl"></i>
+                                    </button>
+                                {% endif %}
+                            </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                    
+                    <!-- Add Time Row -->
+                    <tr class="divide-x divide-gray-200 dark:divide-gray-600">
+                        <td colspan="{{ days|length + 1 }}" class="p-1">
+                             <button @click="isTimeModalOpen = true" class="w-full h-full flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-500 dark:hover:text-blue-400 rounded-lg py-2">
+                                <i class="ri-add-line text-xl mr-1"></i>
+                                <span class="text-xs font-medium">Add Time Row</span>
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Add Schedule Modal -->
+        <div x-show="showAddModal" @keydown.escape.window="showAddModal = false" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50" style="display: none;">
+            <div @click.away="showAddModal = false" class="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-lg flex flex-col max-h-[90vh]">
+                <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center flex-shrink-0">
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white" x-text="`Add Schedule for ${day}`"></h2>
+                    <button @click="showAddModal = false" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white text-2xl">&times;</button>
+                </div>
+                <form id="addScheduleForm" method="POST" action="{{ url_for('faculty_main.section_schedule_grid', program_id=program.id, section_name=section_name, semester=semester) }}" class="flex flex-col flex-grow overflow-hidden">
+                    <div class="p-6 space-y-4 overflow-y-auto flex-grow">
+                        {{ add_form.hidden_tag() }}
+                        <input type="hidden" name="add_schedule_submit" value="1">
+                        {{ add_form.day() }}
+                        
+                        <div>
+                            {{ add_form.course.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                            {{ add_form.course(class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white", id="add_course") }}
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                {{ add_form.time_start.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                                {{ add_form.time_start(class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white", id="add_start", **{'@change': 'checkAvailability(false)'}) }}
+                            </div>
+                            <div>
+                                {{ add_form.time_end.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                                {{ add_form.time_end(class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white", id="add_end", **{'@change': 'checkAvailability(false)'}) }}
+                            </div>
+                        </div>
+                        
+                        <div>
+                            {{ add_form.faculty.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                            <select id="add_faculty" name="faculty" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"></select>
+                        </div>
+
+                        <div>
+                            {{ add_form.room.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                            <select id="add_room" name="room" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"></select>
+                        </div>
+                    </div>
+                    <div class="flex-shrink-0 px-6 py-3 bg-gray-50 dark:bg-slate-800 flex justify-end rounded-b-lg">
+                        <button type="submit" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700 cursor-pointer transition-colors">Add Schedule</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Edit Schedule Modal -->
+        <div x-show="showEditModal" @keydown.escape.window="showEditModal = false" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50" style="display: none;">
+            <div @click.away="showEditModal = false" class="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-lg flex flex-col max-h-[90vh]">
+                <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center flex-shrink-0">
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white">Edit Schedule</h2>
+                    <button @click="showEditModal = false" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white text-2xl">&times;</button>
+                </div>
+                <div class="flex flex-col flex-grow overflow-hidden">
+                    <div class="p-6 space-y-4 overflow-y-auto flex-grow">
+                        <form method="POST" id="editScheduleForm" action="{{ url_for('faculty_main.section_schedule_grid', program_id=program.id, section_name=section_name, semester=semester) }}">
+                            {{ edit_form.hidden_tag() }}
+                            <input type="hidden" name="update_schedule_submit" value="1">
+                            {{ edit_form.schedule_id(id="edit_schedule_id") }}
+                            
+                            <!-- Course -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Course</label>
+                                <select id="edit_course" name="course" x-model="editData.course_id" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white">
+                                    {% for val, label in edit_form.course.choices %}
+                                    <option value="{{ val }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Start Time</label>
+                                    <input type="text" id="edit_start" name="time_start" x-model="editData.time_start" @change="checkAvailability(true)" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">End Time</label>
+                                    <input type="text" id="edit_end" name="time_end" x-model="editData.time_end" @change="checkAvailability(true)" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white">
+                                </div>
+                            </div>
+                            
+                            <!-- Faculty -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Faculty</label>
+                                <select id="edit_faculty" name="faculty" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"></select>
+                            </div>
+                            
+                            <!-- Room -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Room</label>
+                                <select id="edit_room" name="room" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"></select>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="flex-shrink-0 px-6 py-3 bg-gray-50 dark:bg-slate-800 flex justify-between items-center rounded-b-lg">
+                        <form method="POST" :action="`/faculty/section-schedule/delete/${editData.id}`" onsubmit="return confirm('Are you sure you want to delete this schedule?');">
+                            {{ delete_form.hidden_tag() }}
+                            <button type="submit" class="text-red-600 dark:text-red-500 text-sm font-medium hover:underline">Delete Schedule</button>
+                        </form>
+                        <button type="submit" form="editScheduleForm" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700 cursor-pointer transition-colors">Update Schedule</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Custom Time Slot Modal -->
+        <div x-show="isTimeModalOpen" @keydown.escape.window="isTimeModalOpen = false" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50" style="display: none;">
+            <div @click.away="isTimeModalOpen = false" class="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-sm p-6">
+                <h3 class="text-xl font-semibold text-gray-800 dark:text-white mb-4">Add Custom Time Slot</h3>
+                <form id="time-slot-form" method="post" action="{{ url_for('faculty_main.section_schedule_grid', program_id=program.id, section_name=section_name, semester=semester) }}">
+                    {{ time_slot_form.hidden_tag() }}
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            {{ time_slot_form.new_start_time.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                            {{ time_slot_form.new_start_time(class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white") }}
+                        </div>
+                        <div>
+                            {{ time_slot_form.new_end_time.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                            {{ time_slot_form.new_end_time(class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white") }}
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end">
+                        <button type="submit" name="add_time_slot_submit" value="submit" class="bg-primary text-white font-bold py-2 px-6 rounded-button hover:bg-primary/90">
+                            Add
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- PRINT VIEW -->
+<div class="hidden print-only" style="font-family: Arial, sans-serif; color: #000; width: 100%;">
+    {% if section_info %}
+    
+    <!-- HEADER -->
+    <div style="position: relative; height: 80px; margin-bottom: 5px; width: 100%;">
+        <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="College Logo" style="position: absolute; left: 50px; top: 0; height: 75px;">
+        
+        <div style="text-align: center; width: 100%; padding-top: 5px; line-height: 1.2;">
+            <p style="font-size: 8pt; margin: 0;">Republic of the Philippines</p>
+            <p style="font-weight: bold; font-size: 13pt; margin: 2px 0;">PADRE GARCIA POLYTECHNIC COLLEGE</p>
+            <p style="font-size: 8pt; margin: 0;">Brgy. Castillo, Padre Garcia, Batangas 4224</p>
+            <p style="font-weight: bold; font-size: 11pt; margin-top: 8px;">{{ section_info['program'].upper() }}</p>
+        </div>
+    </div>
+    
+    <div style="text-align: center; margin-bottom: 5px;">
+        <p style="font-weight: bold; font-size: 10pt; margin: 0;">CLASS SCHEDULE</p>
+        <p style="font-size: 9pt; margin: 0;">{{ section_info['semester_display'] }} A.Y. {{ active_school_year }}</p>
+    </div>
+    
+    <!-- TABLE -->
+    <table class="w-full border-collapse print-table">
+        <thead>
+            <tr>
+                <th style="width: 10%;">{{ program.program_code }} {{ section_info['section'] }}</th>
+                {% for day in days %}<th style="width: 15%;">{{ day }}</th>{% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% if print_grid_data %}
+                {% for row in print_grid_data %}
+                    {% if not row.is_gap %}
+                        <!-- CONTENT ROW -->
+                        <tr>
+                            <td style="font-weight: bold;">{{ row.display_time }}</td>
+                            {% for item in row.days %}
+                                <td style="vertical-align: middle; padding: 4px;">
+                                    {% if item %}
+                                        <strong style="font-size: 9pt;">{{ item.course_code }}</strong><br>
+                                        <span style="font-size: 7pt; white-space: nowrap;">ROOM {{ item.room }}</span>
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                        <!-- INSTRUCTOR ROW -->
+                        <tr class="instructor-row">
+                            <td style="font-size: 6pt; font-weight: bold; text-align: right; padding-right: 4px; vertical-align: middle;">INSTRUCTOR</td>
+                            {% for item in row.days %}
+                                <td>
+                                    {% if item %}
+                                        {% set name_parts = item.teacher.full_name.split(' ') %}
+                                        {{ name_parts[0][0] }}. {{ name_parts[-1] }}
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% else %}
+                        <!-- GAP / BREAK ROW -->
+                        <tr>
+                            <td style="font-weight: bold; color: #666; font-size: 7pt;">{{ row.display_time }}</td>
+                            <td colspan="6" style="background-color: #f8f9fa; border-top: 1px double #ccc; height: 12px;"></td>
+                        </tr>
+                    {% endif %}
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="7" style="padding: 50px; text-align: center;">No classes scheduled for this section.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+    
+    <!-- FOOTER -->
+    <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 8pt;">
+        <div style="width: 24%; text-align: left;">
+            <p>Prepared by:</p>
+            <p style="margin-top: 30px;">&nbsp;</p>
+            <p>&nbsp;</p>
+        </div>
+        <div style="width: 24%; text-align: center;">
+            <p style="text-align: left;">Checked by:</p>
+            <p style="margin-top: 30px;">&nbsp;</p>
+            <p>&nbsp;</p>
+        </div>
+        <div style="width: 24%; text-align: center;">
+            <p style="text-align: left;">Approved:</p>
+            <p style="margin-top: 30px;">&nbsp;</p>
+            <p>&nbsp;</p>
+        </div>
+        <div style="width: 24%; text-align: center;">
+            <p>&nbsp;</p>
+            <p style="margin-top: 30px;">&nbsp;</p>
+            <p>&nbsp;</p>
+        </div>
+    </div>
+    
+    <div style="text-align: center; margin-top: 5px; font-weight: bold; font-style: italic; font-size: 8pt; color: #007bff;">
+        <p>TAGA PGPC AKO: MATALINO, DISIPLINADO, MABUTING TAO, IPINAGMAMALAKI KO!</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('sectionScheduleHandler', () => ({
+            showAddModal: false, 
+            showEditModal: false, 
+            isTimeModalOpen: false,
+            day: '', 
+            editData: { id: '', user_id: '', course_id: '', room: '', time_start: '', time_end: '' },
+            busyRooms: [],
+            busyFaculty: [],
+
+            openAddModal(day, timeStart, timeEnd) {
+                this.showAddModal = true;
+                this.day = day;
+                
+                const addForm = document.querySelector('#addScheduleForm');
+                addForm.reset();
+                addForm.querySelector('[name=day]').value = day;
+                
+                document.getElementById('add_start').value = timeStart;
+                document.getElementById('add_end').value = timeEnd;
+                
+                this.busyRooms = [];
+                this.busyFaculty = [];
+                
+                this.populateDropdowns('add_room', 'add_faculty', '', '');
+                this.checkAvailability(false); 
+            },
+
+            openEditModal(button) {
+                const d = button.dataset;
+                this.day = d.day; 
+                
+                const cId = COURSE_MAP[d.courseCode] || '';
+
+                this.editData = {
+                    id: d.scheduleId,
+                    user_id: d.teacherId,
+                    course_id: cId, 
+                    room: d.room,
+                    time_start: this.formatTime(d.timeStart),
+                    time_end: this.formatTime(d.timeEnd)
+                };
+                
+                const idField = document.getElementById('edit_schedule_id');
+                if(idField) idField.value = d.scheduleId;
+                
+                this.busyRooms = [];
+                this.busyFaculty = [];
+
+                this.populateDropdowns('edit_room', 'edit_faculty', this.editData.room, this.editData.user_id);
+                this.checkAvailability(true);
+                
+                this.showEditModal = true;
+            },
+
+            checkAvailability(isEdit) {
+                const prefix = isEdit ? 'edit' : 'add';
+                const day = this.day || 'Monday';
+                const start = document.getElementById(`${prefix}_start`).value;
+                const end = document.getElementById(`${prefix}_end`).value;
+                const excludeId = isEdit ? this.editData.id : '';
+
+                if (!start || !end) return;
+
+                const url = `/api/check-availability?day=${day}&start=${start}&end=${end}&semester=${SEMESTER}&exclude_id=${excludeId}`;
+
+                fetch(url)
+                    .then(res => res.json())
+                    .then(data => {
+                        this.busyRooms = data.busy_rooms || [];
+                        this.busyFaculty = data.busy_faculty || [];
+                        
+                        const currentRoom = isEdit ? this.editData.room : null;
+                        const currentFac = isEdit ? this.editData.user_id : null;
+                        this.populateDropdowns(`${prefix}_room`, `${prefix}_faculty`, currentRoom, currentFac);
+                    })
+                    .catch(err => {
+                        console.error(err);
+                    });
+            },
+
+            populateDropdowns(roomElId, facElId, currentRoom, currentFac) {
+                const roomSelect = document.getElementById(roomElId);
+                const facSelect = document.getElementById(facElId);
+                
+                if(!roomSelect || !facSelect) return;
+
+                // ROOMS
+                roomSelect.innerHTML = '';
+                roomSelect.add(new Option('-- Select Room --', ''));
+                const busyRoomSet = new Set(this.busyRooms.map(r => r.trim().toLowerCase()));
+                let currentRoomNorm = currentRoom ? currentRoom.trim().toLowerCase() : "";
+
+                ALL_ROOMS.forEach(([val, label]) => {
+                    if (!val) return;
+                    const cleanVal = val.trim();
+                    const checkVal = cleanVal.toLowerCase();
+                    const isBusy = busyRoomSet.has(checkVal);
+                    const isCurrent = (checkVal === currentRoomNorm);
+
+                    const opt = new Option(label, val);
+                    if (this.busyRooms.length > 0 && isBusy && !isCurrent) {
+                        opt.disabled = true;
+                        opt.text = `${label} (Occupied)`;
+                    }
+                    roomSelect.add(opt);
+                });
+                
+                if (currentRoom) {
+                     let exists = false;
+                     for(let i=0; i<roomSelect.options.length; i++) {
+                         if(roomSelect.options[i].value === currentRoom) exists = true;
+                     }
+                     if(!exists) roomSelect.add(new Option(currentRoom, currentRoom));
+                     roomSelect.value = currentRoom;
+                }
+
+                // FACULTY
+                facSelect.innerHTML = '';
+                facSelect.add(new Option('-- Select Faculty --', ''));
+                const busyFacSet = new Set(this.busyFaculty.map(f => String(f)));
+                let currentFacStr = currentFac ? String(currentFac) : "";
+
+                ALL_FACULTY.forEach(([val, label]) => {
+                    const valStr = String(val);
+                    const isBusy = busyFacSet.has(valStr);
+                    const isCurrent = (valStr === currentFacStr);
+
+                    const opt = new Option(label, val);
+                    if (this.busyFaculty.length > 0 && isBusy && !isCurrent) {
+                         opt.disabled = true;
+                         opt.text = `${label} (Busy)`;
+                    }
+                    facSelect.add(opt);
+                });
+                
+                if (currentFac) {
+                    facSelect.value = String(currentFac);
+                }
+            },
+            
+            formatTime(timeStr) {
+                if (!timeStr) return '';
+                const parts = timeStr.split(':');
+                let h = parseInt(parts[0], 10);
+                const m = parts[1];
+                const ampm = h >= 12 ? 'PM' : 'AM';
+                h = h % 12;
+                if (h === 0) h = 12;
+                return `${String(h).padStart(2, '0')}:${m} ${ampm}`;
+            }
+        }));
+    });
+</script>
+
+{% endblock %}

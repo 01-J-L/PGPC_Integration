@@ -1,0 +1,28 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+<div class="max-w-md mx-auto bg-white dark:bg-slate-800 rounded-lg shadow-md p-8 mt-10">
+    <h2 class="text-xl font-bold text-gray-800 dark:text-white mb-4">Upload Proof of Class</h2>
+    
+    <div class="mb-6 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-md border border-indigo-100 dark:border-indigo-800">
+        <p class="text-sm text-gray-600 dark:text-gray-300"><strong>Class:</strong> {{ sub_request.teaching_load.course_code }}</p>
+        <p class="text-sm text-gray-600 dark:text-gray-300"><strong>Date:</strong> {{ sub_request.date_of_absence.strftime('%B %d, %Y') }}</p>
+        <p class="text-xs text-gray-500 mt-2">Please upload a screenshot of the online session, a photo of the class, or an attendance sheet.</p>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data">
+        {{ form.hidden_tag() }}
+        
+        <div class="mb-4">
+            {{ form.proof.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2") }}
+            {{ form.proof(class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100") }}
+        </div>
+
+        <div class="flex justify-end">
+            <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
+                Submit Proof
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

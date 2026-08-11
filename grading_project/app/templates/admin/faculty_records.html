@@ -1,0 +1,107 @@
+{% extends "admin/admin_base.html" %}
+{% block admin_content %}
+<div class="space-y-6">
+    <!-- Header Section -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Faculty Management</h1>
+            <p class="text-sm text-gray-500">Browse, add, or remove faculty records.</p>
+        </div>
+        <div>
+            <a href="{{ url_for('main.add_faculty') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none transition-colors">
+                <svg class="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                <span>Add Faculty</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+        <form method="GET" action="{{ url_for('main.admin_faculty_records') }}" class="flex flex-col sm:flex-row gap-4 items-end">
+            <div class="w-full sm:max-w-xs">
+                <label for="department" class="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Filter by Department</label>
+                <select name="department" id="department" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" onchange="this.form.submit()">
+                    <option value="">All Departments</option>
+                    <option value="General Education" {% if selected_dept == 'General Education' %}selected{% endif %}>General Education (Minor)</option>
+                    {% for p in programs %}
+                        <option value="{{ p.code }}" {% if selected_dept == p.code %}selected{% endif %}>{{ p.code }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium rounded-md shadow-sm transition-colors">
+                    Filter
+                </button>
+                {% if selected_dept %}
+                <a href="{{ url_for('main.admin_faculty_records') }}" class="px-3 py-2 border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors">
+                    Reset
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    <!-- Main Content Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 bg-white">
+                    {% for faculty in faculties %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ faculty.name }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ faculty.email }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if faculty.department %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                    {{ faculty.department }}
+                                </span>
+                            {% else %}
+                                <span class="text-gray-400 text-sm italic">None</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if faculty.is_approved %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Approved</span>
+                            {% else %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div class="flex justify-end gap-3 items-center">
+                                <!-- ASSIGN LOADS BUTTON -->
+                                <a href="{{ url_for('main.admin_assign_loads', user_id=faculty.id) }}" class="text-indigo-600 hover:text-indigo-900 flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    Assign Loads
+                                </a>
+                                <!-- DELETE BUTTON -->
+                                <form method="POST" action="{{ url_for('main.delete_faculty', user_id=faculty.id) }}" onsubmit="return confirm('Are you sure you want to delete this faculty member? This action cannot be undone.');" class="inline-block m-0">
+                                    <button type="submit" class="text-red-600 hover:text-red-900 transition-colors">Delete</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-10 text-center">
+                            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                            <p class="mt-2 text-sm text-gray-500">No faculty members found.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock admin_content %}

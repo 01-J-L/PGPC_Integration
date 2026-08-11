@@ -1,0 +1,150 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+
+<!-- Print Styles (unchanged) -->
+<style>
+    @media print {
+        body > div > aside, 
+        body > div > div > header {
+            display: none !important;
+        }
+        .md\:pl-72 {
+            padding-left: 0 !important;
+        }
+        .screen-only {
+            display: none !important;
+        }
+        .print-only {
+            display: block !important;
+        }
+        main { padding: 0 !important; }
+        @page {
+            size: portrait;
+            margin: 2cm;
+        }
+    }
+</style>
+
+<!-- START: SCREEN-ONLY CONTENT -->
+<div class="screen-only">
+    <!-- Page Header -->
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+        <h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">Faculty Profile</h1>
+        <div class="flex space-x-2">
+            <button onclick="window.print()" class="bg-slate-500/10 dark:bg-white/10 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-lg flex items-center text-sm font-medium hover:bg-slate-500/20 dark:hover:bg-white/20 transition-colors">
+                <i class="ri-printer-line w-4 h-4 mr-2"></i>
+                Print Profile
+            </button>
+            <a href="{{ url_for('faculty_main.faculty_profile', user_id=faculty.id, edit='true') }}" class="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center text-sm font-medium hover:bg-indigo-500 transition-colors">
+                <i class="ri-edit-line w-4 h-4 mr-2"></i>
+                Edit Profile
+            </a>
+        </div>
+    </div>
+
+    <!-- Redesigned Profile Card -->
+    <div class="bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 rounded-xl shadow-lg">
+        <!-- Profile Header -->
+        <div class="p-6 border-b border-slate-200/80 dark:border-white/10 flex items-center space-x-4">
+            <div class="w-16 h-16 rounded-full flex-shrink-0 bg-slate-200 dark:bg-slate-700/50 flex items-center justify-center ring-4 ring-white/80 dark:ring-slate-800/50">
+                <i class="ri-user-line text-4xl text-slate-500 dark:text-slate-400"></i>
+            </div>
+            <div>
+                <h2 class="text-xl font-bold text-slate-800 dark:text-white">{{ faculty.full_name }}</h2>
+                <div class="flex items-center space-x-4 mt-1">
+                    <span class="text-sm text-slate-600 dark:text-slate-300">{{ faculty.role.title() }}</span>
+                    <span class="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600"></span>
+                    <span class="px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full 
+                        {% if faculty.status == 'active' %} bg-green-500/10 text-green-700 dark:bg-green-500/20 dark:text-green-300
+                        {% else %} bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-300
+                        {% endif %}">
+                        {{ faculty.status.title() }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Body -->
+        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+            <!-- Macro for profile fields -->
+            {% macro profile_field(label, value) %}
+                <div>
+                    <dt class="text-sm text-slate-500 dark:text-slate-400">{{ label }}</dt>
+                    <dd class="font-medium text-slate-800 dark:text-white mt-1">{{ value | default('N/A', true) }}</dd>
+                </div>
+            {% endmacro %}
+            
+            <!-- Basic Information -->
+            <div class="space-y-4">
+                {{ profile_field('Email Address', faculty.email) }}
+                {{ profile_field('Department', faculty.department) }}
+            </div>
+
+            <!-- Professional Information -->
+            <div class="space-y-4">
+                {{ profile_field('Major / Expertise', faculty.major) }}
+                {{ profile_field('Licensed Professional', 'Yes' if faculty.is_licensed else 'No') }}
+            </div>
+            
+            <div class="md:col-span-2 my-4 border-t border-slate-200/80 dark:border-white/10"></div>
+
+            <!-- Educational Background -->
+            <div class="space-y-4">
+                 <h3 class="text-md font-semibold text-slate-700 dark:text-slate-200 col-span-full mb-0">Educational Background</h3>
+                {{ profile_field('Baccalaureate Degree', faculty.baccalaureate_degree) }}
+                {{ profile_field('Year Graduated', faculty.baccalaureate_year_grad) }}
+            </div>
+
+            <div class="space-y-4 md:mt-9">
+                {{ profile_field('Highest Educational Attainment', faculty.highest_edu_attainment) }}
+                {{ profile_field('Year Graduated', faculty.highest_edu_year_grad) }}
+            </div>
+        </div>
+    </div>
+</div>
+<!-- END: SCREEN-ONLY CONTENT -->
+
+
+<!-- START: PRINT-ONLY SECTION (unchanged) -->
+<div class="hidden print-only" style="font-family: 'Times New Roman', serif;">
+    <!-- Letterhead -->
+    <div style="text-align: center; margin-bottom: 1cm;">
+        <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="College Logo" style="height: 90px; margin: 0 auto 10px auto;">
+        <p style="font-size: 11pt; margin: 0;">Republic of the Philippines</p>
+        <p style="font-weight: bold; font-size: 14pt; margin: 0;">PADRE GARCIA POLYTECHNIC COLLEGE</p>
+        <p style="font-size: 11pt; margin: 0;">Brgy. Castillo, Padre Garcia, Batangas 4224</p>
+    </div>
+
+    <!-- Profile Title -->
+    <h1 style="text-align: center; font-size: 16pt; font-weight: bold; margin-bottom: 1cm;">FACULTY PROFILE</h1>
+
+    <!-- Main Content -->
+    <div style="display: flex; justify-content: space-between;">
+        <div style="width: 70%;">
+            <!-- Personal & Professional Info -->
+            <h2 style="font-size: 13pt; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 2px; margin-bottom: 10px;">I. Personal & Professional Information</h2>
+            <table style="width: 100%; font-size: 11pt; border-collapse: collapse;">
+                <tr><td style="padding: 3px; font-weight: bold; width: 35%;">Full Name:</td><td style="padding: 3px;">{{ faculty.full_name }}</td></tr>
+                <tr><td style="padding: 3px; font-weight: bold;">Department:</td><td style="padding: 3px;">{{ faculty.department or 'N/A' }}</td></tr>
+                <tr><td style="padding: 3px; font-weight: bold;">Major / Expertise:</td><td style="padding: 3px;">{{ faculty.major or 'N/A' }}</td></tr>
+                <tr><td style="padding: 3px; font-weight: bold;">Subjects Taught:</td><td style="padding: 3px;">{{ faculty.subjects_taught or 'N/A' }}</td></tr>
+            </table>
+
+            <!-- Educational Attainment -->
+            <h2 style="font-size: 13pt; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 2px; margin-top: 0.8cm; margin-bottom: 10px;">II. Educational Attainment</h2>
+            <table style="width: 100%; font-size: 11pt; border-collapse: collapse;">
+                <tr><td style="padding: 3px; font-weight: bold; width: 35%;">Baccalaureate Degree:</td><td style="padding: 3px;">{{ faculty.baccalaureate_degree or 'N/A' }}</td></tr>
+                <tr><td style="padding: 3px; font-weight: bold;">Year Graduated:</td><td style="padding: 3px;">{{ faculty.baccalaureate_year_grad or 'N/A' }}</td></tr>
+                <tr><td style="padding: 15px 3px 3px 3px; font-weight: bold;">Highest Degree:</td><td style="padding: 15px 3px 3px 3px;">{{ faculty.highest_edu_attainment or 'N/A' }}</td></tr>
+                <tr><td style="padding: 3px; font-weight: bold;">Year Graduated:</td><td style="padding: 3px;">{{ faculty.highest_edu_year_grad or 'N/A' }}</td></tr>
+            </table>
+        </div>
+        <div style="width: 25%; display: flex; justify-content: flex-end;">
+            <div style="width: 150px; height: 200px; border: 1px solid #000; display: flex; align-items: center; justify-content: center; color: #888;">2x2 ID Picture</div>
+        </div>
+    </div>
+</div>
+<!-- END: PRINT-ONLY SECTION -->
+
+{% endblock %}

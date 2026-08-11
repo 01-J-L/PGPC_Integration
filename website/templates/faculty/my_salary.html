@@ -1,0 +1,148 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">Salary Computation</h1>
+        <div class="text-sm text-gray-500">
+            Cut-off: <span class="font-bold text-indigo-600">{{ start_date.strftime('%b %d') }} - {{ end_date.strftime('%b %d, %Y') }}</span>
+        </div>
+    </div>
+
+    <!-- 1. RATE SETTING -->
+    <div class="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-sm mb-6 border-l-4 border-indigo-500">
+        <div class="flex justify-between items-end">
+            <div>
+                <h2 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase">Your Hourly Rate</h2>
+                <p class="text-3xl font-bold text-gray-800 dark:text-white">₱ {{ "{:,.2f}".format(rate) }} <span class="text-sm font-normal text-gray-500">/ hour</span></p>
+            </div>
+            <form method="POST" class="flex gap-2 items-end">
+                {{ form.hidden_tag() }}
+                <div>
+                    {{ form.hourly_rate(class="w-32 px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm", placeholder="Enter Rate") }}
+                </div>
+                <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">Update</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2. SUMMARY CARDS -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <!-- Scheduled -->
+        <div class="bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm">
+            <p class="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold">Scheduled Hours</p>
+            <p class="text-xl font-bold text-gray-800 dark:text-white">{{ total_scheduled_hours }} hrs</p>
+            <p class="text-xs text-gray-400">Based on regular load</p>
+        </div>
+        
+        <!-- Absences -->
+        <div class="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg shadow-sm border border-red-100 dark:border-red-800">
+            <p class="text-xs text-red-500 dark:text-red-400 uppercase font-bold">Absences</p>
+            <p class="text-xl font-bold text-red-700 dark:text-red-300">- {{ total_deduction_hours }} hrs</p>
+            <p class="text-xs text-red-400">Deduction</p>
+        </div>
+
+        <!-- Substitutions -->
+        <div class="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg shadow-sm border border-green-100 dark:border-green-800">
+            <p class="text-xs text-green-500 dark:text-green-400 uppercase font-bold">Substitutions</p>
+            <p class="text-xl font-bold text-green-700 dark:text-green-300">+ {{ total_sub_hours }} hrs</p>
+            <p class="text-xs text-green-400">Additional Pay</p>
+        </div>
+
+        <!-- TOTAL -->
+        <div class="bg-indigo-600 p-4 rounded-lg shadow-lg text-white">
+            <p class="text-xs text-indigo-200 uppercase font-bold">Estimated Net Pay</p>
+            <p class="text-2xl font-bold">₱ {{ "{:,.2f}".format(gross_pay) }}</p>
+            <p class="text-xs text-indigo-200">{{ net_hours }} Total Hours</p>
+        </div>
+    </div>
+
+    <!-- 3. DETAILS TABLES -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Deduction Details -->
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4">
+            <h3 class="font-bold text-gray-800 dark:text-white mb-4">Absence Breakdown</h3>
+            {% if deduction_details %}
+            <table class="w-full text-sm text-left">
+                <thead class="text-xs text-gray-500 uppercase bg-gray-50 dark:bg-slate-700">
+                    <tr>
+                        <th class="px-3 py-2">Date</th>
+                        <th class="px-3 py-2">Course</th>
+                        <th class="px-3 py-2">Hours</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in deduction_details %}
+                    <tr class="border-b dark:border-gray-700">
+                        <td class="px-3 py-2">{{ item.date.strftime('%b %d') }}</td>
+                        <td class="px-3 py-2">{{ item.course }}</td>
+                        <td class="px-3 py-2 text-red-600 font-bold">-{{ item.hours }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-sm text-gray-500 italic">No absences recorded for this period.</p>
+            {% endif %}
+        </div>
+
+        <!-- Substitution Details -->
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4">
+            <h3 class="font-bold text-gray-800 dark:text-white mb-4">Substitution Breakdown</h3>
+            {% if sub_details %}
+            <table class="w-full text-sm text-left">
+                <thead class="text-xs text-gray-500 uppercase bg-gray-50 dark:bg-slate-700">
+                    <tr>
+                        <th class="px-3 py-2">Date</th>
+                        <th class="px-3 py-2">For</th>
+                        <th class="px-3 py-2">Hours</th>
+                        <th class="px-3 py-2 text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in sub_details %}
+                    <tr class="border-b dark:border-gray-700">
+                        <td class="px-3 py-2">{{ item.date.strftime('%b %d') }}</td>
+                        <td class="px-3 py-2">{{ item.original_teacher }}</td>
+                        <td class="px-3 py-2 text-green-600 font-bold">+{{ item.hours }}</td>
+                        
+                        <!-- NEW ACTION COLUMN -->
+                        <td class="px-3 py-2 text-right">
+                            <!-- We need to pass the request ID in the dictionary from routes.py -->
+                            {% if item.status == 'accepted' %}
+                                <a href="{{ url_for('faculty_main.upload_proof', request_id=item.id) }}" class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded border border-indigo-200 hover:bg-indigo-200">
+                                    Upload Proof
+                                </a>
+                            {% elif item.status == 'completed' %}
+                                <span class="text-xs text-green-600 flex items-center justify-end gap-1">
+                                    <i class="ri-check-double-line"></i> Paid
+                                </span>
+                            {% else %}
+                                <span class="text-xs text-gray-400">Pending</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-sm text-gray-500 italic">No substitutions recorded for this period.</p>
+            {% endif %}
+        </div>
+    
+    <!-- Date Picker Form (Optional, to change range) -->
+    <div class="mt-8 pt-6 border-t dark:border-gray-700">
+        <form action="{{ url_for('faculty_main.my_salary') }}" method="GET" class="flex gap-4 items-end">
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Start Date</label>
+                <input type="date" name="start_date" value="{{ start_date }}" class="px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">End Date</label>
+                <input type="date" name="end_date" value="{{ end_date }}" class="px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm">
+            </div>
+            <button type="submit" class="bg-gray-200 dark:bg-slate-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-md text-sm font-bold hover:bg-gray-300">View Other Date Range</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

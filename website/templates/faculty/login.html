@@ -1,0 +1,84 @@
+{% extends "faculty/auth_base.html" %}
+
+{% block content %}
+<!-- This is the main container for the two-column login panel -->
+<div class="w-full max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 bg-white rounded-2xl shadow-2xl overflow-hidden">
+    
+    <!-- START: Left Panel (Branding & Image) -->
+    <div class="relative hidden lg:block">
+        <!-- This uses a single, static background image for the panel -->
+        <img src="{{ url_for('static', filename='images/background.png') }}" alt="School Image" class="absolute h-full w-full object-cover">
+        
+        <!-- Dark Overlay -->
+        <div class="absolute inset-0 bg-gray-900 bg-opacity-60"></div>
+
+        <!-- Content -->
+        <div class="relative h-full flex flex-col justify-between p-12 text-white">
+            <!-- Logo -->
+            <div class="flex items-center space-x-3">
+                <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Logo" class="h-10 rounded-full">
+                <span class="text-2xl font-['Poppins',_sans-serif] font-semibold">Faculty System</span>
+            </div>
+
+            <!-- Slogan -->
+            <div class="mb-12">
+                <h2 class="text-3xl font-bold leading-tight">Padre Garcia Polytechnic College</h2>
+                <p class="mt-2 text-lg text-gray-300">"Garciano Ako, Disiplinado, Mabuting Tao."</p>
+            </div>
+        </div>
+    </div>
+    <!-- END: Left Panel -->
+
+    <!-- START: Right Panel (Login Form) -->
+    <div class="p-8 md:p-12">
+        <h2 class="text-3xl font-bold text-gray-800 mb-2">Sign In</h2>
+        <p class="text-gray-500 mb-8">
+            New User? <a href="{{ url_for('faculty_auth.register') }}" class="font-medium text-primary hover:underline">Click to Register!</a>
+        </p>
+
+        <form action="" method="post" class="space-y-6">
+            {{ form.hidden_tag() }}
+            
+            <!-- Email / Username Field -->
+            <div>
+                {{ form.email.label(class="block text-sm font-medium text-gray-700 mb-1") }}
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+                        <i class="ri-user-line text-gray-400"></i>
+                    </span>
+                    {{ form.email(class="w-full pl-10 pr-4 py-2 bg-gray-50 border rounded-lg focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.email.errors else "border-gray-300 focus:ring-primary"), placeholder="Email") }}
+                </div>
+                {% for error in form.email.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+            </div>
+            
+            <!-- Password Field -->
+            <div>
+                {{ form.password.label(class="block text-sm font-medium text-gray-700 mb-1") }}
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+                        <i class="ri-lock-password-line text-gray-400"></i>
+                    </span>
+                    {{ form.password(class="w-full pl-10 pr-4 py-2 bg-gray-50 border rounded-lg focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.password.errors else "border-gray-300 focus:ring-primary"), placeholder="Enter your password") }}
+                </div>
+                {% for error in form.password.errors %}<span class="text-red-500 text-xs">{{ error }}</span>{% endfor %}
+            </div>
+            
+            <!-- Remember Me & Forgot Password -->
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    {{ form.remember_me(class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded") }}
+                    {{ form.remember_me.label(class="ml-2 block text-sm text-gray-900") }}
+                </div>
+                <a href="{{ url_for('faculty_auth.reset_password_request') }}" class="text-sm font-medium text-primary hover:underline">Forgot password?</a>
+            </div>
+            
+            <!-- Submit Button -->
+            <div>
+                {{ form.submit(class="w-full bg-primary text-white font-bold py-3 px-4 rounded-button hover:bg-primary/90 transition-colors") }}
+            </div>
+        </form>
+    </div>
+    <!-- END: Right Panel -->
+    
+</div>
+{% endblock %}

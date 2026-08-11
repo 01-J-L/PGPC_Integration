@@ -1,0 +1,181 @@
+/* app/static/css/style.css - THE NEW DESIGN SYSTEM */
+
+/* 1. Global Setup & Variables */
+:root {
+    --primary-color: #0d6efd;    /* A vibrant blue */
+    --primary-hover: #0b5ed7;   /* A darker blue for hover */
+    --secondary-color: #ffc107; /* A warm yellow for accents */
+    --dark-color: #212529;      /* For primary text and dark buttons */
+    --body-bg: #f8f9fa;         /* Light grey for page backgrounds */
+    --card-bg: #ffffff;         /* Clean white for cards */
+    --text-muted: #6c757d;      /* For helper text */
+    --border-color: #dee2e6;    /* For subtle borders */
+    --font-family: 'Inter', sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-family);
+    background-color: var(--body-bg);
+    color: var(--dark-color);
+}
+
+/* 2. Authentication Page Layout */
+.auth-wrapper {
+    display: flex;
+    min-height: 100vh;
+}
+
+.auth-promo-panel {
+    flex: 1;
+    background-color: #1a237e; /* A deep, professional blue */
+    background-image: linear-gradient(rgba(26, 35, 126, 0.8), rgba(26, 35, 126, 0.9)), url('../img/school-bg.jpg');
+    background-size: cover;
+    background-position: center;
+    padding: 4rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* Pushes content apart */
+    color: var(--card-bg);
+}
+
+.auth-promo-panel .header {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.auth-promo-panel .content h1 {
+    font-size: 3.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    line-height: 1.2;
+}
+
+.auth-promo-panel .content p {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    max-width: 450px;
+    opacity: 0.9;
+}
+
+.auth-promo-panel .footer {
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+.auth-form-panel {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+}
+
+/* 3. Modern Form & Card Styling */
+.form-container {
+    width: 100%;
+    max-width: 420px;
+}
+
+.form-container h2 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.form-container .subheading {
+    margin-bottom: 2.5rem;
+    color: var(--text-muted);
+}
+
+.form-container .subheading a {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+.form-container .subheading a:hover {
+    text-decoration: underline;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.form-group .form-control {
+    width: 100%;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    transition: all 0.2s ease-in-out;
+}
+
+.form-group .form-control:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* 4. Modern Button */
+.btn-primary {
+    width: 100%;
+    padding: 0.9rem;
+    border: none;
+    border-radius: 0.5rem;
+    background-color: var(--dark-color);
+    color: var(--card-bg);
+    font-weight: 500;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out;
+}
+.btn-primary:hover {
+    background-color: #424649;
+}
+
+.forgot-password {
+    text-align: center;
+    margin-top: 1.5rem;
+}
+.forgot-password a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+.forgot-password a:hover {
+    text-decoration: underline;
+}
+
+/* 5. Alert / Flash Messages */
+.alert {
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid transparent;
+    border-radius: .5rem;
+    text-align: center;
+}
+.alert-danger {
+    color: #842029;
+    background-color: #f8d7da;
+    border-color: #f5c2c7;
+}
+.alert-success {
+    color: #0f5132;
+    background-color: #d1e7dd;
+    border-color: #badbcc;
+}
+.alert-info {
+    color: #055160;
+    background-color: #cff4fc;
+    border-color: #b6effb;
+}

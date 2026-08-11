@@ -1,0 +1,15 @@
+<p>Hello Faculty,</p>
+<p>
+    A substitution opportunity is available for <strong>{{ load.teacher.full_name }}</strong>'s class on <strong>{{ request.date_of_absence.strftime('%A, %B %d, %Y') }}</strong>.
+</p>
+<p><strong>Class Details:</strong></p>
+<ul>
+    <li><strong>Course:</strong> {{ load.course_code }} - {{ load.course_description }}</li>
+    <li><strong>Section:</strong> {{ load.section }}</li>
+    <li><strong>Time:</strong> {{ load.time_start.strftime('%I:%M %p') }} - {{ load.time_end.strftime('%I:%M %p') }}</li>
+</ul>
+<p>If you are available and willing to take this class, please click the link below to accept:</p>
+<p>
+    <a href="{{ url_for('main.accept_substitution_request', request_id=request.id, _external=True) }}">Accept Substitution Request</a>
+</p>
+<p>This is a first-come, first-served opportunity. The link will no longer work once the request has been accepted.</p>

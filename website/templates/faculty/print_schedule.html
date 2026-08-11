@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faculty Schedules</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/print_styles.css') }}">
+    <script>
+        window.onload = function() {
+            window.print();
+        }
+    </script>
+</head>
+<body>
+    <div class="print-container">
+        <div class="college-header">
+            <!-- START: THIS IS THE NEW LINE -->
+            <h1>{{ department_name }}</h1>
+            <!-- END: THIS IS THE NEW LINE -->
+        </div>
+
+        {% for data in all_faculty_data %}
+            <div class="faculty-block">
+                <div class="faculty-name">
+                    {{ data.faculty_name }}
+                </div>
+
+                <table class="schedule-table">
+                    <thead>
+                        <tr>
+                            <th class="time-col"></th>
+                            <th>M</th>
+                            <th>T</th>
+                            <th>W</th>
+                            <th>TH</th>
+                            <th>F</th>
+                            <th>S</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in data.schedule_grid %}
+                        <tr>
+                            <td class="time-cell">{{ row.time_label }}</td>
+                            {% for cell_data in row.days %}
+                                <td>
+                                    {% if cell_data %}
+                                        <div class="schedule-entry">
+                                            <!-- Main schedule info -->
+                                            <div>{{ cell_data.schedule.course_code }} - {{ cell_data.schedule.section }} - RM {{ cell_data.schedule.room }}</div>
+                                            
+                                            <!-- Conditionally display non-standard time -->
+                                            {% if cell_data.is_non_standard %}
+                                                <div class="non-standard-time">{{ cell_data.time_display }}</div>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endfor %}
+    </div>
+</body>
+</html>

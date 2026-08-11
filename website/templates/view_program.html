@@ -1,0 +1,350 @@
+{% extends 'base.html' %}
+
+{% block head %}
+{{ super() }}
+<title>{{ program.title if program else "Program Details" }} - PGPC</title>
+<script src="https://cdn.tailwindcss.com/3.4.1"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.2.0/remixicon.min.css">
+{% endblock %}
+
+{% block style %}
+<style>
+    :root {
+        --primary: #1e40af;
+        --secondary: #3b82f6;
+        --bg-light-gray: #f9fafb;
+    }
+
+    body {
+        font-family: 'Inter', sans-serif;
+        background-color: var(--bg-light-gray);
+    }
+
+    /* Header Styles */
+    header {
+        position: sticky;
+        top: 0;
+        width: 100%;
+        padding: 12px 5%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        z-index: 1000;
+        background-color: #162938;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .header-left .logo {
+        font-size: 1.2em;
+        color: #fff;
+        margin-left: 10px;
+        font-weight: 700;
+    }
+
+    .navigation a {
+        font-size: 1em;
+        color: #fff;
+        text-decoration: none;
+        margin-left: 20px;
+        font-weight: 500;
+    }
+
+    .btnLogin-popup {
+        background-color: #fff;
+        color: #162938;
+        padding: 6px 16px;
+        border-radius: 6px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+
+    /* --- Go Top & Animate (Original) --- */
+    .go-top-btn {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        width: 48px;
+        height: 48px;
+        background-color: var(--primary);
+        color: white;
+        border-radius: 50%;
+        border: none;
+        cursor: pointer;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        box-shadow: var(--shadow-lg);
+        transition: all 0.3s ease;
+    }
+
+    .go-top-btn:hover {
+        background-color: var(--secondary);
+        transform: scale(1.1);
+    }
+
+    .go-top-btn i {
+        font-size: 1.5rem;
+    }
+
+    .reveal-on-scroll {
+        opacity: 0;
+        transform: translateY(50px);
+        transition: opacity 0.8s cubic-bezier(0.5, 0, 0, 1), transform 0.8s cubic-bezier(0.5, 0, 0, 1);
+        will-change: opacity, transform;
+    }
+
+    .reveal-on-scroll.is-visible {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    /* Mobile Nav */
+    .menu-toggle {
+        display: none;
+        flex-direction: column;
+        gap: 5px;
+        cursor: pointer;
+    }
+
+    .menu-toggle span {
+        display: block;
+        width: 25px;
+        height: 3px;
+        background: white;
+        border-radius: 2px;
+    }
+
+    @media (max-width: 992px) {
+        .navigation {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            width: 200px;
+            background: #162938;
+            flex-direction: column;
+            padding: 10px;
+        }
+
+        .navigation.active {
+            display: flex;
+        }
+
+        .navigation a {
+            margin: 10px 0;
+        }
+
+        .menu-toggle {
+            display: flex;
+        }
+    }
+
+    /* Animations */
+    .reveal-on-scroll {
+        opacity: 0;
+        transform: translateY(30px);
+        transition: all 0.8s ease-out;
+    }
+
+    .reveal-on-scroll.is-visible {
+        opacity: 1;
+        transform: translateY(0);
+
+    }
+    .header-left {
+        display: flex;
+        align-items: center;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<header>
+    <div class="header-left">
+        <a href="{{ url_for('views.home') }}"><img src="{{ url_for('static', filename='logopgpc.png') }}"
+                alt="Padre Garcia Polytechnic College Logo" width="80" height="auto"></a>
+        <h2 class="logo">Padre Garcia Polytechnic College</h2>
+    </div>
+
+    <div class="menu-toggle" id="mobile-menu">
+        <span></span><span></span><span></span>
+    </div>
+ 
+    <nav class="navigation" id="main-navigation">
+        <a href="{{ url_for('views.home') }}">Home</a>
+        <a href="{{ url_for('views.about') }}">About</a>
+        <a href="#programs">Programs</a>
+
+        <a href="#news">News</a>
+        <a href="{{ url_for('views.contact_page') }}">Contact</a>
+        {% if student_logged_in %}
+        <a href="{{ url_for('views.application_status_page') }}">
+            <button class="btnLogin-popup">My Application</button>
+        </a>
+        <a href="{{ url_for('auth.logout') }}">
+            <button class="btnLogin-popup" style="background-color: #d9534f;">Logout</button>
+        </a>
+        {% else %}
+        <a href="{{ url_for('auth.student_login_page') }}">
+                Student Login
+            </a>
+        
+        <!-- NEW: Check if registration is open -->
+        
+        <a href="{{ url_for('views.existing_or_not') }}" class="no-underline">
+            <button class="btnLogin-popup">Apply now</button>
+        </a>
+        
+        
+        {% endif %}
+    </nav>
+</header>
+
+<!-- Hero Section -->
+<section
+    class="relative h-[40vh] md:h-[60vh] flex items-center justify-center text-center text-white bg-cover bg-center bg-fixed"
+    style="background-image: url('{{ program.hero_image_url }}');">
+    <div class="absolute inset-0 bg-black/60 z-0"></div>
+    <div class="relative z-10 px-4">
+        <h1 class="text-3xl md:text-5xl lg:text-6xl font-black uppercase tracking-tight">
+            {{ program.title }}
+        </h1>
+        <div class="w-24 h-1.5 bg-blue-500 mx-auto mt-6 rounded-full"></div>
+    </div>
+</section>
+
+<!-- Main Content -->
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 -mt-16 relative z-10">
+
+    <!-- Back Navigation -->
+    <div class="mb-6">
+        <a href="{{ url_for('views.home') }}#programs"
+            class="inline-flex items-center text-sm font-bold text-blue-700 bg-white px-4 py-2 rounded-full shadow-md hover:text-blue-900 transition-all">
+            <i class="ri-arrow-left-s-line mr-1"></i> Back to Programs
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Left Content (Overview & Details) -->
+        <div class="lg:col-span-2 space-y-8">
+
+            <!-- Overview Card -->
+            <div class="bg-white rounded-2xl shadow-xl p-6 md:p-10 reveal-on-scroll">
+                <div class="flex items-center gap-3 mb-6">
+                    <i class="ri-information-fill text-3xl text-blue-600"></i>
+                    <h2 class="text-2xl md:text-3xl font-bold text-gray-900">About the Program</h2>
+                </div>
+                <p class="text-gray-600 leading-relaxed text-base md:text-lg">
+                    {{ program.description }}
+                </p>
+            </div>
+
+            <!-- Objectives Grid -->
+            <div class="bg-white rounded-2xl shadow-xl p-6 md:p-10 reveal-on-scroll">
+                <div class="flex items-center gap-3 mb-8">
+                    <i class="ri-focus-3-fill text-3xl text-blue-600"></i>
+                    <h2 class="text-2xl md:text-3xl font-bold text-gray-900">Learning Objectives</h2>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {% for objective in program.objectives %}
+                    <div class="flex items-start gap-4 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                        <i class="ri-checkbox-circle-fill text-blue-600 text-xl mt-1"></i>
+                        <span class="text-gray-700 font-medium">{{ objective }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Core Courses -->
+            <div class="reveal-on-scroll">
+                <div class="flex items-center gap-3 mb-8 px-2">
+                    <i class="ri-book-open-fill text-3xl text-blue-600"></i>
+                    <h2 class="text-2xl md:text-3xl font-bold text-gray-900">Major Curriculum</h2>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {% for course in program.core_courses %}
+                    <div
+                        class="bg-white p-6 rounded-2xl border border-gray-200 hover:border-blue-400 hover:shadow-lg transition-all duration-300">
+                        <span
+                            class="text-[10px] font-bold uppercase tracking-widest text-blue-600 bg-blue-50 px-2 py-1 rounded">{{
+                            course.course_code }}</span>
+                        <h3 class="font-bold text-gray-900 mt-3 text-lg">{{ course.course_name }}</h3>
+                        <p class="text-gray-500 text-sm mt-2 line-clamp-3">{{ course.desc }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar (Careers & Action) -->
+        <div class="space-y-8">
+
+            <!-- Quick Apply Card -->
+            
+
+            <!-- Career Path Card -->
+            <div class="bg-white rounded-2xl shadow-xl p-6 md:p-8 reveal-on-scroll">
+                <h3 class="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                    <i class="ri-briefcase-4-fill text-blue-600"></i> Career Paths
+                </h3>
+                <div class="space-y-3">
+                    {% for career in program.career_opportunities %}
+                    <div
+                        class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg group hover:bg-blue-600 transition-colors">
+                        <i class="ri-arrow-right-s-line text-blue-500 group-hover:text-white"></i>
+                        <span class="text-sm font-semibold text-gray-700 group-hover:text-white">{{ career }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div
+                class="bg-gradient-to-br from-blue-700 to-indigo-900 rounded-2xl p-8 text-white shadow-2xl reveal-on-scroll">
+                <h3 class="text-xl font-bold mb-2">Interested?</h3>
+                <p class="text-blue-100 text-sm mb-6">Enroll today and become part of our globally competitive
+                    professionals.</p>
+                <a href="{{ program.admission_link }}"
+                    class="block w-full text-center bg-white text-blue-700 py-3 rounded-xl font-bold hover:bg-blue-50 transition-colors shadow-lg">
+                    Apply Now
+                </a>
+                <div class="mt-6 pt-6 border-t border-white/20 text-xs text-blue-200">
+                    <p class="flex items-center gap-2"><i class="ri-check-line"></i> Accredited Curriculum</p>
+                    <p class="flex items-center gap-2 mt-2"><i class="ri-check-line"></i> Industry-Ready Training</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</main>
+
+<button class="go-top-btn" id="goTopBtn">
+    <i class="ri-arrow-up-line"></i>
+</button>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Mobile Toggle
+        const menuBtn = document.getElementById('mobile-menu');
+        const nav = document.getElementById('main-navigation');
+        menuBtn.addEventListener('click', () => nav.classList.toggle('active'));
+
+        // Scroll Animation
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) entry.target.classList.add('is-visible');
+            });
+        }, { threshold: 0.1 });
+        document.querySelectorAll('.reveal-on-scroll').forEach(el => observer.observe(el));
+
+        // Go Top Button
+        const goTopBtn = document.getElementById('goTopBtn');
+        window.addEventListener('scroll', () => {
+            goTopBtn.style.display = window.scrollY > 400 ? 'flex' : 'none';
+        });
+        goTopBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+    });
+</script>
+{% endblock %}

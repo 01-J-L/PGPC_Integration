@@ -1,0 +1,61 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">Import Curriculum</h1>
+    </div>
+
+    <!-- Instructions Panel -->
+    <div class="bg-blue-50 dark:bg-slate-800 border-l-4 border-blue-400 p-6 rounded-r-lg mb-8">
+        <h3 class="font-bold text-blue-800 dark:text-blue-300">Instructions</h3>
+        <ul class="list-disc list-inside mt-2 text-sm text-blue-700 dark:text-slate-300 space-y-1">
+            <li>The file must be an Excel workbook (.xlsx).</li>
+            <li>The first row must contain these exact headers: <strong>PROGRAM_CODE, YEAR, SEMESTER, COURSE_CODE, COURSE_DESCRIPTION, UNITS</strong>.</li>
+            <li>The <strong>PROGRAM_CODE</strong> must match a program that already exists in the system. Add new programs via the "Manage Programs" page first.</li>
+            <li>The import will skip any courses that already exist in the database for a given program.</li>
+        </ul>
+    </div>
+
+    <!-- Upload Form -->
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-8">
+        <form method="POST" enctype="multipart/form-data">
+            {{ form.hidden_tag() }}
+            <div class="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-12 text-center">
+                <i class="ri-upload-cloud-2-line text-5xl text-gray-400 dark:text-gray-500 mb-4"></i>
+                <label for="file" class="relative cursor-pointer bg-primary text-white font-semibold py-2 px-4 rounded-button hover:bg-primary/90">
+                    <span>Choose an Excel file to upload</span>
+                    {{ form.file(class="sr-only", id="file") }}
+                </label>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">XLSX up to 10MB</p>
+                {% if form.file.errors %}
+                    {% for error in form.file.errors %}
+                        <p class="text-red-500 text-sm mt-2">{{ error }}</p>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            <div class="mt-8 flex justify-end">
+                {{ form.submit(class="bg-green-600 text-white font-bold py-2 px-6 rounded-button hover:bg-green-700 disabled:opacity-50", disabled=True) }}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- START: CORRECTED SCRIPT -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const fileInput = document.getElementById('file');
+        // This selector is now corrected to find an <input> instead of a <button>
+        const submitBtn = document.querySelector('form input[type="submit"]');
+
+        fileInput.addEventListener('change', function() {
+            if (fileInput.files.length > 0) {
+                submitBtn.disabled = false;
+            } else {
+                submitBtn.disabled = true;
+            }
+        });
+    });
+</script>
+<!-- END: CORRECTED SCRIPT -->
+{% endblock %}

@@ -1,0 +1,27 @@
+{% "faculty/auth_base.html" %}
+
+{% block content %}
+<div class="flex flex-col items-center justify-center min-h-screen px-4">
+    <div class="mb-8"><h1 class="text-4xl font-['Pacifico'] text-primary">Faculty System</h1></div>
+    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
+        <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Administrator Sign In</h2>
+        <form action="" method="post">
+            {{ form.hidden_tag() }}
+            <div class="mb-4">
+                {{ form.username.label(class="block text-gray-700 text-sm font-medium mb-2") }}
+                {{ form.username(class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary") }}
+            </div>
+            <div class="mb-6">
+                {{ form.password.label(class="block text-gray-700 text-sm font-medium mb-2") }}
+                {{ form.password(class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary") }}
+            </div>
+            <div>
+                {{ form.submit(class="w-full bg-primary text-white font-bold py-3 px-4 rounded-button hover:bg-primary/90") }}
+            </div>
+        </form>
+        <p class="text-center text-sm text-gray-600 mt-6">
+            Not an admin? <a href="{{ url_for('faculty_auth.login') }}" class="font-medium text-primary hover:text-primary/80">Go to Faculty Login</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

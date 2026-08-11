@@ -1,0 +1,1205 @@
+{% extends 'base.html' %}
+
+{% block style %}
+<style>
+  :where([class^="ri-"])::before { content: "\f3c2"; }
+  body { background-color: #f9fafb; }
+  html { scroll-behavior: smooth; }
+  
+  /* Animation Scale Class */
+  .scale-110 { transform: scale(1.1); transition: transform 0.3s ease; }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type="number"] { -moz-appearance: textfield; }
+
+  .validation-error-message {
+    color: #e53e3e;
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+  }
+  .border-red-500 { border-color: #f56565 !important; }
+  .ring-red-500 { --tw-ring-color: #f56565 !important; }
+
+  /* Custom Checkbox/Radio */
+  .custom-checkbox {
+    position: relative; display: inline-block; width: 18px; height: 18px;
+    border: 2px solid #cbd5e1; border-radius: 4px; transition: all 0.2s ease;
+  }
+  .custom-checkbox.checked { background-color: #1e40af; border-color: #1e40af; }
+  .custom-checkbox.checked::after {
+    content: ''; position: absolute; left: 5px; top: 2px; width: 5px; height: 9px;
+    border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+  .custom-radio {
+    position: relative; display: inline-block; width: 18px; height: 18px;
+    border: 2px solid #cbd5e1; border-radius: 50%; transition: all 0.2s ease;
+  }
+  .custom-radio.checked { border-color: #1e40af; }
+  .custom-radio.checked::after {
+    content: ''; position: absolute; left: 3px; top: 3px; width: 8px; height: 8px;
+    border-radius: 50%; background-color: #1e40af;
+  }
+
+   /* --- Header & Footer Styles (Maintained from original index.html) --- */
+    header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        padding: 15px 5%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        z-index: 1000;
+        transition: background-color 0.3s ease;
+    }
+
+    .header-left {
+        display: flex;
+        align-items: center;
+    }
+
+    .header-left .logo {
+        font-size: 1.4em;
+        color: #fff;
+        margin-left: 15px;
+        white-space: nowrap;
+        transition: color 0.3s ease;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    }
+
+    .header-left img {
+        filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, 0.3));
+    }
+
+    .navigation a {
+        position: relative;
+        font-size: 1.1em;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 500;
+        margin-left: 30px;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    }
+
+    .navigation a.no-underline {
+        text-decoration: none;
+    }
+
+    .menu-toggle {
+        display: none;
+        flex-direction: column;
+        justify-content: space-around;
+        width: 30px;
+        height: 25px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        z-index: 1100;
+        margin-left: 20px;
+    }
+
+    .menu-toggle span {
+        display: block;
+        width: 100%;
+        height: 3px;
+        background-color: #fff;
+        border-radius: 3px;
+        transition: all 0.3s ease-in-out;
+        box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+    }
+  @media (max-width: 992px) {
+    header { padding: 10px 3%; }
+    .header-left img { width: 60px; }
+    .header-left .logo { font-size: 0.9em; margin-left: 8px; }
+    .navigation {
+      position: absolute; top: 100%; right: 0; width: 250px; background-color: #162938;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15); flex-direction: column; align-items: stretch;
+      display: none; z-index: 1050; border-top: 1px solid #2a3f54; max-height: calc(100vh - 70px); overflow-y: auto;
+    }
+    .navigation.active { display: flex; }
+    .navigation a { display: block; padding: 12px 20px; margin-left: 0; border-bottom: 1px solid #2a3f54; }
+    .menu-toggle { display: flex; }
+    .menu-toggle.active span:nth-child(1) { transform: translateY(9px) rotate(45deg); }
+    .menu-toggle.active span:nth-child(2) { opacity: 0; }
+    .menu-toggle.active span:nth-child(3) { transform: translateY(-9px) rotate(-45deg); }
+  }
+
+  .main-content-area { padding-top: 70px; }
+  @media (min-width: 993px) { .main-content-area { padding-top: 100px; } }
+
+  /* Footer */
+  .footer { position: relative; display: flex; flex-direction: column; align-items: center; padding: 2rem 1rem; text-align: center; color: white; overflow: hidden; }
+  .footer::before { content: ""; position: absolute; inset: 0; background: url("{{ url_for('static', filename='images/pgpcbuild.jpg') }}") center/cover no-repeat; z-index: 0; opacity: 0.3; }
+  .footer::after { content: ""; position: absolute; inset: 0; background: rgba(22, 41, 56, 0.442); z-index: 1; }
+  .footer * { position: relative; z-index: 2; }
+  .footer-logo { width: 100px; height: 100px; margin-bottom: 1rem; }
+  .footer-title { font-size: 1.5rem; font-weight: bold; }
+  .footer-subtitle { font-size: 1.25rem; font-weight: bold; margin-top: 0.5rem; }
+  .footer-connect { margin-top: 1rem; font-size: 1rem; }
+  .footer-socials { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 1.25rem; }
+  .footer-socials a { color: white; text-decoration: none; transition: color 0.3s ease; }
+  .footer-socials a:hover { color: #0987d0; }
+  .footer-divider { border-top: 1px solid white; width: 25%; margin: 2rem 0; }
+  .footer-bottom { font-size: 0.875rem; line-height: 1.6; max-width: 700px; }
+
+  /* Go Top Button */
+  .go-top-btn { position: fixed; bottom: 70px; right: 35px; border-radius: 50%; cursor: pointer; height: 50px; width: 50px; background: #fff; border: 3px solid #333; display: none; justify-content: center; align-items: center; z-index: 999; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); }
+  .go-top-btn img { width: 20px; height: 20px; }
+  
+  /* REVIEW TABLE STYLES - MODERN */
+  .review-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+  }
+  .review-item {
+      padding: 0.5rem 0;
+      border-bottom: 1px dashed #e5e7eb;
+  }
+  .review-item:last-child {
+      border-bottom: none;
+  }
+  .review-label {
+      font-size: 0.75rem;
+      color: #6b7280;
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+  }
+  .review-value {
+      font-size: 0.95rem;
+      color: #1f2937;
+      font-weight: 500;
+      margin-top: 2px;
+  }
+  /* Responsive Stepper Adjustments */
+  @media (max-width: 640px) {
+    .step-text { font-size: 9px !important; }
+    .step-circle { width: 32px !important; height: 32px !important; font-size: 14px; }
+  }
+</style>
+{% endblock %}
+
+{% block head %}
+<link rel="icon" href="{{ url_for('static', filename='logopgpc.png') }}" type="image/x-icon">
+<header>
+  <div class="header-left">
+        <a href="{{ url_for('views.home') }}"><img src="{{ url_for('static', filename='logopgpc.png') }}"
+                alt="Padre Garcia Polytechnic College Logo" width="80" height="auto"></a>
+        <h2 class="logo">Padre Garcia Polytechnic College</h2>
+    </div>
+
+  <button class="menu-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="main-navigation">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
+
+  <nav class="navigation" id="main-navigation">
+    {% if student_logged_in %}
+    <a href="{{ url_for('views.application_status_page') }}">Application Status</a>
+    <a href="{{ url_for('auth.logout') }}" class="logout-link">
+      <button class="btnLogin-popup btn-logout">Logout</button>
+    </a>
+    {% else %}
+    <a href="{{ url_for('views.existing_or_not') }}" class="no-underline">
+      <button class="btnLogin-popup">Apply now</button>
+    </a>
+    {% endif %}
+  </nav>
+</header>
+{% endblock %}
+
+{% block body %}
+<div class="main-content-area">
+  <main class="container mx-auto px-2 sm:px-4 py-6">
+    <div class="max-w-5xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
+        <div class="p-6 border-b border-gray-200">
+          
+        
+        <!-- STEPPER UI -->
+        <div class="p-4 sm:p-6 border-b border-gray-100 bg-gray-50">
+        <h2 class="text-xl sm:text-2xl font-bold text-gray-800">College Admission Application Form</h2>
+        <p class="text-sm text-gray-500">Complete all required information to apply.</p>
+      </div>
+        {% if student_logged_in %}
+        <a href="{{ url_for('views.application_status_page') }}" class="inline-flex items-center mt-4 bg-gray-100 px-4 py-2 rounded-lg text-sm">
+            <i class="ri-arrow-left-line mr-2"></i> Back to Status
+        </a>
+        {% endif %}
+      </div>
+      
+      <!-- STEPPER -->
+      <div class="px-4 py-6 border-b border-gray-100 bg-white">
+        <div class="flex items-center justify-between max-w-2xl mx-auto relative">
+          <!-- Step 1 -->
+          <div class="flex flex-col items-center z-10">
+            <div class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center step-circle shadow-md" data-step="1">
+              <i class="ri-user-line"></i>
+            </div>
+            <p class="text-[10px] sm:text-xs font-bold text-primary mt-2 uppercase step-text">Personal</p>
+          </div>
+          <div class="flex-1 h-1 bg-gray-200 -mt-6 mx-2 rounded step-bar-container"><div class="h-full bg-primary transition-all duration-300 step-bar" style="width: 0%;" id="bar1"></div></div>
+          
+          <!-- Step 2 -->
+          <div class="flex flex-col items-center z-10">
+            <div class="w-10 h-10 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center step-circle" data-step="2">
+              <i class="ri-team-line"></i>
+            </div>
+            <p class="text-[10px] sm:text-xs font-bold text-gray-400 mt-2 uppercase step-text">Family</p>
+          </div>
+          <div class="flex-1 h-1 bg-gray-200 -mt-6 mx-2 rounded step-bar-container"><div class="h-full bg-primary transition-all duration-300 step-bar" style="width: 0%;" id="bar2"></div></div>
+
+          <!-- Step 3 -->
+          <div class="flex flex-col items-center z-10">
+            <div class="w-10 h-10 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center step-circle" data-step="3">
+              <i class="ri-book-open-line"></i>
+            </div>
+            <p class="text-[10px] sm:text-xs font-bold text-gray-400 mt-2 uppercase step-text">Education</p>
+          </div>
+          <div class="flex-1 h-1 bg-gray-200 -mt-6 mx-2 rounded step-bar-container"><div class="h-full bg-primary transition-all duration-300 step-bar" style="width: 0%;" id="bar3"></div></div>
+
+          <!-- Step 4 -->
+          <div class="flex flex-col items-center z-10">
+            <div class="w-10 h-10 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center step-circle" data-step="4">
+              <i class="ri-check-line"></i>
+            </div>
+            <p class="text-[10px] sm:text-xs font-bold text-gray-400 mt-2 uppercase step-text">Review</p>
+          </div>
+        </div>
+      </div>
+
+        <form action="{{ url_for('auth.submit_application') }}" method="POST" enctype="multipart/form-data">
+          <!-- Hidden field for student type -->
+          <input type="hidden" name="student_type" value="{{ student_type }}">
+
+          <div class="p-6">
+            
+            <!-- STEP 1 -->
+            <div id="step1" class="block">
+              <h3 class="text-lg font-semibold text-gray-800 mb-4">Personal Information</h3>
+              
+              <!-- Student Type Display -->
+              <div class="mb-6 p-4 rounded-md bg-blue-50 border border-blue-200">
+                <label class="block text-gray-700 font-medium mb-2">Applicant Type</label>
+                {% if student_type == 'old' and old_student_id %}
+                <p class="text-sm text-gray-600">You are applying as an <strong class="text-primary">Old/Transferee Student</strong>.</p>
+                <div class="mt-2">
+                  <label class="block text-xs text-gray-500">Your Student ID</label>
+                  <input type="text" name="old_student_id" value="{{ old_student_id }}" readonly class="w-full sm:w-1/2 mt-1 px-4 py-2 bg-gray-100 border border-gray-300 rounded focus:outline-none cursor-not-allowed">
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-600">You are applying as a <strong class="text-primary">New Student</strong>.</p>
+                {% endif %}
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="md:col-span-2">
+                  <div class="mb-6">
+                    <label class="block text-gray-700 font-medium mb-2">Program (Course) <span class="text-red-500">*</span></label>
+                    <select name="program_choice" id="program" class="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary" required>
+                      <option value="">Select a Program</option>
+                      {% for program in programs %}
+                      <option value="{{ program.title }}">{{ program.title }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  
+                  <div class="mb-6">
+                    <label class="block text-gray-700 font-medium mb-2">Full Name <span class="text-red-500">*</span></label>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="Last Name" name="last_name" required />
+                        <p class="text-xs text-gray-500 mt-1">Last Name</p>
+                      </div>
+                      <div>
+                        <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="First Name" name="first_name" required />
+                        <p class="text-xs text-gray-500 mt-1">First Name</p>
+                      </div>
+                      <div>
+                        <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="Middle Name" name="middle_name" />
+                        <p class="text-xs text-gray-500 mt-1">Middle Name (Optional)</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-1">Date of Birth <span class="text-red-500">*</span></label>
+                      <input type="date" class="w-full px-4 py-2 border border-gray-300 rounded" name="date_of_birth" required />
+                    </div>
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-2">Place of Birth <span class="text-red-500">*</span></label>
+                      <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="City/Municipality" name="place_of_birth" required />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-2">Sex <span class="text-red-500">*</span></label>
+                      <div class="flex gap-6 mt-2">
+                        <label class="flex items-center"><input type="radio" name="sex" value="female" required /><span class="ml-2">Female</span></label>
+                        <label class="flex items-center"><input type="radio" name="sex" value="male" required /><span class="ml-2">Male</span></label>
+                      </div>
+                    </div>
+                    <div>
+                      <label class="block text-gray-700 font-medium mb-2">Civil Status <span class="text-red-500">*</span></label>
+                      <div class="flex flex-wrap gap-4 mt-2">
+                        <label class="flex items-center"><input type="radio" name="civil_status" value="single" required /><span class="ml-2">Single</span></label>
+                        <label class="flex items-center"><input type="radio" name="civil_status" value="married" required /><span class="ml-2">Married</span></label>
+                        <label class="flex items-center"><input type="radio" name="civil_status" value="widower" required /><span class="ml-2">Widower</span></label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2">Mobile No. <span class="text-red-500">*</span></label>
+                        <!-- ENFORCED 11 Digits & Numbers Only -->
+                        <input type="tel" class="w-full px-4 py-2 border border-gray-300 rounded" 
+                               placeholder="09xxxxxxxxx" name="mobile_number" 
+                               maxlength="11" 
+                               oninput="this.value = this.value.replace(/[^0-9]/g, '')" 
+                               required />
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2">Email Address <span class="text-red-500">*</span></label>
+                        <input type="email" class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="Your email" name="email_address" value="{{ student_email if student_email else '' }}" required />
+                    </div>
+                  </div>
+                  
+                   <div class="mb-6">
+                    <label class="block text-gray-700 font-medium mb-2">Permanent Address <span class="text-red-500">*</span></label>
+                    <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded mb-2" placeholder="Street, Barangay" name="permanent_address_street_barangay" required />
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="City/Municipality" name="permanent_address_city_municipality" required />
+                        <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="Province" name="permanent_address_province" required />
+                        <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="Postal Code" name="permanent_address_postal_code" required />
+                    </div>
+                  </div>
+
+                  <div class="mb-6">
+                    <label class="block text-gray-700 font-medium mb-2">Religion <span class="text-red-500">*</span></label>
+                    <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="Your religion" name="religion" required />
+                  </div>
+                  <div class="mb-6">
+                    <label class="block text-gray-700 font-medium mb-2">Citizenship <span class="text-red-500">*</span></label>
+                    <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" placeholder="Your citizenship" name="citizenship" required />
+                  </div>
+
+                  <div class="mb-6">
+                    <label class="block text-gray-700 font-medium mb-2">Are you a member of Cultural Minority Group? <span class="text-red-500">*</span></label>
+                    <div class="flex gap-6 mt-2">
+                        <label class="flex items-center"><input type="radio" name="cultural_minority_group" value="No" required><span class="ml-2">No</span></label>
+                        <label class="flex items-center"><input type="radio" name="cultural_minority_group" value="Yes" required><span class="ml-2">Yes</span></label>
+                    </div>
+                  </div>
+                  <div class="mb-6">
+                    <label class="block text-gray-700 font-medium mb-2">Do you have any physical disability? <span class="text-red-500">*</span></label>
+                    <div class="flex gap-6 mt-2">
+                        <label class="flex items-center"><input type="radio" name="physical_disability" value="No" class="disability-radio" required><span class="ml-2">No</span></label>
+                        <label class="flex items-center"><input type="radio" name="physical_disability" value="Yes" class="disability-radio" required><span class="ml-2">Yes</span></label>
+                    </div>
+                    <div id="disability_file_container" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+                        <label class="block text-sm font-medium text-gray-800 mb-2">Upload PWD ID / Medical Cert <span class="text-red-500">*</span></label>
+                        <input type="file" name="pwd_id_file_input" id="pwd_id_file_input" accept=".pdf,.jpg,.jpeg,.png" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Photo Section -->
+                <div class="md:col-span-1">
+                  <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6 flex flex-col items-center justify-center pt-12">
+                    <div id="photoPreviewContainer" class="w-32 h-32 bg-gray-200 border border-gray-300 rounded flex items-center justify-center mb-2 relative overflow-hidden">
+                        <img id="photoPreview" class="hidden w-full h-full object-cover" />
+                        <i id="photoPlaceholder" class="ri-user-line text-gray-400 text-4xl"></i>
+                    </div>
+                    
+                    <p class="text-sm text-gray-700 text-center mb-2">Attach Recent 2x2 Photo (White BG) <span class="text-red-500">*</span></p>
+                    <input type="file" id="photoInput" name="photo" accept="image/*" class="hidden" required />
+                    <button type="button" id="uploadPhotoBtn" class="bg-primary text-white px-4 py-2 rounded-button text-sm whitespace-nowrap">Upload Photo</button>
+                    <div id="photoToast" class="hidden"></div>
+                  </div>
+                  
+                  <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <h4 class="font-medium text-gray-800 mb-2">Application Details</h4>
+                    <div class="mb-4">
+                      <label class="block text-gray-700 text-sm mb-1">Date of Application</label>
+                      <input type="date" class="w-full px-4 py-2 border border-gray-300 rounded bg-gray-100 cursor-not-allowed" value="{{ today_date_for_form }}" name="date_of_application" readonly required />
+                    </div>
+                    <div>
+                      <label class="block text-gray-700 text-sm mb-1">Academic Year</label>
+                      <input type="text" class="w-full px-4 py-2 border border-gray-300 rounded bg-gray-100 cursor-not-allowed" value="{{ active_school_year }}" name="academic_year" readonly required />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-8 flex justify-end">
+                <button type="button" id="nextToStep2" class="bg-primary text-white px-6 py-2 rounded-button font-medium whitespace-nowrap">Next</button>
+              </div>
+            </div>
+
+            <!-- STEP 2 -->
+            <div id="step2" class="hidden">
+               <h3 class="text-lg font-semibold text-gray-800 mb-4">Family Details</h3>
+               <div class="mb-6">
+                <label class="block text-gray-700 font-medium mb-2">Average Family Income <span class="text-red-500">*</span></label>
+                <select name="average_family_income" required class="w-full px-4 py-2 border border-gray-300 rounded">
+                  <option value="">Select income range</option>
+                  <option value="10000_below">Below ₱10,000</option>
+                  <option value="10001_to_20000">₱10,001 - 20,000</option>
+                  <option value="20001_to_30000">₱20,001 - 30,000</option>
+                  <option value="30001_to_40000">₱30,001 - 40,000</option>
+                  <option value="40001_to_50000">₱40,001 - 50,000</option>
+                  <option value="50001_to_100000">₱50,001 - 100,000</option>
+                  <option value="100001_above">Above ₱100,000</option>
+                </select>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                 <!-- Father -->
+                 <div>
+                    <h4 class="font-medium text-gray-800 mb-4">Father's Information</h4>
+                    <div class="mb-4"><label class="block text-sm mb-2">Name</label><input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="father_name" /></div>
+                    <div class="mb-4"><label class="block text-sm mb-2">Occupation</label><input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="father_occupation" /></div>
+                    <div class="mb-4"><label class="block text-sm mb-2">Address</label><input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="father_company_address" /></div>
+                    <!-- Enforced 11 digits -->
+                    <div><label class="block text-sm mb-2">Contact No.</label>
+                      <input type="tel" class="w-full px-4 py-2 border border-gray-300 rounded" 
+                             name="father_contact_number" 
+                             maxlength="11" oninput="this.value = this.value.replace(/[^0-9]/g, '')" 
+                             placeholder="09xxxxxxxxx" /></div>
+                 </div>
+                 <!-- Mother -->
+                 <div>
+                    <h4 class="font-medium text-gray-800 mb-4">Mother's Information</h4>
+                    <div class="mb-4"><label class="block text-sm mb-2">Maiden Name</label><input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="mother_maiden_name" /></div>
+                    <div class="mb-4"><label class="block text-sm mb-2">Occupation</label><input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="mother_occupation" /></div>
+                    <div class="mb-4"><label class="block text-sm mb-2">Address</label><input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="mother_company_address" /></div>
+                    <div><label class="block text-sm mb-2">Contact No.</label>
+                      <input type="tel" class="w-full px-4 py-2 border border-gray-300 rounded" 
+                             name="mother_contact_number" 
+                             maxlength="11" oninput="this.value = this.value.replace(/[^0-9]/g, '')" 
+                             placeholder="09xxxxxxxxx" /></div>
+                 </div>
+                 <!-- Guardian -->
+                 <div>
+                    <h4 class="font-medium text-gray-800 mb-4">Guardian's Information</h4>
+                    <div class="mb-4"><label class="block text-sm mb-2">Name <span class="text-red-500">*</span></label><input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="guardian_name" required /></div>
+                    <div class="mb-4"><label class="block text-sm mb-2">Occupation <span class="text-red-500">*</span></label><input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="guardian_occupation" required /></div>
+                    <div class="mb-4"><label class="block text-sm mb-2">Address <span class="text-red-500">*</span></label><input type="text" class="w-full px-4 py-2 border border-gray-300 rounded" name="guardian_company_address" required /></div>
+                    <div><label class="block text-sm mb-2">Contact No. <span class="text-red-500">*</span></label>
+                      <input type="tel" class="w-full px-4 py-2 border border-gray-300 rounded" 
+                             name="guardian_contact_number" required 
+                             maxlength="11" oninput="this.value = this.value.replace(/[^0-9]/g, '')" 
+                             placeholder="09xxxxxxxxx" /></div>
+                 </div>
+              </div>
+              <div class="mt-8 flex justify-between">
+                <button type="button" id="backToStep1" class="border border-gray-300 text-gray-700 px-6 py-2 rounded-button font-medium">Previous</button>
+                <button type="button" id="nextToStep3" class="bg-primary text-white px-6 py-2 rounded-button font-medium">Next</button>
+              </div>
+            </div>
+
+            <!-- STEP 3 -->
+            <div id="step3" class="hidden">
+               <h3 class="text-lg font-semibold text-gray-800 mb-4">Educational Background</h3>
+               <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                 <div>
+                    <h4 class="font-medium text-gray-800 mb-4">Senior High School</h4>
+                    <div class="mb-4"><label class="block text-sm mb-2">Name <span class="text-red-500">*</span></label><input type="text" name="senior_high_school" class="w-full px-4 py-2 border border-gray-300 rounded" required></div>
+                    <div class="mb-4"><label class="block text-sm mb-2">Address <span class="text-red-500">*</span></label><input type="text" name="senior_high_school_address" class="w-full px-4 py-2 border border-gray-300 rounded" required></div>
+                    <div class="mb-4"><label class="block text-sm mb-2">Strand <span class="text-red-500">*</span></label>
+                        <select name="senior_high_school_track_strand" class="w-full px-4 py-2 border border-gray-300 rounded" required>
+                           <option value="">Select</option>
+                           <option value="STEM">STEM</option>
+                           <option value="ABM">ABM</option>
+                           <option value="HUMSS">HUMSS</option>
+                           <option value="GAS">GAS</option>
+                           <option value="TVL">TVL</option>
+                           <option value="SPORTS">Sports</option>
+                           <option value="ARTS">Arts</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm mb-2">Inclusive Dates (Year) <span class="text-red-500">*</span></label>
+                        <div class="grid grid-cols-2 gap-4">
+                            <input type="text" name="senior_high_school_year_from" placeholder="From" class="w-full px-4 py-2 border border-gray-300 rounded" required>
+                            <input type="text" name="senior_high_school_year_to" placeholder="To" class="w-full px-4 py-2 border border-gray-300 rounded" required>
+                        </div>
+                    </div>
+                 </div>
+                 <div>
+                    <h4 class="font-medium text-gray-800 mb-4">College / ALS (Optional)</h4>
+                    <div class="mb-4"><label class="block text-sm mb-2">School Name</label><input type="text" name="tertiary_school" class="w-full px-4 py-2 border border-gray-300 rounded"></div>
+                    <div class="mb-4"><label class="block text-sm mb-2">Address</label><input type="text" name="tertiary_school_address" class="w-full px-4 py-2 border border-gray-300 rounded"></div>
+                    <div class="mb-4"><label class="block text-sm mb-2">Program</label><input type="text" name="tertiary_course" class="w-full px-4 py-2 border border-gray-300 rounded"></div>
+                    <div class="grid grid-cols-2 gap-4">
+                         <input type="text" name="tertiary_year_from" placeholder="From" class="w-full px-4 py-2 border border-gray-300 rounded">
+                         <input type="text" name="tertiary_year_to" placeholder="To" class="w-full px-4 py-2 border border-gray-300 rounded">
+                    </div>
+                 </div>
+               </div>
+
+               <div class="mt-6 pt-6 border-t border-gray-200">
+                  <h4 class="font-medium text-gray-800 mb-4">Required Documents</h4>
+                  <p class="text-sm text-gray-600 mb-4">Max 5MB. PDF, JPG, PNG.</p>
+                  <div class="mb-6"><label class="block text-sm mb-2">1. Good Moral Cert <span class="text-red-500">*</span></label><input type="file" name="shs_diploma_file_input" accept=".pdf,.jpg,.jpeg,.png" required class="w-full text-sm"></div>
+                  <div class="mb-6"><label class="block text-sm mb-2">2. Brgy Certificate <span class="text-red-500">*</span></label><input type="file" name="shs_card_file_input" accept=".pdf,.jpg,.jpeg,.png" required class="w-full text-sm"></div>
+                  <div class="mb-6"><label class="block text-sm mb-2">3. PSA Birth Cert <span class="text-red-500">*</span></label><input type="file" name="birth_certificate_file_input" accept=".pdf,.jpg,.jpeg,.png" required class="w-full text-sm"></div>
+               </div>
+
+               <div class="mt-8 flex justify-between">
+                <button type="button" id="backToStep2" class="border border-gray-300 text-gray-700 px-6 py-2 rounded-button font-medium">Previous</button>
+                <button type="button" id="nextToStep4" class="bg-primary text-white px-6 py-2 rounded-button font-medium">Next</button>
+              </div>
+            </div>
+
+            <!-- STEP 4: Review & Submit -->
+<div id="step4" class="hidden">
+  <h3 class="text-lg md:text-xl font-semibold text-gray-800 mb-4 px-2">Review & Submit</h3>
+
+  <!-- This container is populated by JS - Ensure JS uses responsive grid classes -->
+  <div id="reviewDataContainer" class="bg-gray-50 p-4 md:p-6 rounded-lg border border-gray-200 mb-6 overflow-hidden">
+    <!-- JS will inject content here. Note: Ensure your JS uses 'grid-cols-1 md:grid-cols-2' -->
+  </div>
+  
+  <!-- Consent and Declaration Box -->
+  <div class="bg-gray-50 p-4 md:p-6 rounded-lg border border-gray-200 mb-6">
+    <h4 class="font-bold text-gray-800 mb-4 border-b pb-2 text-sm md:text-base uppercase tracking-wide">Consent and Declaration</h4>
+    
+    <div class="mb-6">
+      <h5 class="font-bold text-blue-900 mb-2 text-sm">{{ global_content.consent_title or 'CONSENT' }}</h5>
+      <p class="text-xs md:text-sm text-gray-600 leading-relaxed whitespace-pre-line bg-white p-3 rounded border border-gray-100">
+        {{ global_content.consent_text }}
+      </p>
+    </div>
+
+    <div>
+      <h5 class="font-bold text-blue-900 mb-2 text-sm">{{ global_content.oath_title or 'OATH' }}</h5>
+      <p class="text-xs md:text-sm text-gray-600 leading-relaxed whitespace-pre-line bg-white p-3 rounded border border-gray-100">
+        {{ global_content.oath_text }}
+      </p>
+    </div>
+  </div>
+
+  <!-- Agreement Checkbox -->
+  <div class="flex items-start mb-6 p-2">
+    <div class="flex items-center h-5">
+      <input type="checkbox" id="agreements" name="agreements" value="Yes" required 
+             class="w-5 h-5 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer">
+    </div>
+    <label for="agreements" class="ml-3 text-sm text-gray-700 cursor-pointer select-none">
+      I have read and agree to the terms and conditions stated above. <span class="text-red-500">*</span>
+    </label>
+  </div>
+
+  <!-- Submission Date -->
+  <div class="mb-8 px-2">
+    <label class="block text-gray-700 text-xs font-bold uppercase mb-2">Final Submission Date</label>
+    <input type="date" name="final_submission_date" 
+           class="w-full md:w-64 px-4 py-2 border border-gray-300 rounded bg-gray-50 focus:ring-2 focus:ring-primary/50 outline-none" 
+           value="{{ today_date_for_form }}" required>
+  </div>
+
+  <!-- Navigation Buttons (Responsive) -->
+  <div class="mt-8 flex flex-row justify-between items-center gap-4 px-2">
+    <!-- Previous Button (Orange Pill on Mobile) -->
+    <button type="button" id="backToStep3" 
+            class="btn-mobile-nav btn-prev-custom border border-gray-300 text-gray-700 px-6 py-2 rounded-button font-bold flex items-center justify-center transition-all">
+      <span class="hidden md:inline">Previous Step</span>
+      <span class="md:hidden">PREV</span>
+    </button>
+
+    <!-- Submit Button (Green Pill on Mobile) -->
+    <button type="submit" id="submitApplication" 
+            class="btn-mobile-nav btn-next-custom bg-gray-300 text-white px-8 py-2 rounded-button font-bold flex items-center justify-center cursor-not-allowed transition-all" 
+            disabled>
+      <span>SUBMIT</span>
+    </button>
+  </div>
+</div>
+
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+  
+  <!-- Footer -->
+  <footer class="footer">
+    <img src="{{ url_for('static', filename='images/uploads/' + global_content.footer_logo_image) if global_content.footer_logo_image else url_for('static', filename='logopgpc.png') }}" class="footer-logo">
+    <h1 class="footer-title">{{ global_content.footer_title or 'Padre Garcia Polytechnic College' }}</h1>
+    <h2 class="footer-subtitle">{{ global_content.footer_subtitle or 'THE FUTURE BEGINS HERE.' }}</h2>
+    <div class="footer-bottom">
+        <p>© {{ current_year if current_year else '2025' }}. All Rights Reserved.</p>
+    </div>
+  </footer>
+</div>
+
+<button class="go-top-btn" id="goTopBtn"><img src="{{ url_for('static', filename='arrow-up.jpg') }}" alt="up"></button>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    // --- UTILITIES ---
+    const photoToast = document.getElementById("photoToast");
+    
+    // Global Toast Function
+    window.showPhotoToastGlobal = function(message, type) {
+      if (!photoToast) return;
+      photoToast.textContent = message;
+      photoToast.className = "fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white text-sm z-50 transform transition-transform duration-300";
+      if (type === "success") photoToast.classList.add("bg-green-500");
+      else photoToast.classList.add("bg-red-500");
+      photoToast.classList.remove("hidden", "translate-y-full");
+      photoToast.classList.add("translate-y-0");
+      setTimeout(() => {
+        photoToast.classList.remove("translate-y-0");
+        photoToast.classList.add("translate-y-full");
+        setTimeout(() => photoToast.classList.add("hidden"), 300);
+      }, 4000);
+    }
+
+    // --- HELPER: RESET PHOTO INPUT ---
+    function resetPhotoInput() {
+        const photoInput = document.getElementById("photoInput");
+        const photoPreview = document.getElementById("photoPreview");
+        const photoPlaceholder = document.getElementById("photoPlaceholder");
+        
+        if (photoInput) photoInput.value = "";
+        if (photoPreview) { photoPreview.src = ""; photoPreview.classList.add("hidden"); }
+        if (photoPlaceholder) { photoPlaceholder.classList.remove("hidden"); }
+        isPhotoValid = false;
+    }
+
+    const menuToggle = document.querySelector('.menu-toggle');
+        const navigation = document.getElementById('main-navigation');
+        if (menuToggle && navigation) {
+            menuToggle.addEventListener('click', function () {
+                navigation.classList.toggle('active');
+                menuToggle.classList.toggle('active');
+            });
+        }
+
+    // --- FORM ELEMENTS ---
+    const step1 = document.getElementById("step1");
+    const step2 = document.getElementById("step2");
+    const step3 = document.getElementById("step3");
+    const step4 = document.getElementById("step4");
+    
+    const nextToStep2 = document.getElementById("nextToStep2");
+    const nextToStep3 = document.getElementById("nextToStep3");
+    const nextToStep4 = document.getElementById("nextToStep4");
+    
+    const backToStep1 = document.getElementById("backToStep1");
+    const backToStep2 = document.getElementById("backToStep2");
+    const backToStep3 = document.getElementById("backToStep3");
+
+    // --- UPDATE STEPPER ANIMATION ---
+    function updateStepperUI(activeStep) {
+      const stepCircles = document.querySelectorAll('.step-circle');
+      const stepTexts = document.querySelectorAll('.step-text');
+      const stepBars = document.querySelectorAll('.step-bar');
+
+      stepCircles.forEach((circle, idx) => {
+        const stepNum = idx + 1;
+        if (stepNum <= activeStep) {
+          circle.classList.remove('bg-gray-200', 'text-gray-500');
+          circle.classList.add('bg-primary', 'text-white');
+          // Simple pulse animation for current step
+          if (stepNum === activeStep) {
+             circle.classList.add('scale-110');
+             setTimeout(() => circle.classList.remove('scale-110'), 300);
+          }
+        } else {
+          circle.classList.remove('bg-primary', 'text-white');
+          circle.classList.add('bg-gray-200', 'text-gray-500');
+        }
+      });
+
+      stepTexts.forEach((text, idx) => {
+        const stepNum = idx + 1;
+        if (stepNum <= activeStep) {
+           text.classList.remove('text-gray-500'); text.classList.add('text-primary');
+        } else {
+           text.classList.remove('text-primary'); text.classList.add('text-gray-500');
+        }
+      });
+
+      stepBars.forEach((bar, idx) => {
+        // Bar index 0 is between step 1 and 2
+        // So bar 0 should fill if activeStep >= 2
+        if (activeStep > (idx + 1)) {
+           bar.style.transform = 'scaleX(1)';
+        } else {
+           bar.style.transform = 'scaleX(0)';
+        }
+      });
+    }
+
+    // --- COLLECT DATA FOR REVIEW (Robust Version) ---
+    function collectFormData() {
+      // Helper: Get input value by Name, handle empty/null gracefully
+      const val = (name) => {
+        const el = document.querySelector(`[name="${name}"]`);
+        return el && el.value.trim() ? el.value : ''; // Return empty string if not found
+      };
+      
+      const rad = (name) => {
+        const el = document.querySelector(`[name="${name}"]:checked`);
+        return el ? el.value : 'N/A';
+      };
+
+      // Construct Review Object
+      return {
+        // Personal
+        type: val('old_student_id') ? 'Old/Transferee' : 'New',
+        id: val('old_student_id') || 'N/A',
+        program: val('program_choice'),
+        name: `${val('last_name')}, ${val('first_name')} ${val('middle_name')}`,
+        dob: val('date_of_birth'),
+        pob: val('place_of_birth'),
+        sex: rad('sex'),
+        civil: rad('civil_status'),
+        religion: val('religion'),
+        citizenship: val('citizenship'),
+        mobile: val('mobile_number'),
+        email: val('email_address'),
+        address: `${val('permanent_address_street_barangay')}, ${val('permanent_address_city_municipality')}, ${val('permanent_address_province')} ${val('permanent_address_postal_code')}`,
+        minority: rad('cultural_minority_group'),
+        disability: rad('physical_disability'),
+        
+        // Family
+        income: val('average_family_income') || 'N/A',
+        father: { 
+            name: val('father_name') || 'N/A', 
+            job: val('father_occupation') || 'N/A', 
+            addr: val('father_company_address') || 'N/A',
+            contact: val('father_contact_number') || 'N/A' 
+        },
+        mother: { 
+            name: val('mother_maiden_name') || 'N/A', 
+            job: val('mother_occupation') || 'N/A', 
+            addr: val('mother_company_address') || 'N/A',
+            contact: val('mother_contact_number') || 'N/A' 
+        },
+        guardian: { 
+            name: val('guardian_name') || 'N/A', 
+            job: val('guardian_occupation') || 'N/A', 
+            addr: val('guardian_company_address') || 'N/A',
+            contact: val('guardian_contact_number') || 'N/A' 
+        },
+        
+        // Education
+        shs: { 
+            name: val('senior_high_school'), 
+            addr: val('senior_high_school_address') || 'N/A',
+            year: `${val('senior_high_school_year_from')} - ${val('senior_high_school_year_to')}`,
+            strand: val('senior_high_school_track_strand') 
+        },
+        college: { 
+            name: val('tertiary_school') || 'N/A', 
+            course: val('tertiary_course') || 'N/A',
+            addr: val('tertiary_school_address') || 'N/A', 
+            year: (val('tertiary_year_from') && val('tertiary_year_to')) ? `${val('tertiary_year_from')} - ${val('tertiary_year_to')}` : 'N/A'
+        }
+      };
+    }
+
+    // --- DISABILITY TOGGLE ---
+    const disabilityRadios = document.querySelectorAll('.disability-radio');
+    const disabilityContainer = document.getElementById('disability_file_container');
+    const disabilityInput = document.getElementById('pwd_id_file_input');
+    function toggleDisabilityUpload() {
+        const val = document.querySelector('input[name="physical_disability"]:checked')?.value;
+        if (val === 'Yes') {
+            disabilityContainer.classList.remove('hidden');
+            disabilityInput.required = true;
+        } else {
+            disabilityContainer.classList.add('hidden');
+            disabilityInput.required = false;
+        }
+    }
+    disabilityRadios.forEach(r => r.addEventListener('change', toggleDisabilityUpload));
+
+    // --- PHOTO LOGIC (AI Analysis) ---
+    const uploadPhotoBtn = document.getElementById("uploadPhotoBtn");
+    const photoInput = document.getElementById("photoInput");
+    const photoPreview = document.getElementById("photoPreview");
+    const photoPlaceholder = document.getElementById("photoPlaceholder");
+    let isPhotoValid = false;
+
+    if(uploadPhotoBtn) uploadPhotoBtn.addEventListener('click', (e) => { e.preventDefault(); photoInput.click(); });
+
+    if (photoInput) {
+      photoInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        
+        // If user cancels file dialog
+        if (!file) {
+            resetPhotoInput();
+            return;
+        }
+
+        // 1. Basic Check
+        if (!file.type.startsWith("image/")) {
+            showPhotoToastGlobal("⚠️ Please select an image file.", "error"); 
+            resetPhotoInput();
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            showPhotoToastGlobal("⚠️ Photo is too large (max 5MB).", "error"); 
+            resetPhotoInput();
+            return;
+        }
+
+        const img = new Image();
+        const objUrl = URL.createObjectURL(file);
+        
+        img.onload = function() {
+            // 2. Ratio Check (Square)
+            const ratio = img.naturalWidth / img.naturalHeight;
+            if (ratio < 0.95 || ratio > 1.05) {
+                showPhotoToastGlobal("⚠️ REJECTED: Image must be a 2x2 Square.", "error");
+                resetPhotoInput();
+                URL.revokeObjectURL(objUrl); 
+                return;
+            }
+            
+            // 3. Background Check
+            if(!analyzeBackground(img)) {
+                showPhotoToastGlobal("⚠️ REJECTED: Background must be White.", "error");
+                resetPhotoInput();
+                URL.revokeObjectURL(objUrl); 
+                return;
+            }
+
+            // Valid
+            isPhotoValid = true;
+            if(photoPreview) { photoPreview.src = objUrl; photoPreview.classList.remove("hidden"); }
+            if(photoPlaceholder) photoPlaceholder.classList.add("hidden");
+            showPhotoToastGlobal("✅ Valid 2x2 Photo detected.", "success");
+        };
+        img.onerror = function() { 
+            showPhotoToastGlobal("Error loading image.", "error"); 
+            resetPhotoInput();
+        };
+        img.src = objUrl;
+      });
+    }
+
+    function analyzeBackground(img) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 100; canvas.height = 100;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, 100, 100);
+        // Sample top corners/center
+        const samples = [
+            ctx.getImageData(0,0,20,20), ctx.getImageData(80,0,20,20), ctx.getImageData(40,0,20,10)
+        ];
+        let whitePixels = 0, totalPixels = 0;
+        samples.forEach(s => {
+            const data = s.data;
+            for(let i=0; i<data.length; i+=4) {
+                const r=data[i], g=data[i+1], b=data[i+2];
+                // Simple white check: High brightness + Low saturation
+                const brightness = (0.299*r + 0.587*g + 0.114*b);
+                const max = Math.max(r,g,b), min = Math.min(r,g,b);
+                const saturation = max - min;
+                
+                if (brightness > 180 && saturation < 35) whitePixels++;
+                totalPixels++;
+            }
+        });
+        return (whitePixels / totalPixels) > 0.8; // Allow 20% tolerance
+    }
+
+    // --- VALIDATION HELPER ---
+    function findFirstInvalidField(step) {
+        const fields = step.querySelectorAll('input, select, textarea');
+        const checkedGroups = new Set();
+        
+        for (const field of fields) {
+            if (!field.offsetParent && field.type !== 'hidden') continue;
+            
+            // CUSTOM PHONE VALIDATION: Strictly 11 Digits
+            const phoneFields = ['mobile_number', 'father_contact_number', 'mother_contact_number', 'guardian_contact_number'];
+            if (phoneFields.includes(field.name) && field.value.trim().length > 0) {
+                if (field.value.trim().length !== 11) {
+                    field.dataset.customError = "Must be exactly 11 digits.";
+                    return field;
+                }
+            }
+
+            // STANDARD VALIDATION
+            let isInvalid = false;
+            if (field.type === 'radio') {
+                if(field.required && !checkedGroups.has(field.name)) {
+                    if(!step.querySelector(`input[name="${field.name}"]:checked`)) isInvalid = true;
+                    checkedGroups.add(field.name);
+                }
+            } else if (field.type === 'file') {
+                if(field.required && field.files.length === 0) isInvalid = true;
+            } else {
+                if(field.required && !field.value.trim()) isInvalid = true;
+            }
+            
+            if (isInvalid) return field;
+        }
+        return null;
+    }
+
+    function showValidationError(field, msg) {
+        if(!field) return;
+        field.scrollIntoView({behavior:'smooth', block:'center'});
+        field.classList.add('border-red-500', 'ring-2', 'ring-red-500');
+        
+        // Remove old errors
+        let parent = field.closest('.flex.gap-6') || field.parentElement;
+        const old = parent.querySelector('.validation-error-message');
+        if(old) old.remove();
+        
+        const err = document.createElement('p');
+        err.className = 'validation-error-message text-red-500 text-xs mt-1';
+        err.textContent = msg;
+        parent.appendChild(err);
+        
+        const clear = () => {
+            field.classList.remove('border-red-500', 'ring-2', 'ring-red-500');
+            err.remove();
+            delete field.dataset.customError;
+        };
+        field.addEventListener('input', clear);
+        field.addEventListener('change', clear);
+    }
+
+    // --- NAVIGATION HANDLERS ---
+    
+    // STEP 1 -> 2 (With Async Name Check)
+    if(nextToStep2) nextToStep2.addEventListener("click", async (e) => {
+        e.preventDefault();
+        
+        // 1. Basic Fields + Phone Length
+        const invalid = findFirstInvalidField(step1);
+        if(invalid) { 
+            let msg = invalid.dataset.customError || "Please complete this required field.";
+            showValidationError(invalid, msg); 
+            return; 
+        }
+
+        // 2. Photo
+        if(photoInput.files.length === 0) {
+            showPhotoToastGlobal("⚠️ Upload 2x2 Photo.", "error"); return;
+        }
+        if(!isPhotoValid) {
+            showPhotoToastGlobal("⚠️ Photo Invalid (Must be square + white bg).", "error"); return;
+        }
+
+        // 3. Age (16+)
+        const dob = document.querySelector('input[name="date_of_birth"]').value;
+        if(dob) {
+            const age = new Date().getFullYear() - new Date(dob).getFullYear();
+            if(age < 16) { 
+                showPhotoToastGlobal("⚠️ Must be 16+ years old.", "error"); return; 
+            }
+        }
+
+        // 4. DUPLICATE NAME CHECK
+        const btnText = nextToStep2.innerText;
+        nextToStep2.disabled = true; nextToStep2.innerText = "Checking...";
+        
+        try {
+            const res = await fetch('/check-duplicate-name', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    first_name: document.querySelector('input[name="first_name"]').value,
+                    last_name: document.querySelector('input[name="last_name"]').value,
+                    middle_name: document.querySelector('input[name="middle_name"]').value
+                })
+            });
+            const data = await res.json();
+            if(data.exists) {
+                const fname = document.querySelector('input[name="first_name"]');
+                showValidationError(fname, "An applicant with this full name already exists. Please contact admissions if you believe this is an error.");
+                nextToStep2.disabled = false; nextToStep2.innerText = btnText;
+                return;
+            }
+        } catch(err) { console.error(err); }
+
+        nextToStep2.disabled = false; nextToStep2.innerText = btnText;
+
+        // Success
+        step1.classList.add("hidden");
+        step2.classList.remove("hidden");
+        window.scrollTo(0,0);
+        updateStepperUI(2);
+    });
+
+    if(backToStep1) backToStep1.addEventListener("click", (e)=>{
+        e.preventDefault(); step2.classList.add("hidden"); step1.classList.remove("hidden"); window.scrollTo(0,0); updateStepperUI(1);
+    });
+
+    if(nextToStep3) nextToStep3.addEventListener("click", (e)=>{
+        e.preventDefault();
+        const invalid = findFirstInvalidField(step2);
+        if(invalid) { 
+            let msg = invalid.dataset.customError || "Please complete this required field.";
+            showValidationError(invalid, msg); return; 
+        }
+        step2.classList.add("hidden"); step3.classList.remove("hidden"); window.scrollTo(0,0);
+        updateStepperUI(3);
+    });
+
+    if(backToStep2) backToStep2.addEventListener("click", (e)=>{
+        e.preventDefault(); step3.classList.add("hidden"); step2.classList.remove("hidden"); window.scrollTo(0,0); updateStepperUI(2);
+    });
+
+    // STEP 3 -> 4 (Populate Detailed Review)
+    if(nextToStep4) nextToStep4.addEventListener("click", (e)=>{
+        e.preventDefault();
+        const invalid = findFirstInvalidField(step3);
+        if(invalid) { showValidationError(invalid, "Required field or document."); return; }
+        
+        // Populate Review - Detailed Block
+        const data = collectFormData();
+        const container = document.getElementById("reviewDataContainer");
+        const doc1 = document.querySelector('[name="shs_diploma_file_input"]').files[0];
+        const doc2 = document.querySelector('[name="shs_card_file_input"]').files[0];
+        const doc3 = document.querySelector('[name="birth_certificate_file_input"]').files[0];
+        const doc4 = document.querySelector('[name="pwd_id_file_input"]').files[0];
+        
+        container.innerHTML = `
+            <div class="space-y-6">
+                <!-- Personal Information Card -->
+                <div class="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                    <h5 class="text-gray-600 text-sm font-medium mb-4">Personal Information</h5>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                        <div>
+                            <p class="text-xs text-gray-500 mb-1">Program:</p>
+                            <p class="text-sm font-medium text-gray-900">${data.program}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 mb-1">Full Name:</p>
+                            <p class="text-sm font-medium text-gray-900">${data.name}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 mb-1">Date of Birth:</p>
+                            <p class="text-sm font-medium text-gray-900">${data.dob}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 mb-1">Place of Birth:</p>
+                            <p class="text-sm font-medium text-gray-900">${data.pob}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 mb-1">Sex:</p>
+                            <p class="text-sm font-medium text-gray-900 capitalize">${data.sex}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 mb-1">Civil Status:</p>
+                            <p class="text-sm font-medium text-gray-900 capitalize">${data.civil}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 mb-1">Religion:</p>
+                            <p class="text-sm font-medium text-gray-900">${data.religion}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 mb-1">Citizenship:</p>
+                            <p class="text-sm font-medium text-gray-900">${data.citizenship}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 mb-1">Mobile No:</p>
+                            <p class="text-sm font-medium text-gray-900">${data.mobile}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 mb-1">Email:</p>
+                            <p class="text-sm font-medium text-gray-900">${data.email}</p>
+                        </div>
+                        <div class="md:col-span-2">
+                            <p class="text-xs text-gray-500 mb-1">Complete Address:</p>
+                            <p class="text-sm font-medium text-gray-900">${data.address}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Family Information Card -->
+                <div class="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                    <h5 class="text-gray-600 text-sm font-medium mb-4">Family Information</h5>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
+                        <!-- Father -->
+                        <div>
+                            <h6 class="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">Father's Information</h6>
+                            <div class="space-y-2">
+                                <div><span class="text-xs text-gray-500 block">Name:</span> <span class="text-sm text-gray-900">${data.father.name}</span></div>
+                                <div><span class="text-xs text-gray-500 block">Occupation:</span> <span class="text-sm text-gray-900">${data.father.job}</span></div>
+                                <div><span class="text-xs text-gray-500 block">Company & Address:</span> <span class="text-sm text-gray-900">${data.father.addr}</span></div>
+                                <div><span class="text-xs text-gray-500 block">Contact No:</span> <span class="text-sm text-gray-900">${data.father.contact}</span></div>
+                            </div>
+                        </div>
+                        <!-- Mother -->
+                        <div>
+                            <h6 class="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">Mother's Information</h6>
+                            <div class="space-y-2">
+                                <div><span class="text-xs text-gray-500 block">Name:</span> <span class="text-sm text-gray-900">${data.mother.name}</span></div>
+                                <div><span class="text-xs text-gray-500 block">Occupation:</span> <span class="text-sm text-gray-900">${data.mother.job}</span></div>
+                                <div><span class="text-xs text-gray-500 block">Company & Address:</span> <span class="text-sm text-gray-900">${data.mother.addr}</span></div>
+                                <div><span class="text-xs text-gray-500 block">Contact No:</span> <span class="text-sm text-gray-900">${data.mother.contact}</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Educational Background Card -->
+                <div class="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                    <h5 class="text-gray-600 text-sm font-medium mb-4">Educational Background</h5>
+                    
+                    <div class="mb-4">
+                        <h6 class="text-sm font-medium text-gray-800 mb-2">Senior High School</h6>
+                        <div class="space-y-1 text-sm text-gray-600">
+                            <p><span class="text-gray-500 text-xs block">School Name:</span> ${data.shs.name}</p>
+                            <p><span class="text-gray-500 text-xs block">Address:</span> ${data.shs.addr}</p>
+                            <p><span class="text-gray-500 text-xs block">Strand:</span> ${data.shs.strand}</p>
+                            <p><span class="text-gray-500 text-xs block">Year:</span> ${data.shs.year}</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h6 class="text-sm font-medium text-gray-800 mb-2">Uploaded Documents</h6>
+                        <div class="space-y-1 text-sm text-gray-600">
+                            <p><span class="text-gray-500">SHS Diploma:</span> ${doc1 ? doc1.name : 'Not specified'}</p>
+                            <p><span class="text-gray-500">SHS Card (Form 138):</span> ${doc2 ? doc2.name : 'Not specified'}</p>
+                            <p><span class="text-gray-500">Birth Certificate:</span> ${doc3 ? doc3.name : 'Not specified'}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        step3.classList.add("hidden"); step4.classList.remove("hidden"); window.scrollTo(0,0);
+        updateStepperUI(4);
+    });
+
+    if(backToStep3) backToStep3.addEventListener("click", (e)=>{
+        e.preventDefault(); step4.classList.add("hidden"); step3.classList.remove("hidden"); window.scrollTo(0,0); updateStepperUI(3);
+    });
+
+    // Final Submit Enable
+    const finalCheck = document.querySelector('input[name="agreements"]');
+    const submitBtn = document.getElementById("submitApplication");
+    if(finalCheck) finalCheck.addEventListener('change', function() {
+        submitBtn.disabled = !this.checked;
+        if(this.checked) {
+            submitBtn.classList.remove("bg-gray-300", "cursor-not-allowed");
+            submitBtn.classList.add("bg-primary");
+        } else {
+            submitBtn.classList.add("bg-gray-300", "cursor-not-allowed");
+            submitBtn.classList.remove("bg-primary");
+        }
+    });
+
+  });
+</script>
+{% endblock %}

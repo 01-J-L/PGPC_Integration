@@ -1,0 +1,1085 @@
+<!-- --- START OF FILE enrollment_form.html --- -->
+
+{% extends 'base.html' %}
+
+{% block title %}Enrollment Form{% endblock %}
+
+{% block style %}
+<style>
+    /* Radio button styling */
+    input[type="radio"].custom-radio {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 1.25rem;
+        height: 1.25rem;
+        border: 2px solid #d1d5db;
+        border-radius: 50%;
+        outline: none;
+        cursor: pointer;
+        transition: background-color 0.2s, border-color 0.2s;
+    }
+
+    input[type="radio"].custom-radio:checked {
+        background-color: #4f46e5;
+        border-color: #4f46e5;
+    }
+
+    input[type="radio"].custom-radio:checked::before {
+        content: '';
+        display: block;
+        width: 0.625rem;
+        height: 0.625rem;
+        margin: 3px;
+        background-color: white;
+        border-radius: 50%;
+    }
+
+    /* Inventory Form Specific Styles */
+    .form-section h3 {
+        text-align: left;
+        background-color: #eef2ff;
+        color: #4338ca;
+        padding: 12px 16px;
+        margin-top: 30px;
+        font-size: 1.1em;
+        font-weight: 700;
+        border-left: 5px solid #4f46e5;
+        border-radius: 4px;
+    }
+
+    /* Validation Error Message Style */
+    .validation-error {
+        color: #ef4444;
+        font-size: 0.75rem;
+        margin-top: 0.25rem;
+        display: block;
+    }
+
+    .input-error {
+        border-color: #ef4444 !important;
+        --tw-ring-color: #ef4444 !important;
+    }
+
+    /* Signature Warning */
+    #sig-warning {
+        font-size: 0.8rem;
+        margin-top: 0.5rem;
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+    }
+
+    .sig-error {
+        background-color: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #f87171;
+    }
+
+    .sig-success {
+        background-color: #dcfce7;
+        color: #166534;
+        border: 1px solid #4ade80;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+
+<body class="bg-gray-50" style="margin-top: 100px;">
+    <main class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6 sm:p-8">
+            <div class="text-center border-b pb-6 mb-6">
+                <i class="ri-user-follow-line text-5xl text-primary"></i>
+                <h1 class="text-3xl font-bold text-gray-900 mt-4">Enrollment Form & Student Inventory</h1>
+                <p class="text-gray-600 mt-2">Congratulations! Please complete this final form to secure your
+                    enrollment.</p>
+                <p
+                    class="text-xs text-red-700 mt-3 bg-red-50 border border-red-200 rounded-md p-2 flex items-start gap-2">
+                    <i class="ri-error-warning-line text-red-500 text-lg"></i>
+                    <span>Fields marked with <strong>*</strong> are required. Any empty required field will be
+                        highlighted in <strong class="text-red-600">red</strong> with a warning message telling you
+                        exactly what needs to be filled out.</span>
+                </p>
+            </div>
+
+            {% if application %}
+            <form id="enrollmentForm"
+                action="{{ url_for('auth.submit_enrollment', applicant_id=application.applicant_id) }}" method="POST"
+                enctype="multipart/form-data">
+
+                <!-- Applicant Summary -->
+                <div class="space-y-6 text-sm">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-800 mb-3">Applicant Summary</h2>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 bg-gray-50 p-4 rounded-md border">
+                            <p><strong>Applicant Name:</strong> {{ application.first_name }} {{ application.last_name }}
+                            </p>
+                            <p><strong>Student ID:</strong>
+                                {% if application.old_student_id %}
+                                {{ application.old_student_id }}
+                                {% elif application.control_number %}
+                                {{ application.control_number }}
+                                {% else %}
+                                S-{{ "%05d" | format(application.student_user_id) }}
+                                {% endif %}
+                            </p>
+                            <p><strong>Email:</strong> {{ application.email_address }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Enrollment Details -->
+                <div class="mt-8 pt-6 border-t">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-3">Enrollment Details</h2>
+
+                    <!-- Program Selection -->
+                    <div class="mb-6">
+                        <label for="program_choice" class="block text-sm font-medium text-gray-700 mb-1">1. Select
+                            Program <span class="text-red-500">*</span></label>
+                        <select id="program_choice" name="program_choice" required
+                            class="w-full border-gray-300 rounded-md shadow-sm text-sm focus:ring-primary focus:border-primary">
+                            <option value="" disabled>Choose Program...</option>
+                            {% for prog in programs %}
+                            <option value="{{ prog.title }}" {% if prog.title==application.program_choice %}selected{%
+                                endif %}>
+                                {{ prog.title }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">Confirm or change your program choice.</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+                        <div>
+                            <label for="year_level" class="block text-sm font-medium text-gray-700 mb-1">2. Year
+                                Level</label>
+
+                            {% if application.enrollment_student_type == 'New' %}
+                            <!-- NEW STUDENT LOGIC: Locked to 1st Year -->
+                            <input type="text" value="1st Year" readonly
+                                class="w-full border-gray-300 rounded-md shadow-sm text-sm bg-gray-100 text-gray-600 cursor-not-allowed focus:ring-0 focus:border-gray-300">
+                            <input type="hidden" name="year_level" value="1st Year">
+                            <p class="text-xs text-blue-600 mt-1">New students automatically start at 1st Year.</p>
+
+                            {% else %}
+                            <!-- EXISTING STUDENT LOGIC: Dropdown -->
+                            <select id="year_level" name="year_level" required
+                                class="w-full border-gray-300 rounded-md shadow-sm text-sm focus:ring-primary focus:border-primary transition-colors">
+                                <option value="" disabled selected>Choose year...</option>
+                                <option value="1st Year">1st Year</option>
+                                <option value="2nd Year">2nd Year</option>
+                                <option value="3rd Year">3rd Year</option>
+                                <option value="4th Year">4th Year</option>
+                                <option value="5th Year">5th Year</option>
+                            </select>
+                            <p id="year_level_note" class="text-xs text-orange-600 mt-1 hidden">Changing program resets
+                                Year Level to 1st Year.</p>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <label for="semester" class="block text-sm font-medium text-gray-700 mb-1">3.
+                                Semester</label>
+                            <input type="text" id="semester" name="semester"
+                                value="{{ active_term.semester if active_term else '' }}" readonly
+                                class="w-full border-gray-300 rounded-md shadow-sm text-sm bg-gray-100 text-gray-600 cursor-not-allowed focus:ring-0 focus:border-gray-300">
+                            <p class="text-xs text-gray-500 mt-1">Automatically set based on the active academic term.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- SECTION SELECTION (Only for Existing Students without Section) -->
+                    {% if (application.enrollment_student_type == 'Existing' or application.old_student_id) and not
+                    application.section_id %}
+                    <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md" id="section_selection_container">
+                        <h3 class="text-sm font-bold text-blue-800 mb-2">4. Select Your Section</h3>
+                        <p class="text-xs text-blue-600 mb-3">
+                            As an existing student entering the new system, please select your assigned section.
+                            <strong>This selection will become permanent.</strong>
+                        </p>
+
+                        <label for="section_id" class="block text-sm font-medium text-gray-700 mb-1">Select Section
+                            <span class="text-red-500">*</span></label>
+                        <select id="section_id" name="section_id" required
+                            class="w-full border-gray-300 rounded-md shadow-sm text-sm focus:ring-primary focus:border-primary">
+                            <option value="" disabled selected>Select Program & Year first...</option>
+                            <!-- Options populated via JS -->
+                        </select>
+                    </div>
+                    {% endif %}
+
+                    <!-- DOCUMENT UPLOAD SECTION -->
+                    <div class="mb-6">
+                        <h3 class="font-semibold text-gray-800 mb-3">5. Enrollment Documents</h3>
+                        <div class="space-y-4 p-4 rounded-md bg-gray-50 border">
+
+                            <p class="text-xs text-gray-600 mb-4">Upload the required documents below. Max file size:
+                                5MB. Accepted formats: PDF, JPG, PNG.</p>
+
+                            {% set doc_map = {
+                            'enrollment_good_moral_file_input': ('a. Good Moral Certificate', False),
+                            'enrollment_voters_id_file_input': ('c. Voter\'s ID / Certificate (if available)', False),
+                            'enrollment_cbs_file_input': ('d. Verified CBS', False),
+                            'enrollment_brgy_cert_file_input': ('e. Barangay Certification', False)
+                            } %}
+
+                            <!-- Standard Files Loop -->
+                            {% for name, info in doc_map.items() %}
+                            {% set label, submitted = info %}
+                            <div>
+                                <label for="{{ name }}" class="block text-sm font-medium text-gray-700">{{ label
+                                    }}</label>
+                                <input type="file" name="{{ name }}" id="{{ name }}" accept=".pdf,.jpg,.jpeg,.png"
+                                    class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-primary hover:file:bg-indigo-100">
+                            </div>
+                            {% endfor %}
+
+                            <!-- Signature File Upload -->
+                            <div class="mt-4 pt-4 border-t border-gray-200">
+                                <label for="enrollment_entrance_fee_proof_file_input"
+                                    class="block text-sm font-medium text-gray-700 mb-2">
+                                    b. Upload Signature (White BG, Black/Blue Ink) <span class="text-red-500">*</span>
+                                </label>
+                                <input type="file" name="enrollment_entrance_fee_proof_file_input"
+                                    id="enrollment_entrance_fee_proof_file_input" accept=".jpg,.jpeg,.png"
+                                    class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-primary hover:file:bg-indigo-100"
+                                    required>
+                                <div id="sig-warning" class="hidden"></div>
+                                <canvas id="sig-canvas" style="display:none;"></canvas>
+                                <p class="text-xs text-gray-500 mt-1">Please sign on white paper with black/blue ink.
+                                    Only images allowed for signature check.</p>
+                            </div>
+
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Inventory Form Section -->
+                <div class="mt-8 pt-6 border-t">
+                    <div class="form-section">
+                        <h3>I. PERSONAL INFORMATION</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-sm">
+
+                            <!-- Gender: Pulls from Main Profile -->
+                            <div class="md:col-span-2"><label class="font-medium">Gender *</label>
+                                <div class="flex gap-4 mt-2">
+                                    <label class="flex items-center">
+                                        <input type="radio" name="gender" value="Female" class="custom-radio" required
+                                            {% if application.sex=='Female' %}checked{% endif %}>
+                                        <span class="ml-2">Female</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="radio" name="gender" value="Male" class="custom-radio" {% if
+                                            application.sex=='Male' %}checked{% endif %}>
+                                        <span class="ml-2">Male</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Age: Calculated in views.py -->
+                            <div><label class="font-medium">Age</label>
+                                <input type="number" name="age" value="{{ calculated_age }}" class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 " />
+                            </div>
+
+                            <!-- Religion: Pulls from Main Profile -->
+                            <div><label class="font-medium">Religion *</label>
+                                <input type="text" name="religion" value="{{ application.religion or '' }}"
+                                    autocomplete="off" class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 " required>
+                            </div>
+
+                            <!-- Complete Address: Concatenates Main Profile Address Fields -->
+                            <div class="md:col-span-2"><label class="font-medium">Complete Address *</label>
+                                {% set full_addr = (application.permanent_address_street_barangay or '') ~ ', ' ~
+                                (application.permanent_address_city_municipality or '') ~ ', ' ~
+                                (application.permanent_address_province or '') %}
+                                <input type="text" name="complete_address" value="{{ full_addr }}" autocomplete="off"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 " required>
+                            </div>
+
+                            <!-- Mobile Number: Pulls from Main Profile (VALIDATION ADDED) -->
+                            <div><label class="font-medium">Mobile Number *</label>
+                                <input type="tel" name="mobile_number" value="{{ application.mobile_number or '' }}"
+                                    autocomplete="off" maxlength="11"
+                                    oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11)"
+                                    placeholder="09xxxxxxxxx" class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 " required>
+                            </div>
+
+                            <!-- Inventory Specific Fields -->
+                            <div><label class="font-medium">Facebook Account</label><input type="text"
+                                    name="facebook_account" value="{{ application.inventory_facebook_account or '' }}"
+                                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm"></div>
+                            <div><label class="font-medium">Interests/Hobbies</label><input type="text"
+                                    name="interest_hobbies" value="{{ application.inventory_interest_hobbies or '' }}"
+                                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm"></div>
+
+                            <!-- Health Condition: Checks Disability Status -->
+                            <div><label class="font-medium">Health Condition</label>
+                                <input type="text" name="health_condition"
+                                    value="{{ application.inventory_health_condition or ('None' if application.physical_disability == 'No' else application.physical_disability) }}"
+                                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- UPDATED: II. EDUCATIONAL BACKGROUND (Responsive Grid) -->
+                    <div class="form-section">
+                        <h3>II. EDUCATIONAL BACKGROUND</h3>
+                        
+                        <!-- Grid Container -->
+                        <div class="mt-4 border border-gray-200 rounded-lg overflow-hidden text-sm">
+                            
+                            <!-- Desktop Header -->
+                            <div class="hidden md:grid grid-cols-12 gap-4 bg-gray-100 p-3 font-bold text-gray-600 uppercase tracking-wider border-b border-gray-200">
+                                <div class="col-span-2">Level</div>
+                                <div class="col-span-4">School Name</div>
+                                <div class="col-span-3">Inclusive Dates</div>
+                                <div class="col-span-3">Honors / Awards</div>
+                            </div>
+
+                            <!-- Content Rows -->
+                            <div class="divide-y divide-gray-200 bg-white">
+                                
+                                <!-- Row 1: Pre-Elementary -->
+                                <div class="grid grid-cols-1 md:grid-cols-12 gap-3 p-4 md:p-3 items-start md:items-center hover:bg-gray-50 transition-colors">
+                                    <div class="md:col-span-2 font-semibold text-gray-800 flex justify-between items-center">
+                                        Pre-Elementary
+                                        <span class="md:hidden text-xs font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded border">Level</span>
+                                    </div>
+                                    <div class="md:col-span-4">
+                                        <label class="md:hidden text-xs text-gray-500 font-medium mb-1 block uppercase">School Name</label>
+                                        <input type="text" name="pre_elementary_school" value="{{ application.inventory_pre_elementary_school or '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary focus:border-primary placeholder-gray-400" placeholder="School Name">
+                                    </div>
+                                    <div class="md:col-span-3">
+                                        <label class="md:hidden text-xs text-gray-500 font-medium mb-1 block uppercase">Inclusive Dates</label>
+                                        <input type="text" name="pre_elementary_dates" value="{{ application.inventory_pre_elementary_dates or '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary focus:border-primary placeholder-gray-400" placeholder="e.g. 2010-2012">
+                                    </div>
+                                    <div class="md:col-span-3">
+                                        <label class="md:hidden text-xs text-gray-500 font-medium mb-1 block uppercase">Awards</label>
+                                        <input type="text" name="pre_elementary_awards" value="{{ application.inventory_pre_elementary_awards or '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary focus:border-primary placeholder-gray-400" placeholder="e.g. First Honor">
+                                    </div>
+                                </div>
+
+                                <!-- Row 2: Elementary -->
+                                <div class="grid grid-cols-1 md:grid-cols-12 gap-3 p-4 md:p-3 items-start md:items-center hover:bg-gray-50 transition-colors">
+                                    <div class="md:col-span-2 font-semibold text-gray-800 flex justify-between items-center">
+                                        Elementary
+                                        <span class="md:hidden text-xs font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded border">Level</span>
+                                    </div>
+                                    <div class="md:col-span-4">
+                                        <label class="md:hidden text-xs text-gray-500 font-medium mb-1 block uppercase">School Name</label>
+                                        <input type="text" name="elementary_school" value="{{ application.inventory_elementary_school or '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary focus:border-primary placeholder-gray-400" placeholder="School Name">
+                                    </div>
+                                    <div class="md:col-span-3">
+                                        <label class="md:hidden text-xs text-gray-500 font-medium mb-1 block uppercase">Inclusive Dates</label>
+                                        <input type="text" name="elementary_dates" value="{{ application.inventory_elementary_dates or '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary focus:border-primary placeholder-gray-400" placeholder="e.g. 2012-2018">
+                                    </div>
+                                    <div class="md:col-span-3">
+                                        <label class="md:hidden text-xs text-gray-500 font-medium mb-1 block uppercase">Awards</label>
+                                        <input type="text" name="elementary_awards" value="{{ application.inventory_elementary_awards or '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary focus:border-primary placeholder-gray-400" placeholder="e.g. Valedictorian">
+                                    </div>
+                                </div>
+
+                                <!-- Row 3: Secondary (Auto-filled) -->
+                                <div class="grid grid-cols-1 md:grid-cols-12 gap-3 p-4 md:p-3 items-start md:items-center hover:bg-gray-50 transition-colors">
+                                    <div class="md:col-span-2 font-semibold text-gray-800 flex justify-between items-center">
+                                        Secondary
+                                        <span class="md:hidden text-xs font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded border">Level</span>
+                                    </div>
+                                    <div class="md:col-span-4">
+                                        <label class="md:hidden text-xs text-gray-500 font-medium mb-1 block uppercase">School Name</label>
+                                        <input type="text" name="secondary_school" value="{{ application.senior_high_school or '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-50 text-gray-600 focus:ring-primary focus:border-primary" placeholder="School Name" readonly>
+                                    </div>
+                                    <div class="md:col-span-3">
+                                        <label class="md:hidden text-xs text-gray-500 font-medium mb-1 block uppercase">Inclusive Dates</label>
+                                        <input type="text" name="secondary_dates" value="{{ (application.senior_high_school_year_from ~ ' - ' ~ application.senior_high_school_year_to) if application.senior_high_school_year_from else '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary focus:border-primary placeholder-gray-400" placeholder="e.g. 2018-2024">
+                                    </div>
+                                    <div class="md:col-span-3">
+                                        <label class="md:hidden text-xs text-gray-500 font-medium mb-1 block uppercase">Awards</label>
+                                        <input type="text" name="secondary_awards" value="{{ application.inventory_secondary_awards or '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary focus:border-primary placeholder-gray-400" placeholder="e.g. With Honors">
+                                    </div>
+                                </div>
+
+                                <!-- Row 4: Vocational -->
+                                <div class="grid grid-cols-1 md:grid-cols-12 gap-3 p-4 md:p-3 items-start md:items-center hover:bg-gray-50 transition-colors">
+                                    <div class="md:col-span-2 font-semibold text-gray-800 flex justify-between items-center">
+                                        Vocational
+                                        <span class="md:hidden text-xs font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded border">Level</span>
+                                    </div>
+                                    <div class="md:col-span-4">
+                                        <label class="md:hidden text-xs text-gray-500 font-medium mb-1 block uppercase">School Name</label>
+                                        <input type="text" name="vocational_school" value="{{ application.tertiary_school or '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary focus:border-primary placeholder-gray-400" placeholder="School Name">
+                                    </div>
+                                    <div class="md:col-span-3">
+                                        <label class="md:hidden text-xs text-gray-500 font-medium mb-1 block uppercase">Inclusive Dates</label>
+                                        <input type="text" name="vocational_dates" value="{{ (application.tertiary_year_from ~ ' - ' ~ application.tertiary_year_to) if application.tertiary_year_from else '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary focus:border-primary placeholder-gray-400" placeholder="e.g. 2024-2025">
+                                    </div>
+                                    <div class="md:col-span-3">
+                                        <label class="md:hidden text-xs text-gray-500 font-medium mb-1 block uppercase">Awards</label>
+                                        <input type="text" name="vocational_awards" value="{{ application.inventory_vocational_awards or '' }}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary focus:border-primary placeholder-gray-400" placeholder="Awards">
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <div class="form-section">
+                        <h3>III. HOME AND FAMILY BACKGROUND</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mt-4 text-sm">
+
+                            <!-- Father's Info: Force Pull from Main Profile -->
+                            <div>
+                                <h4 class="font-semibold text-gray-800 mb-2">Father's Info</h4>
+                                <label class="font-medium">Name *</label>
+                                <input type="text" name="father_name" value="{{ application.father_name or '' }}"
+                                    autocomplete="off" class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 "
+                                    required>
+
+                                <label class="font-medium mt-2 block">Age</label>
+                                <input type="number" name="father_age" min="26"
+                                    value="{{ application.inventory_father_age or '' }}"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 ">
+
+                                <label class="font-medium mt-2 block">Status *</label>
+                                <div class="flex gap-4 mt-1">
+                                    <label class="flex items-center"><input type="radio" name="father_status"
+                                            value="Living" class="custom-radio" {% if
+                                            application.inventory_father_status !='Deceased' %}checked{% endif %}
+                                            required> <span class="ml-2">Living</span></label>
+                                    <label class="flex items-center"><input type="radio" name="father_status"
+                                            value="Deceased" class="custom-radio" {% if
+                                            application.inventory_father_status=='Deceased' %}checked{% endif %}> <span
+                                            class="ml-2">Deceased</span></label>
+                                </div>
+
+                                <label class="font-medium mt-2 block">Education</label>
+                                <input type="text" name="father_education"
+                                    value="{{ application.inventory_father_education or '' }}"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 ">
+
+                                <label class="font-medium mt-2 block">Occupation *</label>
+                                <input type="text" name="father_occupation"
+                                    value="{{ application.father_occupation or '' }}" autocomplete="off"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 " required>
+
+                                <label class="font-medium mt-2 block">Contact</label>
+                                <input type="tel" name="father_contact"
+                                    value="{{ application.father_contact_number or '' }}" autocomplete="off"
+                                    maxlength="11" oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11)"
+                                    placeholder="09xxxxxxxxx"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 "">
+                            </div>
+
+                            <!-- Mother's Info: Force Pull from Main Profile -->
+                            <div>
+                                <h4 class="font-semibold text-gray-800 mb-2">Mother's Info</h4>
+                                <label class="font-medium">Name *</label>
+                                <input type="text" name="mother_name" value="{{ application.mother_maiden_name or '' }}"
+                                    autocomplete="off" class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 "
+                                    required>
+
+                                <label class="font-medium mt-2 block">Age</label>
+                                <input type="number" name="mother_age" min="26"
+                                    value="{{ application.inventory_mother_age or '' }}"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 ">
+
+                                <label class="font-medium mt-2 block">Status *</label>
+                                <div class="flex gap-4 mt-1">
+                                    <label class="flex items-center"><input type="radio" name="mother_status"
+                                            value="Living" class="custom-radio" {% if
+                                            application.inventory_mother_status !='Deceased' %}checked{% endif %}
+                                            required> <span class="ml-2">Living</span></label>
+                                    <label class="flex items-center"><input type="radio" name="mother_status"
+                                            value="Deceased" class="custom-radio" {% if
+                                            application.inventory_mother_status=='Deceased' %}checked{% endif %}> <span
+                                            class="ml-2">Deceased</span></label>
+                                </div>
+
+                                <label class="font-medium mt-2 block">Education</label>
+                                <input type="text" name="mother_education"
+                                    value="{{ application.inventory_mother_education or '' }}"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 ">
+
+                                <label class="font-medium mt-2 block">Occupation *</label>
+                                <input type="text" name="mother_occupation"
+                                    value="{{ application.mother_occupation or '' }}" autocomplete="off"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 " required>
+
+                                <label class="font-medium mt-2 block">Contact</label>
+                                <input type="tel" name="mother_contact"
+                                    value="{{ application.mother_contact_number or '' }}" autocomplete="off"
+                                    maxlength="11" oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11)"
+                                    placeholder="09xxxxxxxxx"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 ">
+                            </div>
+
+                            <!-- Marital Status: Pulls from Main Profile -->
+                            <div class="md:col-span-2">
+                                <label class="font-medium">Parents' Marital Status *</label>
+                                <div class="flex flex-wrap gap-4 mt-2">
+                                    <label class="flex items-center">
+                                        <input type="radio" name="parents_marital_status" value="Single Parent"
+                                            class="custom-radio" required {% if application.civil_status=='Single'
+                                            %}checked{% endif %}>
+                                        <span class="ml-2">Single Parent</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="radio" name="parents_marital_status" value="Married but Separated"
+                                            class="custom-radio" {% if application.civil_status=='Separated' %}checked{%
+                                            endif %}>
+                                        <span class="ml-2">Married but Separated</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="radio" name="parents_marital_status"
+                                            value="Married and staying together" class="custom-radio" {% if
+                                            application.civil_status=='Married' %}checked{% endif %}>
+                                        <span class="ml-2">Married & Together</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div><label class="font-medium"># of Children *</label><input type="number"
+                                    name="number_of_children"
+                                    value="{{ application.inventory_number_of_children or '' }}"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 " required></div>
+                            <div><label class="font-medium"># of Brothers</label><input type="number"
+                                    name="number_of_brothers"
+                                    value="{{ application.inventory_number_of_brothers or '' }}"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 "></div>
+                            <div><label class="font-medium"># of Sisters</label><input type="number"
+                                    name="number_of_sisters" value="{{ application.inventory_number_of_sisters or '' }}"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 "></div>
+
+                            <!-- Guardian Info: Force Pull from Main Profile -->
+                            <div><label class="font-medium">Guardian Name (if any)</label>
+                                <input type="text" name="guardian_name" value="{{ application.guardian_name or '' }}"
+                                    autocomplete="off" class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 ">
+                            </div>
+                            <div><label class="font-medium">Guardian Relationship</label>
+                                <input type="text" name="guardian_relationship"
+                                    value="{{ application.inventory_guardian_relationship or '' }}"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 ">
+                            </div>
+                            <div><label class="font-medium">Guardian Contact</label>
+                                <input type="tel" name="guardian_contact"
+                                    value="{{ application.guardian_contact_number or '' }}" autocomplete="off"
+                                    maxlength="11" oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11)"
+                                    placeholder="09xxxxxxxxx"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 ">
+                            </div>
+
+                            <!-- Family Income: Pulls from Main Profile -->
+                            <div class="md:col-span-2">
+                                <label class="font-medium">Family Income * (Selected in Step 1: {{
+                                    application.average_family_income }})</label>
+                                <div class="flex flex-wrap gap-4 mt-2">
+                                    <label class="flex items-center"><input type="radio" name="family_income"
+                                            value="P 10,000.00 Below" class="custom-radio" required {% if
+                                            application.average_family_income=='10000_below' %}checked{% endif %}> <span
+                                            class="ml-2">Below ₱10k</span></label>
+                                    <label class="flex items-center"><input type="radio" name="family_income"
+                                            value="P 10,000.00 - P 20,000.00" class="custom-radio" {% if
+                                            application.average_family_income=='10001_to_20000' %}checked{% endif %}>
+                                        <span class="ml-2">₱10k - ₱20k</span></label>
+                                    <label class="flex items-center"><input type="radio" name="family_income"
+                                            value="Above P 20,000.00" class="custom-radio" {% if
+                                            application.average_family_income not in ['10000_below', '10001_to_20000'
+                                            , '' ] %}checked{% endif %}> <span class="ml-2">Above ₱20k</span></label>
+                                </div>
+                            </div>
+
+                            <div><label class="font-medium">Favorite Colors</label><input type="text"
+                                    name="favorite_colors" value="{{ application.inventory_favorite_colors or '' }}"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 "></div>
+                            <div><label class="font-medium">Favorite Sports</label><input type="text"
+                                    name="favorite_sports" value="{{ application.inventory_favorite_sports or '' }}"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 "></div>
+                            <div><label class="font-medium">Favorite Foods</label><input type="text"
+                                    name="favorite_foods" value="{{ application.inventory_favorite_foods or '' }}"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 "></div>
+
+                            <div class="md:col-span-2"><label class="font-medium">Family Description *</label>
+                                <div class="flex flex-wrap gap-4 mt-2">
+                                    {% set fd = application.inventory_family_description %}
+                                    <label class="flex items-center"><input type="radio" name="family_description"
+                                            value="Broken Family" class="custom-radio" {% if fd=='Broken Family'
+                                            %}checked{% endif %}> <span class="ml-2">Broken Family</span></label>
+                                    <label class="flex items-center"><input type="radio" name="family_description"
+                                            value="OFW" class="custom-radio" {% if fd=='OFW' %}checked{% endif %}> <span
+                                            class="ml-2">OFW</span></label>
+                                    <label class="flex items-center"><input type="radio" name="family_description"
+                                            value="Separated" class="custom-radio" {% if fd=='Separated' %}checked{%
+                                            endif %}> <span class="ml-2">Separated</span></label>
+                                    <label class="flex items-center"><input type="radio" name="family_description"
+                                            value="Single Parent" class="custom-radio" {% if fd=='Single Parent'
+                                            %}checked{% endif %}> <span class="ml-2">Single Parent</span></label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>EMERGENCY CONTACT INFORMATION</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-sm">
+                            <div><label class="font-medium">Name *</label><input type="text"
+                                    name="emergency_contact_name"
+                                    value="{{ application.inventory_emergency_contact_name or '' }}"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 " required></div>
+                            <div><label class="font-medium">Number *</label><input type="tel"
+                                    name="emergency_contact_number"
+                                    value="{{ application.inventory_emergency_contact_number or '' }}" maxlength="11"
+                                    oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11)"
+                                    placeholder="09xxxxxxxxx"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 " required></div>
+                            <div><label class="font-medium">Relationship *</label><input type="text"
+                                    name="emergency_contact_relationship"
+                                    value="{{ application.inventory_emergency_contact_relationship or '' }}"
+                                    class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 " required></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submission Controls -->
+                <div class="mt-8 pt-6 border-t">
+                    <div class="flex items-start p-4 rounded-md bg-yellow-50 border border-yellow-200 text-sm">
+                        <i class="ri-alert-line text-yellow-500 text-xl mr-3 mt-1"></i>
+                        <div>
+                            <h3 class="font-semibold text-yellow-800">Final Confirmation</h3>
+                            <p class="text-yellow-700">By submitting, you confirm your intent to enroll. Your submission
+                                will be forwarded to the registrar for verification. Final enrollment depends on the
+                                successful submission of all documents and payment of fees.</p>
+                        </div>
+                    </div>
+                    <div class="mt-10 flex flex-row items-center justify-between gap-2 border-t pt-6">
+
+                        <!-- LEFT SIDE: Cancel -->
+                        {% if application.enrollment_student_type == 'Existing' or application.old_student_id %}
+                        <a href="{{ url_for('views.new_student') }}"
+                            class="text-xs sm:text-sm font-bold text-gray-400 hover:text-red-500 transition-colors flex items-center">
+                            <i class="ri-arrow-left-s-line text-lg"></i>
+                            <span class="hidden xs:inline">Cancel & Go Back</span>
+                            <span class="xs:hidden">Cancel</span>
+                        </a>
+                        {% else %}
+                        <a href="{{ url_for('views.application_status_page') }}"
+                            class="text-xs sm:text-sm font-bold text-gray-400 hover:text-red-500 transition-colors flex items-center">
+                            <i class="ri-arrow-left-s-line text-lg"></i>
+                            <span class="hidden xs:inline">Cancel & Go Back</span>
+                            <span class="xs:hidden">Cancel</span>
+                        </a>
+                        {% endif %}
+
+                        <!-- RIGHT SIDE: Submit -->
+                        <button type="submit"
+                            class="bg-primary text-white px-4 sm:px-10 py-3 rounded-xl font-bold flex items-center shadow-lg hover:bg-primary/90 transition-all active:scale-95 text-xs sm:text-sm">
+                            <span>Submit Enrollment</span>
+                            <i class="ri-checkbox-circle-line ml-2 text-base"></i>
+                        </button>
+
+                    </div>
+                </div>
+            </form>
+            {% else %}
+            <div class="text-center text-red-600 bg-red-50 p-4 rounded-md">
+                <p>Error: Could not load application details. Please go back and try again.</p><a
+                    href="{{ url_for('views.application_status_page') }}"
+                    class="mt-4 inline-block text-primary hover:underline">Return to Status Page</a>
+            </div>
+            {% endif %}
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const programSelect = document.getElementById('program_choice');
+            const yearSelect = document.getElementById('year_level');
+            const yearNote = document.getElementById('year_level_note');
+
+            // For Section Logic
+            const sectionSelect = document.getElementById('section_id');
+            const sectionContainer = document.getElementById('section_selection_container');
+
+            // Store the original program provided by the backend
+            const originalProgram = "{{ application.program_choice }}";
+
+            function checkProgramChange() {
+                const selectedProgram = programSelect.value;
+
+                if (selectedProgram !== originalProgram) {
+                    // User changed program -> Reset to 1st Year
+                    if (yearSelect) {
+                        yearSelect.value = "1st Year";
+                        // Lock visually but keep value submittable
+                        yearSelect.style.pointerEvents = 'none';
+                        yearSelect.style.backgroundColor = '#f3f4f6';
+                        yearSelect.style.color = '#6b7280';
+                    }
+
+                    if (yearNote) yearNote.classList.remove('hidden');
+
+                    // Hide Section Selection (Auto-assign for shifters/new program)
+                    if (sectionContainer) {
+                        sectionContainer.classList.add('hidden');
+                        if (sectionSelect) sectionSelect.removeAttribute('required');
+                    }
+                } else {
+                    // User reverted to original program
+                    if (yearSelect) {
+                        yearSelect.style.pointerEvents = 'auto';
+                        yearSelect.style.backgroundColor = '';
+                        yearSelect.style.color = '';
+                    }
+
+                    if (yearNote) yearNote.classList.add('hidden');
+
+                    // Show Section Selection if applicable (Existing Student)
+                    if (sectionContainer) {
+                        sectionContainer.classList.remove('hidden');
+                        if (sectionSelect) sectionSelect.setAttribute('required', 'required');
+                        fetchSections(); // Load sections
+                    }
+                }
+            }
+
+            // Fetch sections dynamically
+            async function fetchSections() {
+                if (!sectionSelect) return;
+
+                const prog = programSelect.value;
+                const year = yearSelect.value;
+
+                if (prog && year) {
+                    sectionSelect.innerHTML = '<option value="" disabled>Loading...</option>';
+                    sectionSelect.disabled = true;
+
+                    try {
+                        const response = await fetch(`/api/get-sections?program=${encodeURIComponent(prog)}&year=${encodeURIComponent(year)}`);
+                        const sections = await response.json();
+
+                        sectionSelect.innerHTML = '<option value="" disabled selected>Choose Section...</option>';
+
+                        if (sections.length === 0) {
+                            const option = document.createElement('option');
+                            option.text = "No sections available";
+                            option.disabled = true;
+                            sectionSelect.appendChild(option);
+                        } else {
+                            sections.forEach(sec => {
+                                const option = document.createElement('option');
+                                option.value = sec.id;
+                                option.textContent = sec.section_name;
+                                sectionSelect.appendChild(option);
+                            });
+                        }
+                        sectionSelect.disabled = false;
+                    } catch (e) {
+                        console.error("Error loading sections", e);
+                        sectionSelect.innerHTML = '<option value="" disabled>Error loading sections</option>';
+                    }
+                }
+            }
+
+            // Init checks
+            checkProgramChange();
+
+            // Listeners
+            programSelect.addEventListener('change', () => {
+                checkProgramChange();
+            });
+
+            if (yearSelect) {
+                yearSelect.addEventListener('change', () => {
+                    // Re-fetch sections if year changes (only for original program flow)
+                    if (programSelect.value === originalProgram) {
+                        fetchSections();
+                    }
+                });
+            }
+
+            // --- Radio Button Deselection Logic ---
+            const radioGroups = document.querySelectorAll('input[name="family_description"]');
+            let lastCheckedRadio = null;
+
+            radioGroups.forEach(radio => {
+                radio.addEventListener('click', function (e) {
+                    if (this === lastCheckedRadio) {
+                        this.checked = false;
+                        lastCheckedRadio = null;
+                    } else {
+                        lastCheckedRadio = this;
+                    }
+                });
+            });
+
+            const checked = document.querySelector('input[name="family_description"]:checked');
+            if (checked) lastCheckedRadio = checked;
+
+            // --- SIGNATURE VALIDATION LOGIC ---
+            const sigInput = document.getElementById('enrollment_entrance_fee_proof_file_input');
+            const sigWarning = document.getElementById('sig-warning');
+
+            if (sigInput) {
+                sigInput.addEventListener('change', function (e) {
+                    const file = e.target.files[0];
+                    if (!file) { sigWarning.classList.add('hidden'); return; }
+
+                    if (!file.type.startsWith('image/')) {
+                        // PDF can't be easily analyzed in JS, so just warn
+                        sigWarning.textContent = "Please ensure the uploaded signature is on a white background.";
+                        sigWarning.className = "sig-error block";
+                        return;
+                    }
+
+                    const reader = new FileReader();
+                    reader.onload = function (event) {
+                        const img = new Image();
+                        img.onload = function () {
+                            // Analyze
+                            const canvas = document.createElement('canvas');
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0);
+
+                            // Sample pixels (center area usually has ink, corners usually bg)
+                            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                            const data = imageData.data;
+
+                            let darkPixels = 0;
+                            let lightPixels = 0;
+                            let colorPixels = 0;
+                            const totalPixels = data.length / 4;
+
+                            for (let i = 0; i < data.length; i += 4) {
+                                const r = data[i];
+                                const g = data[i + 1];
+                                const b = data[i + 2];
+
+                                const brightness = (r + g + b) / 3;
+
+                                // Check for color (saturation)
+                                const max = Math.max(r, g, b);
+                                const min = Math.min(r, g, b);
+                                if ((max - min) > 40) { // Arbitrary threshold for color
+                                    colorPixels++;
+                                }
+
+                                if (brightness > 200) {
+                                    lightPixels++;
+                                } else if (brightness < 100) {
+                                    darkPixels++;
+                                }
+                            }
+
+                            const whiteRatio = lightPixels / totalPixels;
+                            const colorRatio = colorPixels / totalPixels;
+
+                            if (whiteRatio < 0.6) {
+                                sigWarning.textContent = "⚠️ Background seems dark or cluttered. Please use plain white paper.";
+                                sigWarning.className = "sig-error block";
+                            } else if (colorRatio > 0.1) {
+                                sigWarning.textContent = "⚠️ Detected colored ink. Please use Black or Dark Blue ink.";
+                                sigWarning.className = "sig-error block";
+                            } else {
+                                sigWarning.textContent = "✅ Signature image looks good.";
+                                sigWarning.className = "sig-success block";
+                            }
+                        };
+                        img.src = event.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+
+
+            // --- FORM VALIDATION LOGIC ---
+            const form = document.getElementById('enrollmentForm');
+
+            function showError(input, message) {
+                input.classList.add('input-error');
+                // Remove existing error message if any
+                const parent = input.parentElement;
+                const existingErr = parent.querySelector('.validation-error');
+                if (existingErr) existingErr.remove();
+
+                const errorMsg = document.createElement('span');
+                errorMsg.className = 'validation-error';
+                errorMsg.textContent = message;
+                parent.appendChild(errorMsg);
+            }
+
+            function clearError(input) {
+                input.classList.remove('input-error');
+                const parent = input.parentElement;
+                const existingErr = parent.querySelector('.validation-error');
+                if (existingErr) existingErr.remove();
+            }
+
+            // --- REQUIRED FIELD VALIDATION (Red highlight + warning on empty required fields) ---
+            const requiredMessages = {
+                'program_choice': 'Please choose your program.',
+                'year_level': 'Please choose your year level.',
+                'section_id': 'Please select your section.',
+                'gender': 'Please select your gender.',
+                'religion': 'Please enter your religion.',
+                'complete_address': 'Please enter your complete address.',
+                'mobile_number': 'Please enter your mobile number (must be 11 digits).',
+                'father_name': "Please enter your father's name.",
+                'father_status': "Please indicate your father's status (Living or Deceased).",
+                'father_occupation': "Please enter your father's occupation.",
+                'mother_name': "Please enter your mother's name.",
+                'mother_status': "Please indicate your mother's status (Living or Deceased).",
+                'mother_occupation': "Please enter your mother's occupation.",
+                'parents_marital_status': "Please select your parents' marital status.",
+                'number_of_children': 'Please enter the number of children.',
+                'family_income': 'Please select your family income.',
+                'family_description': 'Please select your family description.',
+                'emergency_contact_name': 'Please enter the emergency contact name.',
+                'emergency_contact_number': 'Please enter the emergency contact number.',
+                'emergency_contact_relationship': 'Please enter the emergency contact relationship.',
+                'enrollment_entrance_fee_proof_file_input': 'Please upload your signature (white background, black/blue ink).'
+            };
+
+            function isRequiredFieldEmpty(input) {
+                if (input.type === 'file') return input.files.length === 0;
+                if (input.tagName === 'SELECT') return !input.value;
+                return input.value.trim() === '';
+            }
+
+            function validateRequiredField(input) {
+                if (isRequiredFieldEmpty(input)) {
+                    showError(input, requiredMessages[input.name] || 'This field is required.');
+                    return false;
+                }
+                clearError(input);
+                return true;
+            }
+
+            const requiredFields = Array.from(form.querySelectorAll('input[required], select[required], textarea[required]'));
+            const radioGroups = new Map();
+            requiredFields.forEach(f => {
+                if (f.type === 'radio') {
+                    if (!radioGroups.has(f.name)) radioGroups.set(f.name, []);
+                    radioGroups.get(f.name).push(f);
+                }
+            });
+
+            function validateRadioGroup(name) {
+                const radios = radioGroups.get(name) || [];
+                const isChecked = radios.some(r => r.checked);
+                radios.forEach(r => r.classList.toggle('input-error', !isChecked));
+                const container = radios[0] ? radios[0].closest('div') : null;
+                if (container) {
+                    const existingErr = container.querySelector('.validation-error');
+                    if (existingErr) existingErr.remove();
+                    if (!isChecked) {
+                        const errorMsg = document.createElement('span');
+                        errorMsg.className = 'validation-error';
+                        errorMsg.style.flexBasis = '100%';
+                        errorMsg.textContent = requiredMessages[name] || 'This field is required.';
+                        container.appendChild(errorMsg);
+                    }
+                }
+                return isChecked;
+            }
+
+            // Highlight empty required fields on page load
+            requiredFields.forEach(f => {
+                if (f.type === 'radio') return;
+                validateRequiredField(f);
+            });
+            radioGroups.forEach((radios, name) => validateRadioGroup(name));
+
+            // Re-validate on change/input
+            requiredFields.forEach(f => {
+                if (f.type === 'radio') {
+                    f.addEventListener('change', function () {
+                        validateRadioGroup(f.name);
+                    });
+                } else {
+                    const eventName = (f.tagName === 'SELECT' || f.type === 'file') ? 'change' : 'input';
+                    f.addEventListener(eventName, function () {
+                        validateRequiredField(f);
+                    });
+                }
+            });
+
+            // 1. Validate Phone Numbers (Exactly 11 digits)
+            const phoneInputs = document.querySelectorAll('input[name="mobile_number"], input[name="father_contact"], input[name="mother_contact"], input[name="guardian_contact"]');
+            phoneInputs.forEach(input => {
+                // Clear error on input
+                input.addEventListener('input', function () {
+                    if (this.value.length === 11) clearError(this);
+                });
+            });
+
+            // 2. Validate Parent Ages (> 25)
+            const ageInputs = document.querySelectorAll('input[name="father_age"], input[name="mother_age"]');
+            ageInputs.forEach(input => {
+                input.addEventListener('input', function () {
+                    if (this.value && parseInt(this.value) > 25) clearError(this);
+                });
+            });
+
+            form.addEventListener('submit', function (e) {
+                let isValid = true;
+                let firstInvalidField = null;
+
+                // Validate Required Fields
+                requiredFields.forEach(f => {
+                    if (f.type === 'radio') return;
+                    if (!validateRequiredField(f)) {
+                        isValid = false;
+                        if (!firstInvalidField) firstInvalidField = f;
+                    }
+                });
+                radioGroups.forEach((radios, name) => {
+                    if (!validateRadioGroup(name)) {
+                        isValid = false;
+                        if (!firstInvalidField) firstInvalidField = radios[0];
+                    }
+                });
+
+                // Validate Phones
+                phoneInputs.forEach(input => {
+                    // Only validate if value is present (for optional fields like guardian, though mobile is required)
+                    if (input.value && input.value.length !== 11) {
+                        isValid = false;
+                        showError(input, "Must be exactly 11 digits.");
+                        if (!firstInvalidField) firstInvalidField = input;
+                    }
+                });
+
+                // Validate Father's Age
+                const fatherAgeInput = document.querySelector('input[name="father_age"]');
+                if (fatherAgeInput && fatherAgeInput.value) {
+                    if (parseInt(fatherAgeInput.value) <= 25) {
+                        isValid = false;
+                        showError(fatherAgeInput, "Age must be higher than 25.");
+                        if (!firstInvalidField) firstInvalidField = fatherAgeInput;
+                    }
+                }
+
+                // Validate Mother's Age
+                const motherAgeInput = document.querySelector('input[name="mother_age"]');
+                if (motherAgeInput && motherAgeInput.value) {
+                    if (parseInt(motherAgeInput.value) <= 25) {
+                        isValid = false;
+                        showError(motherAgeInput, "Age must be higher than 25.");
+                        if (!firstInvalidField) firstInvalidField = motherAgeInput;
+                    }
+                }
+
+                if (!isValid) {
+                    e.preventDefault();
+                    if (firstInvalidField) {
+                        firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        firstInvalidField.focus();
+                    }
+                }
+            });
+
+        });
+    </script>
+</body>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">Edit Profile for {{ user.full_name }}</h1>
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
+        <!-- Initialize Alpine data with current value -->
+        <form method="POST" action="" x-data="{ expertiseType: '{{ form.expertise_type.data or '' }}' }">
+            {{ form.hidden_tag() }}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                <!-- Column 1 -->
+                <div class="space-y-4">
+                    <div>
+                        <label for="{{ form.full_name.id }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Full Name</label>
+                        {{ form.full_name(class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-slate-700 dark:text-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary") }}
+                    </div>
+                    <div>
+                        <label for="{{ form.email.id }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Email Address</label>
+                        {{ form.email(class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-slate-700 dark:text-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary") }}
+                    </div>
+                    
+                    <!-- NEW: Contact Number -->
+                    <div>
+                        <label for="{{ form.contact_number.id }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Contact Number</label>
+                        {{ form.contact_number(class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-slate-700 dark:text-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary", placeholder="09123456789") }}
+                    </div>
+
+                    <!-- REMOVED: Field of Expertise (major) -->
+                    
+                    <!-- UPDATED: Expertise Type -->
+                    <div>
+                        <label for="{{ form.expertise_type.id }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Expertise Type</label>
+                        {{ form.expertise_type(class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-slate-700 dark:text-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary", **{'x-model': 'expertiseType'}) }}
+                    </div>
+                    
+                    <!-- UPDATED: Program Selection (Shows only if PROFED) -->
+                    <div x-show="expertiseType === 'PROFED'" x-transition>
+                        <label for="{{ form.major_program.id }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Major Program</label>
+                        {{ form.major_program(class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-slate-700 dark:text-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary") }}
+                    </div>
+
+                    <div class="flex items-center pt-2">
+                        {{ form.is_licensed(class="h-4 w-4 text-primary focus:ring-primary border-gray-300 dark:border-gray-600 dark:bg-slate-600 rounded") }}
+                        <label for="{{ form.is_licensed.id }}" class="ml-2 block text-sm text-gray-900 dark:text-slate-300">Is Licensed?</label>
+                    </div>
+                </div>
+
+                <!-- Column 2 -->
+                <div class="space-y-4">
+                    <div>
+                        <label for="{{ form.baccalaureate_degree.id }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Baccalaureate Degree</label>
+                        {{ form.baccalaureate_degree(class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-slate-700 dark:text-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary") }}
+                    </div>
+                    <div>
+                        <label for="{{ form.baccalaureate_year_grad.id }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Year Graduated</label>
+                        {{ form.baccalaureate_year_grad(class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-slate-700 dark:text-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary") }}
+                    </div>
+                    <div>
+                        <label for="{{ form.highest_edu_attainment.id }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Highest Educational Attainment</label>
+                        {{ form.highest_edu_attainment(class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-slate-700 dark:text-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary") }}
+                    </div>
+                    <div>
+                        <label for="{{ form.highest_edu_year_grad.id }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Year Graduated</label>
+                        {{ form.highest_edu_year_grad(class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-slate-700 dark:text-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary") }}
+                    </div>
+                    <div>
+                        <label for="{{ form.subjects_taught.id }}" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Subjects Taught (comma-separated)</label>
+                        {{ form.subjects_taught(rows=3, class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-slate-700 dark:text-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary") }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="mt-6 flex justify-end space-x-3">
+                <a href="{{ url_for('faculty_main.faculty_profile', user_id=user.id) }}" class="bg-gray-200 dark:bg-slate-600 text-gray-700 dark:text-slate-300 px-4 py-2 rounded-button text-sm font-medium hover:bg-gray-300 dark:hover:bg-slate-500">
+                    Cancel
+                </a>
+                {{ form.submit(class="bg-primary text-white px-4 py-2 rounded-button text-sm font-medium hover:bg-primary/90 cursor-pointer") }}
+            </div>
+        </form>
+    </div>
+{% endblock %}

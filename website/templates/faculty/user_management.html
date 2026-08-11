@@ -1,0 +1,356 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+
+<!-- Print Styles -->
+<style>
+    @media print {
+        body > div > aside, body > div > div > header, .dark-mode-toggle { display: none !important; }
+        .md\:pl-72 { padding-left: 0 !important; }
+        .screen-only { display: none !important; }
+        .print-only { display: block !important; }
+        main { padding: 0 !important; }
+        .print-table, .print-table th, .print-table td { 
+            border: 1px solid #000; 
+            padding: 4px; 
+            font-size: 8pt; /* Smaller font to fit all columns */
+            text-align: left; 
+            vertical-align: top;
+        }
+        .print-table th { font-weight: bold; background-color: #f0f0f0; }
+        @page { size: landscape; } /* Request landscape for better fit */
+    }
+</style>
+
+<div class="screen-only">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">User Management</h1>
+    </div>
+
+    <!-- Add New User Form -->
+    <div class="bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 rounded-xl shadow-lg p-6 mb-6 relative z-50">
+        <h2 class="text-lg font-semibold text-slate-800 dark:text-white border-b border-slate-200 dark:border-white/10 pb-3 mb-6">Create New User</h2>
+        
+        <form action="{{ url_for('faculty_main.user_management') }}" method="post" x-data="{ role: '', expertiseType: '' }">
+            {{ form.hidden_tag() }}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    {{ form.full_name.label(class="block text-slate-600 dark:text-slate-300 text-sm font-medium mb-2") }}
+                    {{ form.full_name(class="w-full px-4 py-2 bg-black/5 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-lg text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none") }}
+                </div>
+                <div>
+                    {{ form.email.label(class="block text-slate-600 dark:text-slate-300 text-sm font-medium mb-2") }}
+                    {{ form.email(class="w-full px-4 py-2 bg-black/5 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-lg text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none") }}
+                </div>
+                
+                <div>
+                    {{ form.password.label(class="block text-slate-600 dark:text-slate-300 text-sm font-medium mb-2") }}
+                    {{ form.password(class="w-full px-4 py-2 bg-black/5 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-lg text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none") }}
+                </div>
+                
+                <!-- Role Dropdown -->
+                <div class="relative">
+                     <label class="block text-slate-600 dark:text-slate-300 text-sm font-medium mb-2">Role</label>
+                     <div x-data="{ open: false, selectedLabel: 'Select Role' }" class="relative">
+                        <input type="hidden" name="role" x-model="role">
+                        <button @click="open = !open" type="button" class="relative w-full pl-4 pr-10 py-2 text-left bg-black/5 dark:bg-white/5 border border-slate-300 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:text-sm rounded-lg text-slate-800 dark:text-white">
+                           <span x-text="selectedLabel"></span>
+                           <i class="ri-arrow-down-s-line absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        </button>
+                        <div x-show="open" @click.away="open = false" x-transition class="absolute z-50 mt-2 w-full bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-lg shadow-xl" style="display: none;">
+                           <ul class="py-1">
+                                 {% for value, label in form.role.choices %}
+                                 <li><a href="#" @click.prevent="role = '{{ value }}'; selectedLabel = '{{ label }}'; open = false;" class="block px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20">{{ label }}</a></li>
+                                 {% endfor %}
+                           </ul>
+                        </div>
+                     </div>
+                </div>
+
+                <!-- Admin Username (Only for Dean) -->
+                <div x-show="role === 'dean'" x-transition class="md:col-span-2">
+                    {{ form.username.label(class="block text-slate-600 dark:text-slate-300 text-sm font-medium mb-2") }}
+                    {{ form.username(class="w-full px-4 py-2 bg-black/5 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-lg text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none", placeholder="Admin username") }}
+                </div>
+
+                <!-- Expertise Type (Only for Faculty) -->
+                <div x-show="role === 'faculty'" x-transition class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <!-- Expertise Type Dropdown -->
+                    <div class="relative">
+                        {{ form.expertise_type.label(class="block text-slate-600 dark:text-slate-300 text-sm font-medium mb-2") }}
+                        <div x-data="{ open: false, selectedLabel: '-- Select Type --' }" class="relative">
+                            <input type="hidden" name="expertise_type" x-model="expertiseType">
+                            
+                            <button @click="open = !open" type="button" class="relative w-full pl-4 pr-10 py-2 text-left bg-black/5 dark:bg-white/5 border border-slate-300 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:text-sm rounded-lg text-slate-800 dark:text-white">
+                            <span x-text="selectedLabel"></span>
+                            <i class="ri-arrow-down-s-line absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            </button>
+
+                            <!-- FIX: Solid Background (bg-gray-900) -->
+                            <div x-show="open" @click.away="open = false" x-transition 
+                                class="absolute z-50 mt-1 w-full bg-white dark:bg-gray-900 border border-slate-200 dark:border-gray-600 rounded-lg shadow-2xl">
+                            <ul class="py-1">
+                                    {% for value, label in form.expertise_type.choices %}
+                                    <li>
+                                        <a href="#" 
+                                        @click.prevent="expertiseType = '{{ value }}'; selectedLabel = '{{ label }}'; open = false;" 
+                                        class="block px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-indigo-500/10 dark:hover:bg-indigo-600 transition-colors">
+                                            {{ label }}
+                                        </a>
+                                    </li>
+                                    {% endfor %}
+                            </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Program Selection (Only visible if PROFED) -->
+                    <div x-show="expertiseType === 'PROFED'" x-transition class="relative z-40"> <!-- z-40 ensures it doesn't clip -->
+                        {{ form.program.label(class="block text-slate-600 dark:text-slate-300 text-sm font-medium mb-2") }}
+                        
+                        <div x-data="{ open: false, selectedValue: '', selectedLabel: '-- Select Program --' }" class="relative">
+                            <input type="hidden" name="program" x-model="selectedValue">
+
+                            <button @click="open = !open" type="button" class="relative w-full pl-4 pr-10 py-2 text-left bg-black/5 dark:bg-white/5 border border-slate-300 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:text-sm rounded-lg text-slate-800 dark:text-white">
+                                <span x-text="selectedLabel"></span>
+                                <i class="ri-arrow-down-s-line absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            </button>
+
+                            <!-- FIX: Solid Background (bg-gray-900) -->
+                            <div x-show="open" @click.away="open = false" x-transition 
+                                class="absolute z-50 mt-1 w-full bg-white dark:bg-gray-900 border border-slate-200 dark:border-gray-600 rounded-lg shadow-2xl max-h-60 overflow-y-auto">
+                                <ul class="py-1">
+                                    {% for subfield in form.program %}
+                                        {% if subfield.data != None and subfield.data != '' and subfield.data != '__None' %}
+                                        <li>
+                                            <a href="#" 
+                                            @click.prevent="selectedValue = '{{ subfield.data }}'; selectedLabel = '{{ subfield.label.text }}'; open = false;" 
+                                            class="block px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-indigo-500/10 dark:hover:bg-indigo-600 transition-colors">
+                                                {{ subfield.label.text }}
+                                            </a>
+                                        </li>
+                                        {% endif %}
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end">
+                {{ form.submit(class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-500 transition-colors cursor-pointer") }}
+            </div>
+        </form>
+    </div>
+
+    <!-- User List Table -->
+    <div class="bg-white/70 dark:bg-white/10 backdrop-blur-lg border border-slate-200/50 dark:border-white/10 rounded-xl shadow-lg relative z-0">
+        <div class="p-4 border-b border-slate-200 dark:border-white/10">
+            <div class="flex flex-wrap justify-between items-end gap-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-slate-800 dark:text-white">All Users</h2>
+                    <!-- Filters -->
+                    <form method="GET" action="{{ url_for('faculty_main.user_management') }}" class="mt-4 flex items-end flex-wrap gap-4">
+                        <!-- Filter by Role -->
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Filter by Role</label>
+                            {% set selected_filter_role = namespace(value=request.args.get('role', ''), label='All Roles') %}
+                            {% for value, label in filter_form.role.choices %}
+                                {% if value == selected_filter_role.value %}{% set selected_filter_role.label = label %}{% endif %}
+                            {% endfor %}
+                            <div x-data="{ open: false, selectedValue: '{{ selected_filter_role.value }}', selectedLabel: '{{ selected_filter_role.label }}' }" class="relative w-48">
+                                <input type="hidden" name="role" x-model="selectedValue">
+                                <button @click="open = !open" type="button" class="relative w-full pl-4 pr-10 py-2 text-left bg-black/5 dark:bg-white/5 border border-slate-300 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:text-sm rounded-lg text-slate-800 dark:text-white">
+                                    <span x-text="selectedLabel"></span>
+                                    <i class="ri-arrow-down-s-line absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                                </button>
+                                <div x-show="open" @click.away="open = false" x-transition class="absolute z-10 mt-2 w-full bg-white/95 dark:bg-slate-800/95 backdrop-blur-lg border border-slate-200 dark:border-white/10 rounded-lg shadow-xl" style="display: none;">
+                                    <ul class="py-1">
+                                        {% for value, label in filter_form.role.choices %}
+                                        <li><a href="#" @click.prevent="selectedValue = '{{ value }}'; selectedLabel = '{{ label }}'; open = false;" class="block px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20">{{ label }}</a></li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filter by Department -->
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Filter by Department</label>
+                            {% set selected_dept = namespace(value=request.args.get('department', ''), label='All Departments') %}
+                            {% for value, label in filter_form.department.choices %}
+                                {% if value == selected_dept.value %}{% set selected_dept.label = label %}{% endif %}
+                            {% endfor %}
+                            <div x-data="{ open: false, selectedValue: '{{ selected_dept.value }}', selectedLabel: '{{ selected_dept.label }}' }" class="relative w-48">
+                                <input type="hidden" name="department" x-model="selectedValue">
+                                <button @click="open = !open" type="button" class="relative w-full pl-4 pr-10 py-2 text-left bg-black/5 dark:bg-white/5 border border-slate-300 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:text-sm rounded-lg text-slate-800 dark:text-white">
+                                    <span x-text="selectedLabel"></span>
+                                    <i class="ri-arrow-down-s-line absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                                </button>
+                                <div x-show="open" @click.away="open = false" x-transition class="absolute z-10 mt-2 w-full bg-white/95 dark:bg-slate-800/95 backdrop-blur-lg border border-slate-200 dark:border-white/10 rounded-lg shadow-xl" style="display: none;">
+                                    <ul class="py-1">
+                                        {% for value, label in filter_form.department.choices %}
+                                        <li><a href="#" @click.prevent="selectedValue = '{{ value }}'; selectedLabel = '{{ label }}'; open = false;" class="block px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20">{{ label }}</a></li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-500 transition-colors">Filter</button>
+                        <a href="{{ url_for('faculty_main.user_management', clear='true') }}" class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:underline py-2">Clear</a>
+                    </form>
+                </div>
+                <div>
+                    <button onclick="window.print()" class="bg-slate-500/10 dark:bg-white/10 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-lg flex items-center text-sm font-medium hover:bg-slate-500/20 dark:hover:bg-white/20 transition-colors">
+                        <i class="ri-printer-line w-4 h-4 mr-2"></i>
+                        Print
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        <th class="px-6 py-3">Name</th>
+                        <th class="px-6 py-3">Contact</th>
+                        <th class="px-6 py-3">Role / Type</th>
+                        <th class="px-6 py-3">Department / Program</th>
+                        <th class="px-6 py-3">Status</th>
+                        <th class="px-6 py-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200/80 dark:divide-white/10">
+                    {% for user in user_list %}
+                    <tr class="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4">
+                            <div class="text-sm font-medium text-slate-800 dark:text-white">{{ user.full_name }}</div>
+                            <div class="text-sm text-slate-500 dark:text-slate-400">{{ user.email }}</div>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-slate-700 dark:text-slate-300">
+                            {{ user.contact_number or 'N/A' }}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-slate-700 dark:text-slate-300">
+                            {{ user.role.title() }}
+                            {% if user.role == 'faculty' and user.expertise_type %}
+                                <span class="text-xs text-slate-500 dark:text-slate-400">
+                                    {% if user.expertise_type == 'Major' %}
+                                        (PROFED)
+                                    {% elif user.expertise_type == 'Minor' %}
+                                        (GENED)
+                                    {% else %}
+                                        ({{ user.expertise_type }})
+                                    {% endif %}
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-slate-700 dark:text-slate-300">
+                            {% if user.role == 'dean' %}
+                                {{ user.department }}
+                            {% elif (user.expertise_type == 'Major' or user.expertise_type == 'PROFED') and user.program %}
+                                {{ user.program.program_code }}
+                            {% elif user.expertise_type == 'Minor' or user.expertise_type == 'GENED' %}
+                                GENED / Minor
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-sm">
+                            <span class="px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                {% if user.status == 'active' %} bg-green-500/10 text-green-700 dark:bg-green-500/20 dark:text-green-300
+                                {% else %} bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-300
+                                {% endif %}">
+                                {{ user.status.title() }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-right text-sm font-medium flex justify-end items-center space-x-4">
+                            <!-- View Link -->
+                            <a href="{{ url_for('faculty_main.faculty_profile', user_id=user.id) }}" 
+                            class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">
+                            View
+                            </a>
+
+                            <!-- Delete Button (Only show if not the current user) -->
+                            {% if user.id != current_user.id %}
+                            <form action="{{ url_for('faculty_main.delete_user', user_id=user.id) }}" method="POST" 
+                                onsubmit="return confirm('Are you sure you want to delete {{ user.full_name }}? This action cannot be undone.');"
+                                style="display:inline;">
+                                
+                                <button type="submit" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 cursor-pointer ml-4">
+                                    Delete
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center py-6 text-slate-500 dark:text-slate-400">No users found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- START: PRINT-ONLY SECTION (Restored Detailed View) -->
+<div class="hidden print-only">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="College Logo" style="height: 80px;">
+        <div style="text-align: center; line-height: 1.2;">
+            <p>Republic of the Philippines</p>
+            <p style="font-weight: bold; font-size: 14pt;">PADRE GARCIA POLYTECHNIC COLLEGE</p>
+            <p>Brgy. Castillo, Padre Garcia, Batangas 4224</p>
+            <p>padregarciapolytechniccollege@gmail.com</p>
+            <p>(043) 233-2055</p>
+        </div>
+        <div style="width: 80px;"></div>
+    </div>
+    
+    <!-- Restored Detailed Columns with New Fields -->
+    <table class="w-full border-collapse print-table">
+        <thead>
+            <tr>
+                <th>NAME</th>
+                <th>CONTACT</th>
+                <th>BACCALAUREATE</th>
+                <th>YR</th>
+                <th>HIGHEST EDU</th>
+                <th>YR</th>
+                <th>EXP</th>
+                <th>LIC</th>
+                <th>TYPE</th>
+                <th>PROGRAM</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in user_list %}
+            <tr>
+                <td>{{ user.full_name }}</td>
+                <td>{{ user.contact_number or 'N/A' }}</td>
+                <td>{{ user.baccalaureate_degree or 'N/A' }}</td>
+                <td>{{ user.baccalaureate_year_grad or '' }}</td>
+                <td>{{ user.highest_edu_attainment or 'N/A' }}</td>
+                <td>{{ user.highest_edu_year_grad or '' }}</td>
+                <td>{{ user.industry_experience or 'N/A' }}</td>
+                <td>{{ 'Yes' if user.is_licensed else 'No' }}</td>
+                <td>
+                    {% if user.expertise_type == 'Major' %}PROFED{% elif user.expertise_type == 'Minor' %}GENED{% else %}{{ user.expertise_type or 'N/A' }}{% endif %}
+                </td>
+                <txSd>
+                    {% if user.program %}{{ user.program.program_code }}{% else %}N/A{% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="10" style="text-align: center; padding: 20px;">No users found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div style="text-align: center; margin-top: 40px; font-weight: bold; font-style: italic;">
+        <p>"TAGA-PGPC AKO: MATALINO, DISIPLINADO, MABUTING TAO, IPINAGMAMALAKI KO!"</p>
+    </div>
+</div>
+<!-- END: PRINT-ONLY SECTION -->
+
+{% endblock %}

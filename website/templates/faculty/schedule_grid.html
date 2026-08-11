@@ -1,0 +1,485 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+<script>
+    // --- 1. PASS PYTHON VARIABLES TO JS ---
+    const FACULTY_ID = {{ faculty.id }};
+    const SEMESTER = {{ semester }};
+    const EDIT_SCHED_ID = {{ editing_schedule_id or 0 }};
+    const IS_EDITING = EDIT_SCHED_ID > 0;
+    
+    // Data passed from routes.py (edit_data) or form defaults
+    const INITIAL_PROGRAM = '{{ edit_data.program_id if edit_data else (form.program.data.id if form.program.data else "") }}';
+    const INITIAL_COURSE_ID = '{{ edit_data.course_id if edit_data else "" }}';
+    const INITIAL_COURSE_TEXT = '{{ edit_data.course_text if edit_data else "" }}';
+    const INITIAL_SECTION = '{{ edit_data.section if edit_data else "" }}';
+    const INITIAL_ROOM = '{{ edit_data.room if edit_data else "" }}';
+
+    // Safe JSON for Room Choices
+    let ALL_ROOMS = {{ form.room.choices | tojson | safe }} || [];
+</script>
+
+<div x-data="scheduleHandler()">
+
+    <div class="mb-6">
+        <a href="{{ url_for('faculty_main.scheduling') }}" class="text-sm text-primary dark:text-indigo-400 hover:underline flex items-center">
+            <i class="ri-arrow-left-s-line mr-1"></i> Back to Faculty List
+        </a>
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white mt-2">
+            Scheduling for: {{ faculty.full_name }} 
+            <span class="text-lg font-medium text-gray-500 dark:text-gray-400">({% if semester == 1 %}1st Semester{% else %}2nd Semester{% endif %})</span>
+        </h1>
+    </div>
+
+    <!-- SCHEDULE GRID TABLE -->
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[800px] table-fixed">
+                <thead class="bg-gray-50 dark:bg-slate-700">
+                    <tr class="divide-x divide-gray-200 dark:divide-gray-600">
+                        <th class="px-2 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-40">Time</th>
+                        {% for day in days %}
+                        <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{{ day }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for row in schedule_grid %}
+                    <tr class="divide-x divide-gray-200 dark:divide-gray-600">
+                        <td class="px-2 py-2 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white align-top h-28 flex items-center justify-between">
+                              <span>{{ row.display_time }}</span>
+                        </td>
+                        {% for item in row.days %}
+                        <td class="p-1 align-top text-center relative group h-28">
+                            {% if item %}
+                                <div onclick="window.location.href='{{ url_for('faculty_main.schedule_grid', faculty_id=faculty.id, semester=semester, edit=item.schedule.id) }}'" 
+                                     class="p-2 rounded-lg text-left bg-primary/10 dark:bg-primary/20 h-full w-full hover:bg-primary/20 dark:hover:bg-primary/30 transition-colors text-xs flex flex-col justify-between cursor-pointer relative group border border-primary/20 dark:border-primary/30">
+                                    
+                                    <div>
+                                        <p class="font-bold text-primary dark:text-indigo-300">{{ item.schedule.course_code }} - {{ item.schedule.section }}</p>
+                                        <p class="text-gray-600 dark:text-slate-300 truncate">{{ item.schedule.course_description }}</p>
+                                        <p class="text-gray-500 dark:text-slate-400 mt-1">Room: {{ item.schedule.room }}</p>
+                                        <p class="font-semibold text-gray-700 dark:text-slate-200 mt-2">{{ item.schedule.time_start.strftime('%I:%M') }} - {{ item.schedule.time_end.strftime('%I:%M %p') }}</p>
+                                    </div>
+                                    
+                                    {% if item.has_pending_request %}
+                                        <a href="{{ url_for('faculty_main.create_substitution_request', teaching_load_id=item.schedule.id) }}"
+                                           onclick="event.stopPropagation();"
+                                           class="block mt-2 text-xs bg-yellow-200 dark:bg-yellow-500/20 text-yellow-800 dark:text-yellow-300 rounded px-2 py-1 w-full text-center hover:bg-yellow-300 dark:hover:bg-yellow-500/30 transition-colors z-10">
+                                            Manage Substitution
+                                        </a>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <button @click="openAddModal('{{ days[loop.index0] }}', '{{ row.form_start }}', '{{ row.form_end }}')" class="w-full h-full flex items-center justify-center text-gray-300 dark:text-gray-600 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-500 dark:hover:text-blue-400 transition-colors">
+                                    <i class="ri-add-line text-2xl"></i>
+                                </button>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- ADD/EDIT MODAL -->
+    <div x-show="isModalOpen" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style="display: none;" x-transition>
+        <div @click.away="closeModal()" class="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-lg p-6">
+            <div class="flex justify-between items-center border-b dark:border-gray-700 pb-3 mb-4">
+                <h3 id="modal-title" class="text-xl font-semibold text-gray-800 dark:text-white">
+                    {% if editing_schedule_id %}Edit Schedule{% else %}Add Schedule{% endif %}
+                </h3>
+                <button @click="closeModal()" class="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white text-2xl">&times;</button>
+            </div>
+            <form id="schedule-form" method="post" action="{{ url_for('faculty_main.schedule_grid', faculty_id=faculty.id, semester=semester, edit=editing_schedule_id) if editing_schedule_id else url_for('faculty_main.schedule_grid', faculty_id=faculty.id, semester=semester) }}">
+                {{ form.hidden_tag() }}
+                
+                <div class="space-y-4">
+                    <!-- Times -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            {{ form.time_start.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                            {{ form.time_start(class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md dark:text-white", id="time_start", **{'@change': 'checkAvailability()'}) }}
+                        </div>
+                        <div>
+                            {{ form.time_end.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                            {{ form.time_end(class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md dark:text-white", id="time_end", **{'@change': 'checkAvailability()'}) }}
+                        </div>
+                    </div>
+
+                    <!-- Program & Course -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="program" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Program</label>
+                            <select id="program" name="program" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" @change="fetchData(false)">
+                                <option value="">-- Select a Program --</option>
+                                {% for subfield in form.program %}
+                                    {% if subfield.data and subfield.data != '__None' and subfield.data != 'None' %}
+                                        <option value="{{ subfield.data }}" {% if form.program.data|string == subfield.data|string %}selected{% endif %}>
+                                            {{ subfield.label.text }}
+                                        </option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- CUSTOM SEARCHABLE COURSE DROPDOWN -->
+                        <div class="relative">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Course</label>
+                            
+                            <input type="text" 
+                                   x-model="courseSearch" 
+                                   @focus="showCourseDropdown = true" 
+                                   @click.away="showCourseDropdown = false"
+                                   placeholder="Type to search..."
+                                   class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white">
+                            
+                            <input type="hidden" id="course" name="course" x-model="selectedCourseId">
+
+                            <div x-show="showCourseDropdown" 
+                                 class="absolute z-20 w-full mt-1 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto"
+                                 style="display: none;">
+                                
+                                <template x-for="group in filteredCourses" :key="group.label">
+                                    <div>
+                                        <div class="px-3 py-2 bg-gray-100 dark:bg-slate-800 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider sticky top-0" x-text="group.label"></div>
+                                        <template x-for="course in group.options" :key="course.id">
+                                            <div @click="selectCourse(course)" 
+                                                 class="px-4 py-2 cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-900/50 text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-600 last:border-0"
+                                                 :class="{'bg-indigo-50 dark:bg-indigo-900/30': selectedCourseId == course.id}">
+                                                <span x-text="course.text"></span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                                
+                                <div x-show="filteredCourses.length === 0" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 text-center">
+                                    No courses found matching "<span x-text="courseSearch"></span>"
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section & Room -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            {{ form.section.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                            {{ form.section(class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md dark:text-white", id="section") }}
+                        </div>
+                        <div>
+                            {{ form.room.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                            <select id="room" name="room" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md dark:text-white"></select>
+                        </div>
+                    </div>
+                    <input type="hidden" id="day" name="day" value="">
+                </div>
+
+                <div class="mt-6 flex justify-between items-center">
+                    <div id="delete-button-container">
+                        {% if editing_schedule_id %}
+                        <button type="button" onclick="if(confirm('Are you sure you want to delete this schedule?')) { document.getElementById('delete-form').submit(); }" class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 text-sm font-medium">Delete Schedule</button>
+                        {% endif %}
+                    </div>
+                    <button id="form-submit-button" type="submit" name="add_schedule_submit" value="submit" class="bg-primary text-white font-bold py-2 px-6 rounded-button hover:bg-primary/90">
+                        {% if editing_schedule_id %}Update Schedule{% else %}Add Schedule{% endif %}
+                    </button>
+                </div>
+            </form>
+            {% if editing_schedule_id %}
+            <form id="delete-form" method="post" action="{{ url_for('faculty_main.delete_schedule', schedule_id=editing_schedule_id, semester=semester) }}" class="hidden">
+                {{ delete_form.hidden_tag() }}
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- CUSTOM TIME MODAL -->
+    <div x-show="isTimeModalOpen" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style="display: none;" x-transition>
+        <div @click.away="isTimeModalOpen = false" class="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-sm p-6">
+            <h3 class="text-xl font-semibold text-gray-800 dark:text-white mb-4">Add Custom Time Slot</h3>
+            <form id="time-slot-form" method="post" action="{{ url_for('faculty_main.schedule_grid', faculty_id=faculty.id, semester=semester) }}">
+                {{ time_slot_form.hidden_tag() }}
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        {{ time_slot_form.new_start_time.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                        {{ time_slot_form.new_start_time(class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md dark:text-white") }}
+                    </div>
+                    <div>
+                        {{ time_slot_form.new_end_time.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                        {{ time_slot_form.new_end_time(class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md dark:text-white") }}
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <button type="submit" name="add_time_slot_submit" value="submit" class="bg-primary text-white font-bold py-2 px-6 rounded-button hover:bg-primary/90">
+                        Add
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('scheduleHandler', () => ({
+            isModalOpen: IS_EDITING,
+            isTimeModalOpen: false,
+            busyRooms: [],
+            
+            // Searchable Dropdown Data
+            courseData: [], 
+            courseSearch: '', 
+            selectedCourseId: '', 
+            selectedCourseYear: 0,
+            showCourseDropdown: false,
+            
+            // Get Faculty Program from Python
+            defaultProgramId: '{{ faculty_program_id }}',
+
+            get filteredCourses() {
+                if (this.courseSearch === '') return this.courseData;
+                const lowerSearch = this.courseSearch.toLowerCase();
+                return this.courseData.map(group => {
+                    const filteredOptions = group.options.filter(c => 
+                        c.text.toLowerCase().includes(lowerSearch)
+                    );
+                    return { label: group.label, options: filteredOptions };
+                }).filter(group => group.options.length > 0);
+            },
+
+            init() {
+                // Auto-select for New Schedule
+                if (this.defaultProgramId && !this.isModalOpen) {
+                    const programField = document.getElementById('program');
+                    if (programField && (!programField.value || programField.value === '__None')) {
+                        programField.value = this.defaultProgramId;
+                        this.refreshDropdowns(false);
+                    }
+                }
+
+                // Restore for Edit Mode
+                if (this.isModalOpen) {
+                    const programField = document.getElementById('program');
+                    if (INITIAL_PROGRAM && (!programField.value || programField.value === '__None')) {
+                         programField.value = INITIAL_PROGRAM.toString();
+                    }
+                    if (INITIAL_COURSE_ID) {
+                        this.selectedCourseId = INITIAL_COURSE_ID;
+                        this.courseSearch = INITIAL_COURSE_TEXT || "Loading...";
+                    }
+                    this.refreshDropdowns(true); 
+                    this.renderRoomDropdown();
+                    this.checkAvailability();
+                }
+            },
+
+            refreshDropdowns(isRestoring) {
+                // Fetch independently to avoid blocking
+                this.fetchCourses(isRestoring);
+                this.fetchSections(isRestoring);
+            },
+
+            selectCourse(course) {
+                this.selectedCourseId = course.id;
+                this.courseSearch = course.text;
+                this.selectedCourseYear = course.year; 
+                this.showCourseDropdown = false;
+                document.getElementById('course').value = course.id;
+                this.filterSections();
+            },
+
+            openAddModal(day, timeStart, timeEnd) {
+                this.isModalOpen = true;
+                document.getElementById('schedule-form').reset();
+                this.courseSearch = '';
+                this.selectedCourseId = '';
+                this.selectedCourseYear = 0;
+                
+                document.getElementById('modal-title').textContent = `Add Schedule for ${day} at ${timeStart} - ${timeEnd}`;
+                document.getElementById('delete-button-container').innerHTML = '';
+                document.getElementById('day').value = day;
+                document.getElementById('time_start').value = timeStart;
+                document.getElementById('time_end').value = timeEnd;
+                
+                const programField = document.getElementById('program');
+                // Use default if available
+                const myProgram = this.defaultProgramId || INITIAL_PROGRAM;
+                
+                if (myProgram) {
+                    programField.value = myProgram;
+                    if (this.courseData.length === 0) this.refreshDropdowns(false);
+                } else {
+                    programField.value = '';
+                    this.courseData = [];
+                    document.getElementById('section').innerHTML = '<option value=\'\'>-- Select a Program First --</option>';
+                }
+                this.checkAvailability();
+            },
+            
+            closeModal() {
+                this.isModalOpen = false;
+                const url = new URL(window.location.href);
+                url.searchParams.delete('edit');
+                window.history.pushState({}, '', url);
+            },
+
+            checkAvailability() {
+                const day = document.getElementById('day').value;
+                const start = document.getElementById('time_start').value;
+                const end = document.getElementById('time_end').value;
+                if (!day || !start || !end) {
+                    this.renderRoomDropdown();
+                    return;
+                }
+                
+                // FIXED URLS with /faculty prefix
+                let url = `/faculty/api/check-availability?day=${day}&start=${start}&end=${end}&semester=${SEMESTER}`;
+                if (IS_EDITING) url += `&exclude_id=${EDIT_SCHED_ID}`;
+                
+                fetch(url)
+                    .then(res => res.json())
+                    .then(data => {
+                        this.busyRooms = data.busy_rooms || [];
+                        this.renderRoomDropdown();
+                    })
+                    .catch(() => {
+                        this.busyRooms = [];
+                        this.renderRoomDropdown();
+                    });
+            },
+
+            renderRoomDropdown() {
+                const roomSelect = document.getElementById('room');
+                let currentVal = roomSelect.value;
+                if (!currentVal && IS_EDITING && INITIAL_ROOM) currentVal = INITIAL_ROOM;
+                
+                let currentValNorm = currentVal ? currentVal.trim().toLowerCase() : "";
+                roomSelect.innerHTML = ''; 
+                roomSelect.add(new Option('-- Select Room --', ''));
+
+                const busySet = new Set(this.busyRooms.map(r => r.trim().toLowerCase()));
+
+                ALL_ROOMS.forEach(([val, label]) => {
+                    const cleanVal = val.trim();
+                    const checkVal = cleanVal.toLowerCase();
+                    const isBusy = busySet.has(checkVal);
+                    const isCurrent = (checkVal === currentValNorm);
+
+                    const opt = new Option(label, val);
+                    if (isBusy && !isCurrent) {
+                        opt.disabled = true;
+                        opt.text = `${label} (Occupied)`;
+                    }
+                    roomSelect.add(opt);
+                });
+                if (currentVal) roomSelect.value = currentVal;
+            },
+
+            fetchCourses(isRestoring) {
+                const programId = document.getElementById('program').value;
+                if (!programId || programId === '__None') return;
+
+                // FIXED URL
+                fetch(`/faculty/api/get-courses/${programId}/sem/${SEMESTER}?v=${Date.now()}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        this.courseData = data.courses.map(group => {
+                            if(group.children) return { label: group.text, options: group.children };
+                            else return { label: 'Others', options: [group] };
+                        });
+
+                        if (isRestoring && INITIAL_COURSE_ID) {
+                            this.selectedCourseId = INITIAL_COURSE_ID;
+                            document.getElementById('course').value = INITIAL_COURSE_ID;
+                            let found = false;
+                            this.courseData.forEach(g => {
+                                g.options.forEach(c => {
+                                    if(c.id.toString() === INITIAL_COURSE_ID.toString()) {
+                                        this.courseSearch = c.text;
+                                        this.selectedCourseYear = c.year;
+                                        found = true;
+                                    }
+                                });
+                            });
+                            if (!found && INITIAL_COURSE_TEXT) this.courseSearch = INITIAL_COURSE_TEXT;
+                            this.filterSections();
+                        }
+                    })
+                    .catch(err => console.error("Course Fetch Error:", err));
+            },
+
+            fetchSections(isRestoring) {
+                const programId = document.getElementById('program').value;
+                const sectionSelect = document.getElementById('section');
+                if (!programId || programId === '__None') return;
+                
+                if (!isRestoring) sectionSelect.innerHTML = '<option value=\'\'>Loading...</option>';
+
+                // FIXED URL
+                fetch(`/faculty/api/get-sections/${programId}/sem/${SEMESTER}?v=${Date.now()}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        sectionSelect.innerHTML = '<option value=\'\'>-- Select Section --</option>';
+                        if (data.sections.length === 0) {
+                            if (!isRestoring) sectionSelect.innerHTML = '<option value=\'\'>No sections found</option>';
+                        } else {
+                            data.sections.forEach(sec => {
+                                const opt = new Option(sec.text, sec.id);
+                                opt.setAttribute('data-year', sec.year);
+                                sectionSelect.add(opt);
+                            });
+                        }
+
+                        if (isRestoring && INITIAL_SECTION) {
+                            let exists = false;
+                            for (let i = 0; i < sectionSelect.options.length; i++) {
+                                if (sectionSelect.options[i].value === INITIAL_SECTION) {
+                                    exists = true; break;
+                                }
+                            }
+                            if (!exists) {
+                                const opt = new Option(INITIAL_SECTION, INITIAL_SECTION);
+                                sectionSelect.add(opt);
+                            }
+                            sectionSelect.value = INITIAL_SECTION;
+                        }
+                        if(this.selectedCourseId) this.filterSections();
+                    })
+                    .catch(err => {
+                        console.error("Section Fetch Error:", err);
+                        sectionSelect.innerHTML = '<option value=\'\'>Error loading sections</option>';
+                    });
+            },
+            
+            filterSections() {
+                const sectionSelect = document.getElementById('section');
+                const targetYear = this.selectedCourseYear; 
+                if (!this.selectedCourseId) {
+                    for (let i = 0; i < sectionSelect.options.length; i++) {
+                        sectionSelect.options[i].hidden = false;
+                        sectionSelect.options[i].disabled = false;
+                    }
+                    return;
+                }
+                const shouldFilter = (targetYear && targetYear !== 0 && targetYear !== '0');
+                for (let i = 0; i < sectionSelect.options.length; i++) {
+                    const opt = sectionSelect.options[i];
+                    if (!opt.value) continue; 
+                    const secYear = opt.getAttribute('data-year');
+                    if (shouldFilter && secYear && parseInt(secYear) !== parseInt(targetYear)) {
+                        opt.hidden = true;
+                        opt.disabled = true;
+                    } else {
+                        opt.hidden = false;
+                        opt.disabled = false;
+                    }
+                }
+                const currentSec = sectionSelect.options[sectionSelect.selectedIndex];
+                if (currentSec && currentSec.hidden) sectionSelect.value = '';
+            }
+        }));
+    });
+</script>
+{% endblock %}

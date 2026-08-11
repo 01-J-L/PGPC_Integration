@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+
+{% block title %}Re-Enrollment Form{% endblock %}
+
+{% block body %}
+<body class="bg-gray-50" style="margin-top: 100px;">
+    <main class="container mx-auto px-4 py-8">
+        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6 sm:p-8">
+            <div class="text-center border-b pb-6 mb-6">
+                <i class="ri-refresh-line text-5xl text-primary"></i>
+                <h1 class="text-3xl font-bold text-gray-900 mt-4">Re-Enrollment Form</h1>
+                <p class="text-gray-600 mt-2">Academic Term: <strong>{{ active_school_year }}</strong></p>
+            </div>
+
+            {% if is_graduating %}
+            <div class="bg-green-50 border-l-4 border-green-500 p-6 mb-6 rounded-r-lg">
+                <div class="flex items-center">
+                    <i class="ri-checkbox-circle-fill text-green-500 text-3xl mr-4"></i>
+                    <div>
+                        <h3 class="text-lg font-bold text-green-800">Curriculum Completed</h3>
+                        <p class="text-green-700">You have completed the 4th Year. Please contact the Registrar for graduation details.</p>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+
+            <form action="{{ url_for('auth.submit_re_enrollment', applicant_id=application.applicant_id) }}" method="POST">
+
+                <div class="mb-8 p-4 bg-gray-50 rounded-md border text-sm">
+                    <p class="text-gray-500 uppercase font-bold text-xs mb-2">Student Name</p>
+                    <p class="text-lg font-bold text-gray-800">{{ application.first_name }} {{ application.last_name }}</p>
+                    <p class="text-gray-600">Current Course: <span class="font-medium">{{ application.program_choice }}</span></p>
+                </div>
+
+                <div class="space-y-6">
+                    <h2 class="text-lg font-semibold text-gray-800 border-l-4 border-primary pl-3">Update Enrollment Details</h2>
+                    
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                        <div class="grid grid-cols-1 gap-6">
+                            
+                            <!-- Program Selection -->
+                            <div>
+                                <label for="program_choice" class="block text-sm font-bold text-gray-700 mb-1">Program / Course</label>
+                                
+                                {% if projected_sem == "1st Semester" %}
+                                    <!-- 1st Semester: Student can change program -->
+                                    <select name="program_choice" id="program_choice" required 
+                                        class="w-full border-blue-300 rounded-md shadow-sm text-sm focus:ring-primary focus:border-primary bg-white">
+                                        {% if programs %}
+                                            {% for prog in programs %}
+                                                <option value="{{ prog.title }}" {% if prog.title == application.program_choice %}selected{% endif %}>
+                                                    {{ prog.title }}
+                                                </option>
+                                            {% endfor %}
+                                        {% else %}
+                                            <option value="{{ application.program_choice }}">{{ application.program_choice }}</option>
+                                        {% endif %}
+                                    </select>
+                                    <p id="shift_warning" class="text-xs text-orange-600 mt-2 hidden animate-pulse font-bold">
+                                        <i class="ri-error-warning-line"></i> Course Shift Detected: You will return to 1st Year level.
+                                    </p>
+                                {% else %}
+                                    <!-- 2nd Semester: Program is fixed -->
+                                    <div class="relative">
+                                        <input type="text" value="{{ application.program_choice }}" readonly 
+                                            class="w-full border-gray-200 rounded-md shadow-sm text-sm bg-gray-100 text-gray-500 font-medium cursor-not-allowed">
+                                        <input type="hidden" name="program_choice" value="{{ application.program_choice }}">
+                                        <span class="absolute right-3 top-2.5 text-[10px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded font-bold uppercase">Locked</span>
+                                    </div>
+                                    <p class="text-[11px] text-gray-500 mt-2 italic">Program changes are only allowed during the 1st Semester.</p>
+                                {% endif %}
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                <!-- Year Level -->
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Target Year Level</label>
+                                    <input type="text" id="display_year_level" value="{{ projected_year }}" readonly 
+                                        class="w-full border-blue-200 rounded-md shadow-sm text-sm bg-white text-gray-800 font-bold cursor-not-allowed">
+                                    <input type="hidden" name="year_level" id="hidden_year_level" value="{{ projected_year }}">
+                                </div>
+                                
+                                <!-- Semester -->
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Target Semester</label>
+                                    <input type="text" value="{{ projected_sem }}" readonly 
+                                        class="w-full border-blue-200 rounded-md shadow-sm text-sm bg-white text-gray-800 font-bold cursor-not-allowed">
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-10 pt-6 border-t flex flex-col sm:flex-row justify-end items-center gap-4">
+                    <a href="{{ url_for('views.application_status_page') }}" class="text-sm font-medium text-gray-400 hover:text-gray-600">Cancel</a>
+                    <button type="submit" class="w-full sm:w-auto bg-primary text-white px-10 py-3 rounded-md font-bold text-sm hover:bg-primary-dark transition-all shadow-md">
+                        Submit Re-Enrollment
+                    </button>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+    </main>
+
+    <script>
+        const programDropdown = document.getElementById('program_choice');
+        if (programDropdown) {
+            programDropdown.addEventListener('change', function() {
+                const originalProgram = "{{ application.program_choice }}";
+                const selectedProgram = this.value;
+                const displayYear = document.getElementById('display_year_level');
+                const hiddenYear = document.getElementById('hidden_year_level');
+                const warning = document.getElementById('shift_warning');
+                
+                if (selectedProgram !== originalProgram) {
+                    displayYear.value = "1st Year";
+                    hiddenYear.value = "1st Year";
+                    warning.classList.remove('hidden');
+                    displayYear.classList.add('text-orange-600', 'border-orange-300');
+                } else {
+                    displayYear.value = "{{ projected_year }}";
+                    hiddenYear.value = "{{ projected_year }}";
+                    warning.classList.add('hidden');
+                    displayYear.classList.remove('text-orange-600', 'border-orange-300');
+                }
+            });
+        }
+    </script>
+</body>
+{% endblock %}

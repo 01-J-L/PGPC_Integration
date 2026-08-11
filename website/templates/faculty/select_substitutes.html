@@ -1,0 +1,154 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+<form action="{{ url_for('faculty_main.send_notifications', sub_request_id=sub_request.id) }}" method="post">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <a href="{{ url_for('faculty_main.absence_reports_list') }}" class="text-sm text-primary dark:text-indigo-400 hover:underline flex items-center mb-2">
+            <i class="ri-arrow-left-s-line mr-1"></i> Back to Absence Reports
+        </a>
+        <div class="flex justify-between items-end">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 dark:text-white">Select Substitutes to Notify</h1>
+                <p class="text-slate-500 dark:text-slate-400 mt-1">Select one or more faculty members to notify about this substitution opportunity.</p>
+            </div>
+            <button type="submit" class="bg-primary text-white font-bold py-2 px-6 rounded-lg hover:bg-primary/90 shadow-lg shadow-primary/30 transition-all">
+                Send Notifications
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Left Column: Opportunity Details -->
+        <div class="lg:col-span-1 h-fit space-y-6">
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div class="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                    <h2 class="font-semibold text-slate-800 dark:text-white">Opportunity Details</h2>
+                </div>
+                <div class="p-5 space-y-4">
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Course</p>
+                        <p class="text-sm font-medium text-slate-800 dark:text-slate-200">{{ sub_request.teaching_load.course_code }} - {{ sub_request.teaching_load.course_description }}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Date of Absence</p>
+                        <p class="text-sm font-medium text-slate-800 dark:text-slate-200">{{ sub_request.date_of_absence.strftime('%A, %B %d, %Y') }}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Original Teacher</p>
+                        <p class="text-sm font-medium text-slate-800 dark:text-slate-200">{{ sub_request.original_teacher.full_name }}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Schedule</p>
+                        <p class="text-sm font-medium text-slate-800 dark:text-slate-200">
+                            {{ sub_request.teaching_load.day }}, 
+                            {{ sub_request.teaching_load.time_start.strftime('%I:%M %p') }} - {{ sub_request.teaching_load.time_end.strftime('%I:%M %p') }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Reason</p>
+                        <p class="text-sm italic text-slate-600 dark:text-slate-400">"{{ sub_request.reason }}"</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Faculty Selection -->
+        <div class="lg:col-span-2 space-y-6">
+            
+            <!-- Available Faculty -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                    <div>
+                        <h2 class="font-bold text-slate-800 dark:text-white flex items-center">
+                            <i class="ri-check-double-line text-emerald-500 mr-2"></i> Available Faculty
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">These faculty do not have a schedule conflict at this time.</p>
+                    </div>
+                    <span class="bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-bold px-2 py-1 rounded-full">
+                        {{ available_faculty|length }} Found
+                    </span>
+                </div>
+                
+                <ul class="divide-y divide-slate-100 dark:divide-slate-700/50 max-h-[400px] overflow-y-auto">
+                    {% for item in available_faculty %}
+                    <li class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                        <label class="flex items-start p-4 cursor-pointer">
+                            <div class="flex items-center h-5">
+                                <input type="checkbox" name="faculty_ids" value="{{ item.faculty.id }}" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary dark:bg-slate-700 dark:border-slate-600">
+                            </div>
+                            <div class="ml-3 text-sm w-full">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-medium text-slate-900 dark:text-white">{{ item.faculty.full_name }}</span>
+                                </div>
+                                <p class="text-slate-500 dark:text-slate-400 mt-0.5 text-xs font-medium uppercase tracking-wide">
+                                    {% if item.faculty.expertise_type == 'PROFED' and item.faculty.program %}
+                                        {{ item.faculty.program.program_code }}
+                                    {% elif item.faculty.expertise_type == 'GENED' %}
+                                        GENED
+                                    {% else %}
+                                        {{ item.faculty.department or 'N/A' }}
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </label>
+                    </li>
+                    {% else %}
+                    <li class="p-8 text-center text-slate-500 dark:text-slate-400 italic">
+                        No available faculty found for this time slot.
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <!-- Conflicted Faculty (DISABLED) -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 opacity-70">
+                <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center cursor-pointer" onclick="document.getElementById('conflicted-list').classList.toggle('hidden')">
+                    <div>
+                        <h2 class="font-bold text-slate-800 dark:text-white flex items-center">
+                            <i class="ri-error-warning-line text-amber-500 mr-2"></i> Faculty with Schedule Conflicts
+                        </h2>
+                        <!-- FIX: Updated text -->
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">These faculty are busy and cannot be notified.</p>
+                    </div>
+                    <i class="ri-arrow-down-s-line text-slate-400"></i>
+                </div>
+                
+                <ul id="conflicted-list" class="hidden divide-y divide-slate-100 dark:divide-slate-700/50 max-h-[300px] overflow-y-auto bg-slate-50/50 dark:bg-black/10">
+                    {% for item in conflicted_faculty %}
+                    <!-- FIX: Added cursor-not-allowed -->
+                    <li class="transition-colors cursor-not-allowed opacity-60">
+                        <label class="flex items-start p-4 cursor-not-allowed">
+                            <div class="flex items-center h-5">
+                                <!-- FIX: Added disabled attribute -->
+                                <input type="checkbox" disabled class="w-4 h-4 text-gray-400 border-gray-300 rounded bg-gray-100 cursor-not-allowed dark:bg-slate-800 dark:border-slate-600">
+                            </div>
+                            <div class="ml-3 text-sm w-full">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-medium text-slate-600 dark:text-slate-400">{{ item.faculty.full_name }}</span>
+                                    <span class="text-xs text-amber-600 dark:text-amber-400 font-semibold bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded">Busy</span>
+                                </div>
+                                <p class="text-slate-500 dark:text-slate-500 mt-0.5 text-xs font-medium uppercase tracking-wide">
+                                    {% if item.faculty.expertise_type == 'PROFED' and item.faculty.program %}
+                                        {{ item.faculty.program.program_code }}
+                                    {% elif item.faculty.expertise_type == 'GENED' %}
+                                        GENED
+                                    {% else %}
+                                        {{ item.faculty.department or 'N/A' }}
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </label>
+                    </li>
+                    {% else %}
+                    <li class="p-6 text-center text-slate-500 dark:text-slate-400 italic text-sm">
+                        No other faculty have conflicts at this time.
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}

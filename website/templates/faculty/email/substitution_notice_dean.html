@@ -1,0 +1,12 @@
+<p>Dear Dean,</p>
+<p>
+    A substitution is needed for <strong>{{ load.teacher.full_name }}</strong>'s class on <strong>{{ request.date_of_absence.strftime('%A, %B %d, %Y') }}</strong>.
+</p>
+<p><strong>Class Details:</strong></p>
+<ul>
+    <li><strong>Course:</strong> {{ load.course_code }} - {{ load.course_description }}</li>
+    <li><strong>Section:</strong> {{ load.section }}</li>
+    <li><strong>Time:</strong> {{ load.time_start.strftime('%I:%M %p') }} - {{ load.time_end.strftime('%I:%M %p') }}</li>
+    <li><strong>Reason:</strong> {{ request.reason or 'Not provided' }}</li>
+</ul>
+<p>An email has been sent to all other faculty. You will be notified if the request is accepted.</p>

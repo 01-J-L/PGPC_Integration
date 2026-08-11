@@ -1,0 +1,630 @@
+{% extends 'base.html' %}
+
+{% block title %}Contact Us{% endblock %}
+
+{% block head %}
+{{ super() }}
+<link rel="icon" href="{{ url_for('static', filename='logopgpc.png') }}" type="image/x-icon">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.2.0/remixicon.min.css">
+{% endblock %}
+
+{% block style %}
+<style>
+    /* --- General Styles & Theme Variables (from index.html) --- */
+    :root {
+        --primary: #1e40af;
+        --secondary: #3b82f6;
+        --text-dark: #111827;
+        --text-medium: #4b5563;
+        --text-light: #6b7280;
+        --bg-light-gray: #f9fafb;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+        --radius-xl: 24px;
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    }
+
+    html {
+        scroll-behavior: smooth;
+    }
+
+    body {
+        font-family: 'Inter', sans-serif;
+        background-color: var(--bg-light-gray);
+        color: var(--text-medium);
+    }
+
+    /* --- Header Styles (Static for Contact Page) --- */
+    header {
+        position: static;
+        /* MODIFICATION: Changed from 'sticky' */
+        width: 100%;
+        padding: 15px 5%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #162938;
+        /* Always dark */
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .header-left {
+        display: flex;
+        align-items: center;
+    }
+
+    .header-left .logo {
+        font-size: 1.4em;
+        color: #fff;
+        margin-left: 15px;
+        white-space: nowrap;
+    }
+
+    .navigation {
+        position: relative;
+    }
+
+    /* Added relative position for child menu */
+    .navigation a {
+        position: relative;
+        font-size: 1.1em;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 500;
+        margin-left: 30px;
+    }
+
+    .navigation a.no-underline {
+        text-decoration: none;
+    }
+
+    .menu-toggle {
+        display: none;
+        flex-direction: column;
+        justify-content: space-around;
+        width: 30px;
+        height: 25px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        z-index: 1100;
+        margin-left: 20px;
+    }
+
+    .menu-toggle span {
+        display: block;
+        width: 100%;
+        height: 3px;
+        background-color: #fff;
+        border-radius: 3px;
+        transition: all 0.3s ease-in-out;
+    }
+
+    /* --- Mobile Navigation --- */
+    @media (max-width: 992px) {
+        header {
+            padding: 10px 3%;
+            position: relative;
+            /* Needed for absolute child positioning */
+        }
+
+        .header-left img {
+            width: 60px;
+            height: auto;
+        }
+
+        .header-left .logo {
+            font-size: 0.9em;
+            margin-left: 8px;
+        }
+
+        .navigation {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            width: 250px;
+            background-color: #162938;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+            flex-direction: column;
+            align-items: stretch;
+            display: none;
+            z-index: 1050;
+            border-top: 1px solid #2a3f54;
+            max-height: calc(100vh - 80px);
+            overflow-y: auto;
+        }
+
+        .navigation.active {
+            display: flex;
+        }
+
+        .navigation a {
+            display: block;
+            padding: 12px 20px;
+            margin-left: 0;
+            text-align: left;
+            color: #f0f0f0;
+            border-bottom: 1px solid #2a3f54;
+        }
+
+        .menu-toggle {
+            display: flex;
+        }
+
+        .menu-toggle.active span:nth-child(1) {
+            transform: translateY(9px) rotate(45deg);
+        }
+
+        .menu-toggle.active span:nth-child(2) {
+            opacity: 0;
+        }
+
+        .menu-toggle.active span:nth-child(3) {
+            transform: translateY(-9px) rotate(-45deg);
+        }
+    }
+
+ /* 1. CRITICAL FIX: This ensures padding doesn't increase the width of elements */
+.contact-page-container *, 
+.contact-page-container *::before, 
+.contact-page-container *::after {
+    box-sizing: border-box;
+}
+
+/* --- Main Content Area --- */
+.contact-page-container {
+    padding: 2rem 1rem; /* Reduced padding for mobile */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    width: 100%;
+    overflow-x: hidden; /* Prevent any accidental side scrolling */
+}
+
+.contact-content-wrapper {
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 1.5rem; /* Reduced padding so inputs have room on mobile */
+    background-color: #fff;
+    border-radius: var(--radius-xl, 1rem);
+    box-shadow: var(--shadow-lg, 0 10px 15px rgba(0,0,0,0.1));
+}
+
+.page-title-main {
+    text-align: center;
+    color: var(--text-dark, #111);
+    font-size: 1.75rem; /* Smaller font for mobile */
+    font-weight: 800;
+    margin-bottom: 2rem;
+}
+
+.form-and-info-layout {
+    display: grid;
+    grid-template-columns: 1fr; /* Stacked by default for mobile */
+    gap: 2.5rem;
+}
+
+/* Headers inside columns */
+.form-fields-column h2,
+.info-column h2 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-dark, #111);
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+/* Form Styles */
+.contact-form {
+    width: 100%;
+}
+
+.contact-form label {
+    display: none;
+}
+
+.contact-form input,
+.contact-form textarea {
+    width: 100%; /* Now stays at 100% because of box-sizing */
+    padding: 12px 15px;
+    margin-bottom: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-lg, 0.5rem);
+    font-size: 1rem;
+    font-family: 'Inter', sans-serif;
+    background-color: #f8fafc;
+    transition: all 0.3s ease;
+    display: block; /* Ensures they don't sit side-by-side */
+}
+
+.contact-form input:focus,
+.contact-form textarea:focus {
+    outline: none;
+    border-color: var(--primary, #2563eb);
+    background-color: #fff;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.contact-form textarea {
+    min-height: 150px;
+    resize: vertical;
+}
+
+.contact-form button[type="submit"] {
+    background: linear-gradient(to right, var(--primary, #2563eb), var(--secondary, #4f46e5));
+    color: white;
+    padding: 14px 25px;
+    border: none;
+    border-radius: var(--radius-lg, 0.5rem);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%; /* Full width on mobile */
+    box-shadow: var(--shadow-md, 0 4px 6px rgba(0,0,0,0.1));
+}
+
+/* Contact Info Items */
+.contact-item {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 1.25rem;
+    font-size: 0.95rem;
+}
+
+.contact-item i {
+    color: var(--primary, #2563eb);
+    font-size: 1.25rem;
+    margin-right: 1rem;
+    margin-top: 3px;
+}
+
+.contact-item span {
+    flex: 1;
+    word-break: break-word; /* Prevents long emails from breaking layout */
+}
+
+/* Map Responsive Container */
+.map-container {
+    margin-top: 1.5rem;
+    border-radius: var(--radius-lg, 0.5rem);
+    overflow: hidden;
+    height: 250px;
+    width: 100%;
+}
+
+.map-container iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+/* --- Tablet and Desktop Adjustments --- */
+@media (min-width: 768px) {
+    .contact-content-wrapper {
+        padding: 3rem;
+    }
+    
+    .page-title-main {
+        font-size: 2.5rem;
+    }
+}
+
+@media (min-width: 992px) {
+    .form-and-info-layout {
+        grid-template-columns: 1.2fr 1fr; /* Side by side on large screens */
+        gap: 4rem;
+    }
+    
+    .contact-form button[type="submit"] {
+        width: auto;
+        padding: 14px 40px;
+    }
+}
+
+    /* --- Animate on Scroll & Go Top Button --- */
+    .reveal-on-scroll {
+        opacity: 0;
+        transform: translateY(50px);
+        transition: opacity 0.8s cubic-bezier(0.5, 0, 0, 1), transform 0.8s cubic-bezier(0.5, 0, 0, 1);
+        will-change: opacity, transform;
+    }
+
+    .reveal-on-scroll.is-visible {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .go-top-btn {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        width: 48px;
+        height: 48px;
+        background-color: var(--primary);
+        color: white;
+        border-radius: 50%;
+        border: none;
+        cursor: pointer;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        box-shadow: var(--shadow-lg);
+        transition: all 0.3s ease;
+    }
+
+    .go-top-btn:hover {
+        background-color: var(--secondary);
+        transform: scale(1.1);
+    }
+
+    .go-top-btn i {
+        font-size: 1.5rem;
+    }
+
+    /* --- Footer (Unchanged) --- */
+    .footer {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 2rem 1rem;
+        text-align: center;
+        color: white;
+        overflow: hidden;
+    }
+
+    .footer::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: url("{{ url_for('static', filename='images/pgpcbuild.jpg') }}") center/cover no-repeat fixed;
+        z-index: 0;
+        opacity: 0.3;
+    }
+
+    .footer::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(22, 41, 56, 0.442);
+        z-index: 1;
+    }
+
+    .footer * {
+        position: relative;
+        z-index: 2;
+    }
+
+    .footer-logo {
+        width: 100px;
+        height: 100px;
+        margin-bottom: 1rem;
+    }
+
+    .footer-title {
+        font-size: 1.5rem;
+        font-weight: bold;
+    }
+
+    .footer-subtitle {
+        font-size: 1.25rem;
+        font-weight: bold;
+        margin-top: 0.5rem;
+    }
+
+    .footer-connect {
+        margin-top: 1rem;
+        font-size: 1rem;
+    }
+
+    .footer-socials {
+        display: flex;
+        gap: 1rem;
+        margin-top: 0.5rem;
+        font-size: 1.25rem;
+    }
+
+    .footer-socials a {
+        color: white;
+        text-decoration: none;
+        transition: color 0.3s ease;
+    }
+
+    .footer-socials a:hover {
+        color: #0987d0;
+    }
+
+    .footer-divider {
+        border-top: 1px solid white;
+        width: 25%;
+        margin: 2rem 0;
+    }
+
+    .footer-bottom {
+        font-size: 0.875rem;
+        line-height: 1.6;
+        max-width: 700px;
+    }
+
+    .footer-bottom p {
+        margin-bottom: 0.5rem;
+    }
+
+    .footer-bottom a {
+        color: white;
+        text-decoration: none;
+    }
+
+    .footer-bottom a:hover {
+        text-decoration: underline;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<header>
+    <div class="header-left">
+        <a href="{{ url_for('views.home') }}"><img src="{{ url_for('static', filename='logopgpc.png') }}"
+                alt="Padre Garcia Polytechnic College Logo" width="80" height="auto"></a>
+        <h2 class="logo">Padre Garcia Polytechnic College</h2>
+    </div>
+    <button class="menu-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="main-navigation">
+        <span></span><span></span><span></span>
+    </button>
+    <nav class="navigation" id="main-navigation">
+        <a href="{{ url_for('views.home') }}">Home</a>
+        <a href="{{ url_for('views.about') }}">About</a>
+        <a href="{{ url_for('views.home') }}#programs">Programs</a>
+        <a href="{{ url_for('views.home') }}#news">News</a>
+        <a href="{{ url_for('views.contact_page') }}">Contact</a>
+        {% if student_logged_in %}
+        <a href="{{ url_for('views.application_status_page') }}"><button class="btnLogin-popup">My
+                Application</button></a>
+        <a href="{{ url_for('auth.logout') }}"><button class="btnLogin-popup"
+                style="background-color: #d9534f;">Logout</button></a>
+        {% else %}
+        <a href="{{ url_for('auth.student_login_page') }}">
+                Student Login
+            </a>
+        <a href="{{ url_for('views.existing_or_not') }}" class="no-underline"><button class="btnLogin-popup">Apply
+                now</button></a>
+        {% endif %}
+    </nav>
+</header>
+
+<div class="contact-page-container">
+    <div class="contact-content-wrapper reveal-on-scroll">
+        <h1 class="page-title-main">Get In Touch</h1>
+
+        <div class="form-and-info-layout">
+            <div class="form-fields-column">
+                <h2>Send Us a Message</h2>
+                <form action="{{ url_for('views.submit_contact_form') }}" method="POST" class="contact-form">
+                    <label for="name">Full Name</label>
+                    <input type="text" id="name" name="name" placeholder="Full Name" required>
+                    <label for="email">Your Email Address</label>
+                    <input type="email" id="email" name="email" placeholder="Your Email Address" required>
+                    <label for="subject">Subject</label>
+                    <input type="text" id="subject" name="subject" placeholder="Subject" required>
+                    <label for="message">Message</label>
+                    <textarea id="message" name="message" placeholder="Write your message here..." required></textarea>
+                    <button type="submit">Send Message</button>
+                </form>
+            </div>
+            <div class="info-column">
+                <h2>Contact Information</h2>
+                <div class="contact-item">
+                    <i class="ri-mail-send-line"></i>
+                    <span><a href="mailto:{{ global_content.contact_email }}">{{ global_content.contact_email
+                            }}</a></span>
+                </div>
+                <div class="contact-item">
+                    <i class="ri-phone-line"></i>
+                    <span><a href="tel:{{ global_content.contact_phone }}">{{ global_content.contact_phone }}</a></span>
+                </div>
+                <div class="contact-item">
+                    <i class="ri-map-pin-line"></i>
+                    <span>{{ global_content.contact_address }}</span>
+                </div>
+                <div class="contact-item">
+                    <i class="ri-time-line"></i>
+                    <span>Office Hours: {{ global_content.contact_hours }}</span>
+                </div>
+                <div class="map-container">
+                    <iframe src="{{ global_content.contact_map_url }}" allowfullscreen="" loading="lazy"
+                        referrerpolicy="no-referrer-when-downgrade" title="Location Map">
+                    </iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<button class="go-top-btn" id="goTopBtn" title="Go to top">
+    <i class="ri-arrow-up-line"></i>
+</button>
+
+<footer class="footer">
+    <!-- Dynamic Logo -->
+    <img src="{{ url_for('static', filename='images/uploads/' + global_content.footer_logo_image) if global_content.footer_logo_image else url_for('static', filename='logopgpc.png') }}" 
+         alt="Padre Garcia Polytechnic College logo" class="footer-logo" />
+    
+    <!-- Dynamic Title & Slogan -->
+    <h1 class="footer-title">{{ global_content.footer_title or 'Padre Garcia Polytechnic College' }}</h1>
+    <h2 class="footer-subtitle">{{ global_content.footer_subtitle or 'THE FUTURE BEGINS HERE.' }}</h2>
+    
+    <!-- Dynamic Connect Text & Socials -->
+    <p class="footer-connect">{{ global_content.footer_connect_text or 'Connect with us' }}</p>
+    <div class="footer-socials">
+        {% if global_socials %}
+            {% for link in global_socials %}
+                <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" aria-label="{{ link.platform_name }}">
+                    <i class="{{ link.icon_class }}"></i>
+                </a>
+            {% endfor %}
+        {% else %}
+            <!-- Fallback for old static link if no dynamic links exist -->
+            {% if global_content.footer_facebook_link %}
+                <a href="{{ global_content.footer_facebook_link }}" target="_blank" rel="noopener noreferrer" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+            {% endif %}
+        {% endif %}
+    </div>
+
+    <div class="footer-divider"></div>
+    
+    <!-- Dynamic Links & Contact Info -->
+    <div class="footer-bottom">
+      <p>
+          <a href="{{ url_for('views.about') }}">About</a> | 
+          <a href="{{ url_for('views.contact_page') }}">Contact us</a> | 
+          <a href="{{ url_for('views.home') }}#programs">Programs</a> | 
+          <a href="{{ url_for('views.home') }}">Admission</a> | 
+          <a href="https://maps.app.goo.gl/od3hUBTfTZ1uNNvn7" target="_blank" rel="noopener noreferrer">{{ global_content.contact_address }}</a> | 
+          <a href="tel:{{ global_content.contact_phone }}">{{ global_content.contact_phone }}</a>
+      </p>
+      <p>© {{ current_year if current_year else '2025' }}. All Rights Reserved {{ global_content.footer_title }} | <a href="https://www.padregarcia.gov.ph/home" target="_blank" rel="noopener noreferrer">Padre Garcia PH</a></p>
+    </div>
+</footer>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const menuToggle = document.querySelector('.menu-toggle');
+        const navigation = document.getElementById('main-navigation');
+        if (menuToggle && navigation) {
+            menuToggle.addEventListener('click', function () {
+                navigation.classList.toggle('active');
+                menuToggle.classList.toggle('active');
+            });
+        }
+
+        const goTopBtn = document.getElementById('goTopBtn');
+        if (goTopBtn) {
+            window.addEventListener('scroll', () => {
+                if (window.scrollY > 200) { goTopBtn.style.display = "flex"; } else { goTopBtn.style.display = "none"; }
+            });
+            goTopBtn.addEventListener('click', () => { window.scrollTo({ top: 0, behavior: "smooth" }); });
+        }
+
+        // Animate on Scroll
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                }
+            });
+        }, { threshold: 0.1 });
+        document.querySelectorAll('.reveal-on-scroll').forEach(el => { observer.observe(el); });
+    });
+</script>
+{% endblock %}

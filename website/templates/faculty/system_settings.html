@@ -1,0 +1,140 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white">System Settings</h1>
+            <p class="text-gray-600 dark:text-gray-400">Manage global academic configurations.</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- CARD 1: ACTIVE CONFIGURATION -->
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6 border-t-4 border-blue-500">
+            <div class="flex items-center mb-4">
+                <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400 mr-4">
+                    <i class="ri-settings-3-line text-xl"></i>
+                </div>
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white">Active Configuration</h2>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Edit Current Semester & Duration</p>
+                </div>
+            </div>
+            
+            <form method="POST" action="">
+                {{ form.hidden_tag() }}
+                
+                <!-- Display Current Active Badge -->
+                <div class="mb-6 bg-gray-50 dark:bg-slate-700/50 p-4 rounded-lg border border-gray-100 dark:border-gray-600">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <span class="text-xs font-uppercase text-gray-500 dark:text-gray-400 tracking-wider">CURRENT SCHOOL YEAR:</span>
+                            <div class="text-2xl font-bold text-primary dark:text-blue-400 mt-1">{{ current_sy }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    
+                    <!-- 1. SEMESTER SETTINGS -->
+                    <div class="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg border border-slate-200 dark:border-slate-600">
+                        <h3 class="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">Semester Settings</h3>
+                        
+                        <!-- Semester Dropdown -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Active Semester</label>
+                            {{ form.current_semester(class="block w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:ring-primary focus:border-primary") }}
+                        </div>
+
+                        <!-- NEW: Semester Dates -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Sem. Start Date</label>
+                                {{ form.sem_start_date(class="block w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white text-sm") }}
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Sem. End Date</label>
+                                {{ form.sem_end_date(class="block w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white text-sm") }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. SCHOOL YEAR SETTINGS -->
+                    <div class="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg border border-slate-200 dark:border-slate-600">
+                        <h3 class="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">School Year Duration</h3>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">SY Start Date</label>
+                                {{ form.active_start_date(class="block w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white text-sm") }}
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">SY End Date</label>
+                                {{ form.active_end_date(class="block w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white text-sm") }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Switch Year Dropdown -->
+                    <div class="pt-2 border-t dark:border-gray-700">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2 mt-2">
+                            Switch Active School Year
+                        </label>
+                        {{ form.select_year(class="block w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:ring-primary focus:border-primary") }}
+                    </div>
+
+                    <!-- Save Button -->
+                    <div class="pt-2">
+                        {{ form.submit_switch(class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors cursor-pointer") }}
+                    </div>
+                </div>
+        </div>
+
+        <!-- CARD 2: CREATE NEW YEAR (Unchanged) -->
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6 border-t-4 border-green-500">
+            <div class="flex items-center mb-4">
+                <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-full text-green-600 dark:text-green-400 mr-4">
+                    <i class="ri-calendar-check-line text-xl"></i>
+                </div>
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white">New Academic Year</h2>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Initialize a new school year</p>
+                </div>
+            </div>
+
+                <div class="space-y-5">
+                    <div class="bg-gray-50 dark:bg-slate-700/50 p-4 rounded-lg border border-gray-100 dark:border-gray-600">
+                        <p class="text-sm text-gray-600 dark:text-slate-300">
+                            Defining the <strong>Start</strong> and <strong>End</strong> dates helps prevent scheduling classes outside the academic calendar.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+                            Enter New School Year
+                        </label>
+                        {{ form.new_year(class="block w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:ring-green-500 focus:border-green-500 placeholder-gray-400 dark:placeholder-gray-500") }}
+                    </div>
+
+                    <!-- Date Range Inputs -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Start Date</label>
+                            {{ form.start_date(class="block w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:ring-green-500 focus:border-green-500") }}
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">End Date</label>
+                            {{ form.end_date(class="block w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:ring-green-500 focus:border-green-500") }}
+                        </div>
+                    </div>
+
+                    <!-- Save Button -->
+                    <div class="pt-2">
+                        {{ form.submit_create(class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors cursor-pointer") }}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}

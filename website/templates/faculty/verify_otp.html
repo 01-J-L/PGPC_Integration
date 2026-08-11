@@ -1,0 +1,58 @@
+{% extends "faculty/auth_base.html" %}
+
+{% block content %}
+<div class="flex flex-col items-center justify-center min-h-screen px-4">
+    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
+        <h2 class="text-2xl font-bold text-center text-gray-800 mb-2">Check Your Email</h2>
+        <p class="text-center text-gray-500 mb-6">We've sent a 6-digit verification code to your email address.</p>
+        
+        <form method="POST" action="">
+            {{ form.hidden_tag() }}
+            <div class="mb-6">
+                {{ form.otp.label(class="block text-gray-700 text-sm font-medium mb-2") }}
+                {{ form.otp(class="w-full text-center text-2xl tracking-widest px-4 py-3 bg-gray-50 border rounded-lg focus:outline-none focus:ring-2 " + ("border-red-500 focus:ring-red-500" if form.otp.errors else "border-gray-300 focus:ring-primary"), placeholder="------", maxlength="6", autocomplete="off") }}
+                {% for error in form.otp.errors %}
+                    <span class="text-red-500 text-xs block mt-1">{{ error }}</span>
+                {% endfor %}
+            </div>
+            
+            <div class="mb-6">
+                {{ form.submit(class="w-full bg-primary text-white font-bold py-3 px-4 rounded-button hover:bg-primary/90 transition-colors cursor-pointer") }}
+            </div>
+        </form>
+
+        <!-- Resend Code Section -->
+        <div class="text-center text-sm text-gray-600" x-data="{ 
+            timer: 60,
+            canResend: false,
+            startTimer() {
+                this.canResend = false;
+                this.timer = 60;
+                let interval = setInterval(() => {
+                    this.timer--;
+                    if (this.timer <= 0) {
+                        this.canResend = true;
+                        clearInterval(interval);
+                    }
+                }, 1000);
+            }
+        }" x-init="startTimer()">
+            <p>
+                Didn't receive the code? 
+                <br>
+                <template x-if="!canResend">
+                    <span class="text-gray-400">Resend in <span x-text="timer"></span>s</span>
+                </template>
+                
+                <template x-if="canResend">
+                    <a href="{{ url_for('faculty_auth.resend_otp', email=request.args.get('email')) }}" 
+                       @click="startTimer()"
+                       class="font-medium text-primary hover:text-primary/80 cursor-pointer underline">
+                        Resend Code
+                    </a>
+                </template>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+    <!-- Page Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white">School Year Analytics</h1>
+            <p class="text-gray-600 dark:text-gray-400 mt-1">Generate a complete analysis of teaching loads for a specific school year.</p>
+        </div>
+    </div>
+
+    <!-- School Year Selection Form -->
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6 mb-8">
+        <form method="POST" class="flex items-end space-x-4">
+            {{ form.hidden_tag() }}
+            <div class="flex-grow">
+                {{ form.school_year.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
+                {{ form.school_year(class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary dark:text-white") }}
+            </div>
+            <div>
+                {{ form.submit(class="bg-primary text-white font-bold py-2 px-6 rounded-button hover:bg-primary/90 cursor-pointer transition-colors") }}
+            </div>
+        </form>
+    </div>
+
+    <!-- Analytics Results Section -->
+    {% if analytics_data %}
+    <div class="space-y-8">
+        <h2 class="text-xl font-bold text-gray-800 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
+            Analytics Report for School Year: <span class="text-primary dark:text-indigo-400">{{ school_year }}</span>
+        </h2>
+
+        <!-- Grid for the two main tables -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Faculty Workload (Wider Column) -->
+            <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm overflow-hidden">
+                <div class="p-4 border-b dark:border-gray-700"><h3 class="text-lg font-semibold text-gray-800 dark:text-white">Faculty Workload Summary</h3></div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                <th class="px-4 py-3">Faculty Name</th>
+                                <th class="px-4 py-3 text-center">1st Sem Units</th>
+                                <th class="px-4 py-3 text-center">2nd Sem Units</th>
+                                <th class="px-4 py-3 text-center">Total Units</th>
+                                <th class="px-4 py-3">Peak Load Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-gray-700">
+                            {% for name, data in analytics_data.faculty_workload %}
+                            <tr class="hover:bg-gray-50 dark:hover:bg-slate-700/50">
+                                <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{{ name }}</td>
+                                <td class="px-4 py-3 text-sm text-center text-gray-600 dark:text-slate-300">{{ data.sem1 }}</td>
+                                <td class="px-4 py-3 text-sm text-center text-gray-600 dark:text-slate-300">{{ data.sem2 }}</td>
+                                <td class="px-4 py-3 text-sm text-center font-bold text-gray-800 dark:text-white">{{ data.total }}</td>
+                                <td class="px-4 py-3">
+                                    <div class="flex items-center">
+                                        <div class="w-full bg-gray-200 dark:bg-slate-600 rounded-full h-2.5">
+                                            <div class="{{ data.status_color }} h-2.5 rounded-full" style="width: {{ data.percentage }}%"></div>
+                                        </div>
+                                        <span class="ml-2 text-xs font-medium">{{ "%.0f"|format(data.percentage) }}%</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="5" class="text-center py-4 text-gray-500 dark:text-gray-400">No workload data found for this school year.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Program Statistics (Narrower Column) -->
+            <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm overflow-hidden h-fit">
+                <div class="p-4 border-b dark:border-gray-700"><h3 class="text-lg font-semibold text-gray-800 dark:text-white">Classes per Program</h3></div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead><tr class="bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"><th class="px-4 py-3">Program Name</th><th class="px-4 py-3 text-center">Total Classes</th></tr></thead>
+                        <tbody class="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-gray-700">
+                            {% for program in analytics_data.program_stats %}
+                            <tr class="hover:bg-gray-50 dark:hover:bg-slate-700/50">
+                                <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{{ program.program_name }}</td>
+                                <td class="px-4 py-3 text-sm text-center text-gray-600 dark:text-slate-300">{{ program.class_count }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="2" class="text-center py-4 text-gray-500 dark:text-gray-400">No data found.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+{% endblock %}
