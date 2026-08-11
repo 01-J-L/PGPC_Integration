@@ -7933,6 +7933,28 @@ def admin_maintenance():
         if cursor: cursor.close()
         if conn: conn.close()
 
+def _ensure_grading_admins(cursor):
+    """Create the two grading-system admin accounts (CCBA & COC) if missing."""
+    initial_password = os.getenv('ADMIN_INITIAL_PASSWORD', 'adminpgpc@2025')
+    specs = [
+        ('gradingccba', 'CCBA Grading Admin', 'CCBA', 'gradingccba@pgpc.edu.ph'),
+        ('gradingcoc', 'COC Grading Admin', 'COC', 'gradingcoc@pgpc.edu.ph'),
+    ]
+    created = []
+    for username, full_name, department, email in specs:
+        cursor.execute("SELECT id FROM system_users WHERE username = %s", (username,))
+        if cursor.fetchone():
+            continue
+        hashed = generate_password_hash(initial_password, method='pbkdf2:sha256')
+        cursor.execute(
+            "INSERT INTO system_users (username, password, role, full_name, department, email, `system`) "
+            "VALUES (%s, %s, 'admin', %s, %s, %s, 'grading')",
+            (username, hashed, full_name, department, email)
+        )
+        created.append(username)
+    return created
+
+
 @auth.route('/admin/manage-users')
 def admin_manage_users():
     if session.get('user_role') != 'admin':
@@ -7942,28 +7964,53 @@ def admin_manage_users():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Superadmin is higher than admin: hide it from regular admins.
-    # Only a superadministrator (is_superadmin) sees the superadmin account.
+    # Auto-create the grading-system admin accounts (CCBA & COC) on first load.
+    created_admins = _ensure_grading_admins(cursor)
+    if created_admins:
+        conn.commit()
+        flash(f"Grading system admin accounts created ({', '.join(created_admins)}). "
+              f"Default password is the ADMIN_INITIAL_PASSWORD. Change it below.", "info")
+
+    # Admission + Grading system accounts live in system_users.
     if session.get('is_superadmin'):
         cursor.execute("""
-            SELECT id, username, role, full_name, created_at, can_edit 
-            FROM system_users 
-            ORDER BY role, username
+            SELECT id, username, role, full_name, created_at, can_edit, department, email,
+                   COALESCE(`system`, 'admission') AS `system`
+            FROM system_users
+            ORDER BY `system`, role, username
         """)
     else:
         cursor.execute("""
-            SELECT id, username, role, full_name, created_at, can_edit 
-            FROM system_users 
+            SELECT id, username, role, full_name, created_at, can_edit, department, email,
+                   COALESCE(`system`, 'admission') AS `system`
+            FROM system_users
             WHERE role != 'superadmin'
-            ORDER BY role, username
+            ORDER BY `system`, role, username
         """)
-    
+
     users = cursor.fetchall()
+    for u in users:
+        u['source'] = 'system_users'
+
+    # Faculty system admins (CCBA & COC deans) live in the users table.
+    cursor.execute("""
+        SELECT id, username, role, full_name, NULL AS created_at, 1 AS can_edit,
+               department, email, 'faculty' AS `system`
+        FROM users
+        WHERE role = 'dean'
+        ORDER BY department
+    """)
+    deans = cursor.fetchall()
+    for d in deans:
+        d['source'] = 'users'
+
     cursor.close()
     conn.close()
-    
+
+    users.extend(deans)
+
     _, stats = _get_all_applications_and_stats()
-    
+
     return render_template('admin_manage_users.html', users=users, stats=stats, active_page='manage_users')
 
 
@@ -7976,6 +8023,9 @@ def admin_add_user():
     password = request.form.get('password')
     full_name = request.form.get('full_name')
     role = request.form.get('role')
+    system = request.form.get('system', 'admission')
+    department = request.form.get('department') or None
+    email = request.form.get('email') or None
 
     if not all([username, password, full_name, role]):
         flash("All fields are required.", "danger")
@@ -7987,8 +8037,8 @@ def admin_add_user():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # --- ENFORCE SINGLE ADMIN RULE ---
-        if role == 'admin':
+        # --- ENFORCE SINGLE ADMIN RULE (admission system only) ---
+        if system == 'admission' and role == 'admin':
             cursor.execute("SELECT id FROM system_users WHERE role = 'admin'")
             existing_admin = cursor.fetchone()
             if existing_admin:
@@ -7997,7 +8047,48 @@ def admin_add_user():
         # ---------------------------------
 
         hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
-        cursor.execute("INSERT INTO system_users (username, password, full_name, role) VALUES (%s, %s, %s, %s)", 
+
+        # --- FACULTY SYSTEM: create a Dean account in the users table ---
+        if system == 'faculty':
+            if not department or department not in ('CCBA', 'COC'):
+                flash("Please select a department (CCBA or COC) for a Faculty admin.", "danger")
+                return redirect(url_for('auth.admin_manage_users'))
+            cursor.execute("SELECT id FROM users WHERE email = %s OR username = %s", (email, username))
+            if cursor.fetchone():
+                flash("That email or username is already registered in the Faculty system.", "danger")
+                return redirect(url_for('auth.admin_manage_users'))
+            cursor.execute("""
+                INSERT INTO users (username, email, password_hash, role, status, full_name, department)
+                VALUES (%s, %s, %s, 'dean', 'active', %s, %s)
+            """, (username, email, hashed_password, full_name, department))
+            conn.commit()
+            flash(f"Faculty admin '{username}' ({department}) created successfully.", "success")
+            return redirect(url_for('auth.admin_manage_users'))
+
+        # --- GRADING SYSTEM: role forced to admin + department required ---
+        if system == 'grading':
+            if not department or department not in ('CCBA', 'COC'):
+                flash("Please select a department (CCBA or COC) for a Grading admin.", "danger")
+                return redirect(url_for('auth.admin_manage_users'))
+            cursor.execute("SELECT id FROM system_users WHERE username = %s", (username,))
+            if cursor.fetchone():
+                flash("Username already exists.", "danger")
+                return redirect(url_for('auth.admin_manage_users'))
+            cursor.execute("""
+                INSERT INTO system_users (username, password, full_name, role, department, email, `system`)
+                VALUES (%s, %s, %s, 'admin', %s, %s, 'grading')
+            """, (username, hashed_password, full_name, department, email))
+            conn.commit()
+            flash(f"Grading admin '{username}' ({department}) created successfully.", "success")
+            return redirect(url_for('auth.admin_manage_users'))
+
+        # --- ADMISSION SYSTEM (default) ---
+        cursor.execute("SELECT id FROM system_users WHERE username = %s", (username,))
+        if cursor.fetchone():
+            flash("Username already exists.", "danger")
+            return redirect(url_for('auth.admin_manage_users'))
+
+        cursor.execute("INSERT INTO system_users (username, password, full_name, role, `system`) VALUES (%s, %s, %s, %s, 'admission')", 
                        (username, hashed_password, full_name, role))
         conn.commit()
         flash(f"User {username} ({role}) added successfully.", "success")
@@ -8018,17 +8109,29 @@ def admin_add_user():
 def admin_delete_user(user_id):
     if session.get('user_role') != 'admin': return redirect(url_for('auth.admin'))
     
+    source = request.form.get('source', 'system_users')
+
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
+        # --- FACULTY SYSTEM (users table) ---
+        if source == 'users':
+            cursor.execute("DELETE FROM users WHERE id = %s AND role = 'dean'", (user_id,))
+            conn.commit()
+            if cursor.rowcount:
+                flash("Faculty admin deleted successfully.", "success")
+            else:
+                flash("Faculty admin not found.", "danger")
+            return redirect(url_for('auth.admin_manage_users'))
+
         # Check user role before deleting
-        cursor.execute("SELECT role FROM system_users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT role, `system` FROM system_users WHERE id = %s", (user_id,))
         target_user = cursor.fetchone()
 
-        if target_user and target_user['role'] == 'admin':
+        if target_user and target_user['role'] == 'admin' and target_user.get('system', 'admission') != 'grading':
             flash("Critical Action Blocked: The main Administrator account cannot be deleted.", "danger")
             return redirect(url_for('auth.admin_manage_users'))
 
@@ -8053,6 +8156,9 @@ def admin_edit_user():
     full_name = request.form.get('full_name')
     username = request.form.get('username')
     role = request.form.get('role')
+    source = request.form.get('source', 'system_users')
+    department = request.form.get('department') or None
+    email = request.form.get('email') or None
 
     if not all([user_id, full_name, username, role]):
         flash("Missing required fields.", "danger")
@@ -8064,13 +8170,37 @@ def admin_edit_user():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Prevent editing the main Admin's role/username to something else (Self-lockout protection)
+        # --- FACULTY SYSTEM (users table) ---
+        if source == 'users':
+            cursor.execute("SELECT email FROM users WHERE id = %s", (user_id,))
+            current = cursor.fetchone()
+            if not current:
+                flash("Faculty admin not found.", "danger")
+                return redirect(url_for('auth.admin_manage_users'))
+            cursor.execute("SELECT id FROM users WHERE (username = %s OR email = %s) AND id != %s",
+                           (username, email, user_id))
+            if cursor.fetchone():
+                flash("That username or email is already taken.", "danger")
+                return redirect(url_for('auth.admin_manage_users'))
+            cursor.execute("""
+                UPDATE users SET full_name = %s, username = %s, email = %s, department = %s
+                WHERE id = %s
+            """, (full_name, username, email, department, user_id))
+            conn.commit()
+            flash(f"Faculty admin '{username}' updated successfully.", "success")
+            return redirect(url_for('auth.admin_manage_users'))
+
+        # --- system_users table (Admission / Grading) ---
         cursor.execute("SELECT role FROM system_users WHERE id = %s", (user_id,))
         current_user_data = cursor.fetchone()
         
-        if current_user_data and current_user_data['role'] == 'admin':
-            # If editing the admin, force role to stay admin to prevent accidental demotion
-            role = 'admin' 
+        if not current_user_data:
+            flash("User not found.", "danger")
+            return redirect(url_for('auth.admin_manage_users'))
+
+        # Prevent demoting/renaming the main Admin account (Self-lockout protection)
+        if current_user_data['role'] == 'admin':
+            role = 'admin'
             
         # Check for duplicate username (exclude current user)
         cursor.execute("SELECT id FROM system_users WHERE username = %s AND id != %s", (username, user_id))
@@ -8081,9 +8211,9 @@ def admin_edit_user():
         # Execute Update
         cursor.execute("""
             UPDATE system_users 
-            SET full_name = %s, username = %s, role = %s 
+            SET full_name = %s, username = %s, role = %s, department = %s, email = %s
             WHERE id = %s
-        """, (full_name, username, role, user_id))
+        """, (full_name, username, role, department, email, user_id))
         
         conn.commit()
         flash(f"User '{username}' updated successfully.", "success")
@@ -8103,6 +8233,7 @@ def admin_change_user_password():
 
     user_id = request.form.get('user_id')
     new_password = request.form.get('new_password')
+    source = request.form.get('source', 'system_users')
 
     if not user_id or not new_password:
         flash("Missing data for password reset.", "danger")
@@ -8120,7 +8251,11 @@ def admin_change_user_password():
 
         hashed_password = generate_password_hash(new_password, method='pbkdf2:sha256')
         
-        cursor.execute("UPDATE system_users SET password = %s WHERE id = %s", (hashed_password, user_id))
+        # Faculty system admins live in the users table (column password_hash).
+        if source == 'users':
+            cursor.execute("UPDATE users SET password_hash = %s WHERE id = %s", (hashed_password, user_id))
+        else:
+            cursor.execute("UPDATE system_users SET password = %s WHERE id = %s", (hashed_password, user_id))
         conn.commit()
         
         flash("User password updated successfully.", "success")

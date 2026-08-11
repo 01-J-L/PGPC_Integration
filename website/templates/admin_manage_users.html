@@ -19,7 +19,9 @@
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">System</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Edit Privilege
                         </th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -31,21 +33,40 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {{ user.full_name }}<br>
                             <span class="text-xs text-gray-500">@{{ user.username }}</span>
+                            {% if user.email %}
+                            <span class="text-xs text-gray-400 block">{{ user.email }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                                {% if user.system == 'admission' %}bg-indigo-100 text-indigo-800
+                                {% elif user.system == 'grading' %}bg-rose-100 text-rose-800
+                                {% else %}bg-emerald-100 text-emerald-800{% endif %}">
+                                {{ user.system|upper }}
+                            </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                                 {% if user.role == 'admin' %}bg-purple-100 text-purple-800
+                                {% elif user.role == 'superadmin' %}bg-red-100 text-red-800
                                 {% elif user.role == 'registrar' %}bg-blue-100 text-blue-800
                                 {% elif user.role == 'guidance' %}bg-green-100 text-green-800
                                 {% elif user.role == 'osa' %}bg-yellow-100 text-yellow-800
                                 {% elif user.role == 'cashier' %}bg-teal-100 text-teal-800
                                 {% elif user.role == 'accounting' %}bg-orange-100 text-orange-800
+                                {% elif user.role == 'secretary' %}bg-pink-100 text-pink-800
+                                {% elif user.role == 'dean' %}bg-indigo-100 text-indigo-800
                                 {% else %}bg-gray-100 text-gray-800{% endif %}">
                                 {{ user.role|upper }}
                             </span>
                         </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {{ user.department or '—' }}
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap text-center">
-                            {% if user.role == 'admin' %}
+                            {% if user.system == 'faculty' %}
+                            <span class="text-xs text-gray-400 italic">N/A</span>
+                            {% elif user.role in ['admin', 'superadmin'] %}
                             <span class="text-xs text-gray-400 italic">Full Access</span>
                             {% else %}
                             <!-- Toggle Switch for Automatic Saving -->
@@ -60,25 +81,36 @@
                             {% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                            <!-- Edit Button -->
+                            <button type="button"
+                                onclick="openEditModal('{{ user.id }}', '{{ user.source }}', '{{ user.system }}', '{{ user.full_name }}', '{{ user.username }}', '{{ user.role }}', '{{ user.department or '' }}', '{{ user.email or '' }}')"
+                                class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 p-1 rounded border border-indigo-200"
+                                title="Edit User">
+                                <i class="ri-edit-2-line"></i>
+                            </button>
+
                             <!-- Change Password Button -->
-                            <button type="button" onclick="openPasswordModal('{{ user.id }}', '{{ user.username }}')"
+                            <button type="button" onclick="openPasswordModal('{{ user.id }}', '{{ user.username }}', '{{ user.source }}')"
                                 class="text-blue-600 hover:text-blue-900 bg-blue-50 p-1 rounded border border-blue-200"
                                 title="Change Password">
                                 <i class="ri-key-2-line"></i>
                             </button>
 
-                            <!-- Delete Button (Hidden for Admin) -->
-                            {% if user.role != 'admin' %}
+                            <!-- Delete Button (Hidden for main Admin / Superadmin) -->
+                            {% if user.role == 'admin' and user.system != 'grading' %}
+                            <span class="text-gray-400 text-xs italic px-2">Protected</span>
+                            {% elif user.role == 'superadmin' %}
+                            <span class="text-gray-400 text-xs italic px-2">Protected</span>
+                            {% else %}
                             <form action="{{ url_for('auth.admin_delete_user', user_id=user.id) }}" method="POST"
                                 class="inline" onsubmit="return confirm('Delete this user?');">
+                                <input type="hidden" name="source" value="{{ user.source }}">
                                 <button type="submit"
                                     class="text-red-600 hover:text-red-900 bg-red-50 p-1 rounded border border-red-200"
                                     title="Delete User">
                                     <i class="ri-delete-bin-line"></i>
                                 </button>
                             </form>
-                            {% else %}
-                            <span class="text-gray-400 text-xs italic px-2">Protected</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -94,6 +126,15 @@
             <h3 class="text-lg font-semibold text-gray-800 mb-4">Add New User</h3>
             <form action="{{ url_for('auth.admin_add_user') }}" method="POST" class="space-y-4">
                 <div>
+                    <label class="block text-sm font-medium text-gray-700">System</label>
+                    <select name="system" id="addSystemSelect" required onchange="toggleAddSystem()"
+                        class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
+                        <option value="admission">Admission System</option>
+                        <option value="grading">Grading System</option>
+                        <option value="faculty">Faculty System</option>
+                    </select>
+                </div>
+                <div>
                     <label class="block text-sm font-medium text-gray-700">Full Name</label>
                     <input type="text" name="full_name" required
                         class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
@@ -103,22 +144,35 @@
                     <input type="text" name="username" required
                         class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
                 </div>
+                <div id="addEmailField" style="display:none;">
+                    <label class="block text-sm font-medium text-gray-700">Email</label>
+                    <input type="email" name="email"
+                        class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
+                </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Password</label>
                     <input type="password" name="password" required
                         class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
                 </div>
-                <div>
+                <div id="addRoleField">
                     <label class="block text-sm font-medium text-gray-700">Role</label>
-                    <select name="role" required
+                    <select name="role" id="addRoleSelect" required
                         class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
                         <option value="registrar">Registrar</option>
                         <option value="guidance">Guidance</option>
                         <option value="osa">OSA</option>
                         <option value="cashier">Cashier</option>
                         <option value="accounting">Accounting</option>
-                        <!-- NEW OPTION ADDED HERE -->
                         <option value="secretary">Secretary</option>
+                    </select>
+                </div>
+                <div id="addDepartmentField" style="display:none;">
+                    <label class="block text-sm font-medium text-gray-700">Department</label>
+                    <select name="department" id="addDepartmentSelect"
+                        class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
+                        <option value="">-- Select Department --</option>
+                        <option value="CCBA">CCBA</option>
+                        <option value="COC">COC</option>
                     </select>
                 </div>
                 <div class="pt-2">
@@ -128,6 +182,68 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div id="editModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50"
+    onclick="closeEditModal(event)">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white"
+        onclick="event.stopPropagation()">
+        <div class="mt-3">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Edit User</h3>
+                <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-500"><i
+                        class="ri-close-line text-2xl"></i></button>
+            </div>
+            <div class="mt-2 py-3">
+                <form action="{{ url_for('auth.admin_edit_user') }}" method="POST">
+                    <input type="hidden" name="user_id" id="editUserId">
+                    <input type="hidden" name="source" id="editSource">
+                    <input type="hidden" name="system" id="editSystem">
+
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                    <input type="text" name="full_name" id="editFullName" required
+                        class="w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm mb-4">
+
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                    <input type="text" name="username" id="editUsername" required
+                        class="w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm mb-4">
+
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" name="email" id="editEmail"
+                        class="w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm mb-4">
+
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                    <select name="role" id="editRole"
+                        class="w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm mb-4">
+                        <option value="admin">Admin</option>
+                        <option value="registrar">Registrar</option>
+                        <option value="guidance">Guidance</option>
+                        <option value="osa">OSA</option>
+                        <option value="cashier">Cashier</option>
+                        <option value="accounting">Accounting</option>
+                        <option value="secretary">Secretary</option>
+                        <option value="dean">Dean</option>
+                    </select>
+
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                    <select name="department" id="editDepartment"
+                        class="w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm mb-4">
+                        <option value="">-- None --</option>
+                        <option value="CCBA">CCBA</option>
+                        <option value="COC">COC</option>
+                    </select>
+
+                    <div class="flex justify-end gap-2">
+                        <button type="button" onclick="closeEditModal()"
+                            class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md text-sm font-medium hover:bg-gray-300">Cancel</button>
+                        <button type="submit"
+                            class="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700">Save</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 </div>
@@ -148,6 +264,7 @@
                 </p>
                 <form action="{{ url_for('auth.admin_change_user_password') }}" method="POST">
                     <input type="hidden" name="user_id" id="modalUserId">
+                    <input type="hidden" name="source" id="modalSource">
 
                     <label class="block text-sm font-medium text-gray-700 mb-1">New Password</label>
                     <input type="password" name="new_password" required
@@ -169,9 +286,63 @@
 <!-- JAVASCRIPT FOR AUTO-SAVE -->
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-    function openPasswordModal(userId, username) {
+    function toggleAddSystem() {
+        const system = document.getElementById('addSystemSelect').value;
+        const emailField = document.getElementById('addEmailField');
+        const deptField = document.getElementById('addDepartmentField');
+        const roleField = document.getElementById('addRoleField');
+        const roleSelect = document.getElementById('addRoleSelect');
+        const deptSelect = document.getElementById('addDepartmentSelect');
+
+        if (system === 'admission') {
+            emailField.style.display = 'none';
+            deptField.style.display = 'none';
+            roleField.style.display = 'block';
+            deptSelect.value = '';
+        } else {
+            emailField.style.display = 'block';
+            deptField.style.display = 'block';
+            roleField.style.display = 'none';
+            deptSelect.required = true;
+        }
+    }
+
+    function openEditModal(id, source, system, fullName, username, role, department, email) {
+        document.getElementById('editUserId').value = id;
+        document.getElementById('editSource').value = source;
+        document.getElementById('editSystem').value = system;
+        document.getElementById('editFullName').value = fullName;
+        document.getElementById('editUsername').value = username;
+        document.getElementById('editEmail').value = email;
+        document.getElementById('editDepartment').value = department;
+
+        const roleSelect = document.getElementById('editRole');
+        if (source === 'users') {
+            roleSelect.innerHTML = '<option value="dean">Dean</option>';
+        } else if (system === 'grading') {
+            roleSelect.innerHTML = '<option value="admin">Admin</option>';
+        } else {
+            roleSelect.innerHTML = '<option value="admin">Admin</option>' +
+                '<option value="registrar">Registrar</option>' +
+                '<option value="guidance">Guidance</option>' +
+                '<option value="osa">OSA</option>' +
+                '<option value="cashier">Cashier</option>' +
+                '<option value="accounting">Accounting</option>' +
+                '<option value="secretary">Secretary</option>';
+        }
+        roleSelect.value = role;
+
+        document.getElementById('editModal').classList.remove('hidden');
+    }
+
+    function closeEditModal(event) {
+        document.getElementById('editModal').classList.add('hidden');
+    }
+
+    function openPasswordModal(userId, username, source) {
         document.getElementById('modalUserId').value = userId;
         document.getElementById('modalUsername').textContent = username;
+        document.getElementById('modalSource').value = source;
         document.getElementById('passwordModal').classList.remove('hidden');
     }
 

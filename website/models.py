@@ -312,6 +312,7 @@ class SystemUser(db.Model):
     can_edit = db.Column(db.Boolean, default=True)
     department = db.Column(db.String(100))
     email = db.Column(db.String(100))
+    system = db.Column(db.String(20), default='admission')
 
 
 class StudentUser(db.Model):
