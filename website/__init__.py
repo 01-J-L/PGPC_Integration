@@ -104,16 +104,16 @@ def create_app():
 
     # --- 5.5 GLOBAL MAINTENANCE MODE GATE ---
     # When maintenance_mode = '1' in system_settings, block everything for
-    # everyone except the superadmin. The superadmin still needs to reach the
-    # login page so they can log in and turn maintenance off again.
+    # everyone except the superadmin. The superadmin login page stays
+    # reachable so they can log in and turn maintenance off again.
     @app.before_request
     def check_maintenance_mode():
         if request.endpoint == 'static':
             return
         if session.get('user_role') == 'superadmin' or session.get('is_superadmin'):
             return
-        # Keep the login page + login/logout endpoints reachable at all times
-        if request.endpoint in ('auth.admin', 'auth.admin_login', 'auth.logout', 'auth.admin_maintenance'):
+        # Keep the login pages + login/logout endpoints reachable at all times
+        if request.endpoint in ('auth.admin', 'auth.admin_login', 'auth.superadmin_login', 'auth.logout', 'auth.admin_maintenance'):
             return
         try:
             from .models import SystemSetting

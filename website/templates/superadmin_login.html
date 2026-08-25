@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}PGPC_Superadmin Panel{% endblock %}
+
+{% block content %}
+<style>
+    :root {
+        --page-bg: #0F172A;
+        --panel-bg: #1E293B;
+        --accent-color: #F59E0B; /* Amber accent to distinguish from regular admin */
+        --text-color: #E2E8F0;
+        --label-color: #94A3B8;
+        --danger-color: #F43F5E;
+        --success-color: #34D399;
+        --input-border-focus-color: #FCD34D;
+    }
+
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: var(--page-bg);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        color: var(--text-color);
+        padding: 20px;
+        box-sizing: border-box;
+    }
+
+    .superadmin-panel-container {
+        background-color: var(--panel-bg);
+        padding: 30px 40px 40px 40px;
+        border-radius: 8px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        width: 100%;
+        max-width: 400px;
+        text-align: center;
+    }
+
+    .pgpc-logo-superadmin {
+        width: 60px;
+        height: auto;
+        margin-bottom: 20px;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .superadmin-panel-container h1 {
+        margin-bottom: 8px;
+        font-size: 1.75rem;
+        font-weight: 600;
+        color: var(--text-color);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+    }
+
+    .superadmin-subtitle {
+        color: var(--accent-color);
+        font-size: 0.75rem;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        margin-bottom: 30px;
+    }
+
+    .input-group {
+        margin-bottom: 25px;
+        text-align: left;
+    }
+
+    .input-group label {
+        display: block;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--label-color);
+        text-transform: uppercase;
+        margin-bottom: 8px;
+        letter-spacing: 0.05em;
+    }
+
+    .input-group input[type="text"],
+    .input-group input[type="password"] {
+        width: 100%;
+        padding: 10px 2px;
+        background-color: transparent;
+        border: none;
+        border-bottom: 2px solid var(--label-color);
+        color: var(--text-color);
+        font-size: 1rem;
+        box-sizing: border-box;
+        transition: border-color 0.3s ease;
+    }
+
+    .input-group input[type="text"]:focus,
+    .input-group input[type="password"]:focus {
+        outline: none;
+        border-bottom-color: var(--accent-color);
+    }
+
+    .button-wrapper {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 30px;
+    }
+
+    .superadmin-panel-container button[type="submit"] {
+        background-color: transparent;
+        border: 2px solid var(--accent-color);
+        color: var(--accent-color);
+        padding: 10px 25px;
+        border-radius: 5px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        cursor: pointer;
+        transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .superadmin-panel-container button[type="submit"]:hover {
+        background-color: var(--accent-color);
+        color: var(--panel-bg);
+    }
+
+    .flash-messages-container {
+        margin-top: 20px;
+        width: 100%;
+    }
+    .flash-message {
+        padding: 10px;
+        margin-bottom: 10px;
+        border-radius: 4px;
+        font-size: 0.875rem;
+        text-align: center;
+        border: 1px solid transparent;
+    }
+    .flash-danger {
+        background-color: rgba(244, 63, 94, 0.1);
+        color: var(--danger-color);
+        border-color: var(--danger-color);
+    }
+    .flash-success {
+        background-color: rgba(52, 211, 153, 0.1);
+        color: var(--success-color);
+        border-color: var(--success-color);
+    }
+
+    .home-button-superadmin {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        background-color: var(--panel-bg);
+        color: var(--accent-color);
+        padding: 8px 15px;
+        border-radius: 5px;
+        text-decoration: none;
+        font-size: 0.875rem;
+        font-weight: 500;
+        border: 1px solid var(--accent-color);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        transition: background-color 0.2s ease, color 0.2s ease;
+    }
+    .home-button-superadmin:hover {
+        background-color: var(--accent-color);
+        color: var(--panel-bg);
+    }
+
+</style>
+
+<div class="superadmin-panel-container">
+    <img src="{{ url_for('static', filename='logopgpc.png') }}" alt="PGPC Logo" class="pgpc-logo-superadmin">
+
+    <h1>Superadmin Panel</h1>
+    <div class="superadmin-subtitle">Restricted Access</div>
+    <form action="{{ url_for('auth.superadmin_login') }}" method="POST">
+        <div class="input-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required>
+        </div>
+        <div class="input-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+        <div class="button-wrapper">
+            <button type="submit">Login</button>
+        </div>
+    </form>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-messages-container">
+                {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+</div>
+
+<a href="{{ url_for('views.home') }}" class="home-button-superadmin">
+    ← Home
+</a>
+
+{% endblock %}

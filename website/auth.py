@@ -7832,36 +7832,41 @@ def admin_login():
              return redirect(url_for('auth.admin_dashboard'))
 
         # 3. STANDARD LOGIN
+        if user and user['role'] == 'superadmin' and not check_password_hash(user['password'], password or ''):
+            # Do not reveal that this is a superadmin account on bad credentials
+            flash('Invalid credentials', "danger")
+            return redirect(url_for('auth.admin'))
+
+        if user and user['role'] == 'superadmin':
+            # Superadmin accounts must use the dedicated /superadminlogin page
+            flash('Superadmin accounts must log in through the Superadmin Panel.', "danger")
+            return redirect(url_for('auth.admin'))
+
         if user and check_password_hash(user['password'], password):
             session['user_id'] = user['id']
             session['user_name'] = user['full_name']
-            
-            # Superadmin gets full admin access + a marker used by the
-            # maintenance-mode gate (session['user_role'] stays 'admin' so
-            # every existing admin permission check keeps working).
-            if user['role'] == 'superadmin':
-                session['user_role'] = 'admin'
-                session['is_superadmin'] = True
+
+            session['user_role'] = user['role']
+            # Store permission in session (Default True for Admin, others check DB)
+            if user['role'] == 'admin':
                 session['can_edit_student'] = True
             else:
-                session['user_role'] = user['role']
-                # Store permission in session (Default True for Admin, others check DB)
-                if user['role'] == 'admin':
-                    session['can_edit_student'] = True
-                else:
-                    # 1 = True, 0 = False in MySQL
-                    session['can_edit_student'] = bool(user.get('can_edit', 1)) 
-    
+                # 1 = True, 0 = False in MySQL
+                session['can_edit_student'] = bool(user.get('can_edit', 1))
+
             flash(f"? Welcome back, {user['full_name']}!", "success")
-            
-            # --- REDIRECT LOGIC BASED ON ROLE ---
-            
-            # Superadmin -> Maintenance control panel (own system)
-            if user['role'] == 'superadmin':
+
+            # If maintenance mode is ON, send Admin straight to the
+            # maintenance control panel (dashboard would be blocked).
+            cursor.execute("SELECT setting_value FROM system_settings WHERE setting_key = 'maintenance_mode'")
+            maint_row = cursor.fetchone()
+            if maint_row and maint_row['setting_value'] == '1':
                 return redirect(url_for('auth.admin_maintenance'))
-            
+
+            # --- REDIRECT LOGIC BASED ON ROLE ---
+
             # Cashier & Accounting -> Cashier Dashboard
-            elif user['role'] in ['cashier', 'accounting']:
+            if user['role'] in ['cashier', 'accounting']:
                 return redirect(url_for('auth.cashier_dashboard'))
             
             # Guidance & OSA -> Enrolled Students List
@@ -7891,10 +7896,55 @@ def admin_login():
         if cursor: cursor.close()
         if conn: conn.close()
 
+@auth.route('/superadminlogin', methods=['GET', 'POST'])
+def superadmin_login():
+    # Already logged in as superadmin -> go straight to the control panel
+    if session.get('is_superadmin'):
+        return redirect(url_for('auth.admin_maintenance'))
+
+    if request.method == 'GET':
+        return render_template("superadmin_login.html")
+
+    username = request.form.get('username')
+    password = request.form.get('password')
+
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("SELECT * FROM system_users WHERE username = %s AND role = 'superadmin'", (username,))
+        user = cursor.fetchone()
+
+        if user and check_password_hash(user['password'], password):
+            session.clear()
+            session['user_id'] = user['id']
+            session['user_name'] = user['full_name']
+            # Keep full admin access so every admin permission check keeps working,
+            # plus the marker used by the maintenance-mode gate.
+            session['user_role'] = 'admin'
+            session['is_superadmin'] = True
+            session['can_edit_student'] = True
+
+            flash(f"Welcome back, {user['full_name']}!", "success")
+            return redirect(url_for('auth.admin_maintenance'))
+
+        flash('Invalid credentials', "danger")
+        return redirect(url_for('auth.superadmin_login'))
+
+    except Exception as e:
+        flash(f"Login error: {e}", "danger")
+        print(f"Superadmin Login Error: {e}")
+        return redirect(url_for('auth.superadmin_login'))
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
 @auth.route('/admin/maintenance', methods=['GET', 'POST'])
 def admin_maintenance():
-    # Superadmin only (session['user_role'] is 'admin' for superadmin)
-    if not session.get('is_superadmin') or session.get('user_role') != 'admin':
+    # Admin and Superadmin only
+    if not (session.get('is_superadmin') or session.get('user_role') == 'admin'):
         flash("Unauthorized access.", "danger")
         return redirect(url_for('auth.admin'))
 
@@ -8026,6 +8076,20 @@ def admin_add_user():
     system = request.form.get('system', 'admission')
     department = request.form.get('department') or None
     email = request.form.get('email') or None
+
+    # --- PREDEFINED ADMIN ACCOUNT ROLES: route to the correct system/table ---
+    special_admin_roles = {
+        'ccba_grading_admin': ('grading', 'CCBA'),
+        'coc_grading_admin': ('grading', 'COC'),
+        'ccba_admin': ('faculty', 'CCBA'),
+        'coc_admin': ('faculty', 'COC'),
+    }
+    if role in special_admin_roles:
+        target_system, department = special_admin_roles[role]
+        if target_system == 'faculty' and not email:
+            flash("Email is required for a Faculty admin account.", "danger")
+            return redirect(url_for('auth.admin_manage_users'))
+        system = target_system
 
     if not all([username, password, full_name, role]):
         flash("All fields are required.", "danger")

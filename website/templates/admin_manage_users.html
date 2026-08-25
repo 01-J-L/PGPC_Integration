@@ -156,7 +156,7 @@
                 </div>
                 <div id="addRoleField">
                     <label class="block text-sm font-medium text-gray-700">Role</label>
-                    <select name="role" id="addRoleSelect" required
+                    <select name="role" id="addRoleSelect" required onchange="updateAddAuxFields()"
                         class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
                         <option value="registrar">Registrar</option>
                         <option value="guidance">Guidance</option>
@@ -164,6 +164,12 @@
                         <option value="cashier">Cashier</option>
                         <option value="accounting">Accounting</option>
                         <option value="secretary">Secretary</option>
+                        <optgroup label="Admin Accounts">
+                            <option value="ccba_grading_admin">CCBA Grading Admin</option>
+                            <option value="coc_grading_admin">COC Grading Admin</option>
+                            <option value="ccba_admin">CCBA Admin</option>
+                            <option value="coc_admin">COC Admin</option>
+                        </optgroup>
                     </select>
                 </div>
                 <div id="addDepartmentField" style="display:none;">
@@ -286,25 +292,54 @@
 <!-- JAVASCRIPT FOR AUTO-SAVE -->
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
+    const ADMIN_ROLE_OPTIONS = '<optgroup label="Admin Accounts">' +
+        '<option value="ccba_grading_admin">CCBA Grading Admin</option>' +
+        '<option value="coc_grading_admin">COC Grading Admin</option>' +
+        '<option value="ccba_admin">CCBA Admin</option>' +
+        '<option value="coc_admin">COC Admin</option>' +
+        '</optgroup>';
+
+    function getAddBaseRoleOptions(system) {
+        if (system === 'grading') {
+            return '<option value="admin">Admin</option>';
+        }
+        if (system === 'faculty') {
+            return '<option value="dean">Dean</option>';
+        }
+        return '<option value="registrar">Registrar</option>' +
+            '<option value="guidance">Guidance</option>' +
+            '<option value="osa">OSA</option>' +
+            '<option value="cashier">Cashier</option>' +
+            '<option value="accounting">Accounting</option>' +
+            '<option value="secretary">Secretary</option>';
+    }
+
     function toggleAddSystem() {
         const system = document.getElementById('addSystemSelect').value;
-        const emailField = document.getElementById('addEmailField');
-        const deptField = document.getElementById('addDepartmentField');
         const roleField = document.getElementById('addRoleField');
         const roleSelect = document.getElementById('addRoleSelect');
         const deptSelect = document.getElementById('addDepartmentSelect');
 
-        if (system === 'admission') {
-            emailField.style.display = 'none';
-            deptField.style.display = 'none';
-            roleField.style.display = 'block';
-            deptSelect.value = '';
-        } else {
-            emailField.style.display = 'block';
-            deptField.style.display = 'block';
-            roleField.style.display = 'none';
-            deptSelect.required = true;
-        }
+        roleSelect.innerHTML = getAddBaseRoleOptions(system) + ADMIN_ROLE_OPTIONS;
+        roleField.style.display = 'block';
+        deptSelect.value = '';
+        updateAddAuxFields();
+    }
+
+    function updateAddAuxFields() {
+        const system = document.getElementById('addSystemSelect').value;
+        const role = document.getElementById('addRoleSelect').value;
+        const emailField = document.getElementById('addEmailField');
+        const deptField = document.getElementById('addDepartmentField');
+        const deptSelect = document.getElementById('addDepartmentSelect');
+
+        const specialAdminRoles = ['ccba_grading_admin', 'coc_grading_admin', 'ccba_admin', 'coc_admin'];
+        const isSpecial = specialAdminRoles.includes(role);
+        const needsDept = !isSpecial && (system === 'grading' || system === 'faculty');
+
+        emailField.style.display = (isSpecial || system !== 'admission') ? 'block' : 'none';
+        deptField.style.display = needsDept ? 'block' : 'none';
+        deptSelect.required = needsDept;
     }
 
     function openEditModal(id, source, system, fullName, username, role, department, email) {
