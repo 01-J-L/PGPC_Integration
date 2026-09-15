@@ -140,6 +140,7 @@ class Section(db.Model):
     )
 
     program = db.relationship('Program', backref=db.backref('sections', cascade="all, delete-orphan"))
+    applicants = db.relationship('Applicant', backref=db.backref('section', lazy='joined'), lazy='dynamic')
 
     def __repr__(self):
         return f'<Section {self.program.program_code} {self.name}>'
@@ -297,15 +298,18 @@ class User(UserMixin, db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    user = User.query.get(int(user_id))
+    if user:
+        return user
+    return SystemUser.query.get(int(user_id))
 
 
-class SystemUser(db.Model):
+class SystemUser(UserMixin, db.Model):
     __tablename__ = 'system_users'
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
-    password = db.Column(db.String(255), nullable=False)
+    password = db.Column('password', db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False)
     full_name = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
@@ -313,6 +317,27 @@ class SystemUser(db.Model):
     department = db.Column(db.String(100))
     email = db.Column(db.String(100))
     system = db.Column(db.String(20), default='admission')
+
+    @property
+    def name(self):
+        return self.full_name
+
+    @property
+    def is_approved(self):
+        return True
+
+    def set_password(self, password):
+        from werkzeug.security import generate_password_hash
+        self.password = generate_password_hash(password)
+
+    def check_password(self, password):
+        from werkzeug.security import check_password_hash
+        if not self.password:
+            return False
+        try:
+            return check_password_hash(self.password, password)
+        except Exception:
+            return False
 
 
 class StudentUser(db.Model):
@@ -490,6 +515,31 @@ class Applicant(db.Model):
     pwd_id_mimetype = db.Column(db.String(100))
     is_section_permanent = db.Column(db.Boolean, default=False)
     organization = db.Column(db.String(100))
+
+    @property
+    def student_number(self):
+        return self.old_student_id
+
+    @property
+    def id(self):
+        return self.applicant_id
+
+    @property
+    def name(self):
+        if self.middle_name and self.middle_name.strip():
+            return f"{self.last_name}, {self.first_name} {self.middle_name[0]}."
+        return f"{self.last_name}, {self.first_name}"
+
+    def calculate_gwa(self, year, semester):
+        grades = [g for g in self.grades if g.subject.year_level == year and g.subject.semester == semester]
+        total_points, total_units = 0, 0
+        for g in grades:
+            if g.final_grade_point:
+                point = g.final_grade_point
+                if point <= 3.0:
+                    total_points += point * float(g.subject.units)
+                    total_units += float(g.subject.units)
+        return round(total_points / total_units, 2) if total_units > 0 else 0.00
 
 
 class ApplicationMessage(db.Model):

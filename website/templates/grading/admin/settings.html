@@ -1,0 +1,53 @@
+{% extends "faculty/base.html" %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="space-y-6">
+        
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">System Settings</h1>
+            <p class="text-sm text-gray-500">Configure the active academic period for the system.</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <h2 class="text-lg font-bold text-gray-900">Active School Year Configuration</h2>
+            </div>
+            <div class="p-8">
+                <form method="POST" class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Active School Year</label>
+                            <input type="text" name="active_school_year" value="{{ system_settings.active_school_year }}" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 px-3">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Active Semester</label>
+                            <input type="text" name="active_semester" value="{{ system_settings.active_semester }}" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 px-3">
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-gray-100 flex justify-end">
+                        <button type="submit" class="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer">Update Settings</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Informational Card -->
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-md">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-blue-700">
+                        Changing these settings will affect the default view for Faculty dashboards and Student reports.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock content %}

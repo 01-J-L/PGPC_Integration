@@ -1,0 +1,505 @@
+{% extends "faculty/base.html" %}
+
+{% block content %}
+<!-- ... Kept all your <style> tags exactly as they were ... -->
+<style>
+    .grade-management-container { width: 100%; }
+    .table-wrapper { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+    .grade-table { border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 12px; width: 100%; min-width: 1600px; }
+    .grade-table th, .grade-table td { border: 1px solid #9ca3af; padding: 6px 4px; text-align: center; height: 32px; vertical-align: middle; }
+    .hidden-col { display: none; }
+    .bg-prelim-head { background-color: #fca5a5; color: #7f1d1d; } 
+    .bg-mid-head { background-color: #93c5fd; color: #1e3a8a; } 
+    .bg-fin-head { background-color: #fdba74; color: #7c2d12; } 
+    .bg-orange-sub { background-color: #ffedd5; color: #7c2d12; font-weight: bold; }
+    .col-blue { background-color: #dbeafe; font-weight: 600; }
+    .col-green { background-color: #dcfce7; font-weight: 600; }
+    .vertical-text { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; height: 120px; padding: 6px 0; line-height: 1.2; font-weight: 600; text-transform: uppercase; }
+    input[type="number"] { width: 100%; height: 100%; min-width: 35px; border: none; text-align: center; background: transparent; font-size: 12px; font-weight: 500; padding: 6px 0; -moz-appearance: textfield; }
+    input[type="number"]:hover { background-color: #f3f4f6; }
+    input[type="number"]:focus { outline: 2px solid #2563eb; background: white; }
+    input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .sticky-col { position: sticky; left: 0; background: white; z-index: 20; border-right: 2px solid #4b5563; width: 220px; min-width: 220px; text-align: left; padding-left: 12px; font-weight: 600; color: #111827; box-shadow: 4px 0 6px -2px rgba(0,0,0,0.1); }
+    .grade-pass { color: #059669; }
+    .grade-fail { color: #dc2626; font-weight: 800; }
+    thead tr th { position: relative; z-index: 10; }
+    thead tr th.sticky-col { z-index: 30; }
+    .dropdown { position: relative; display: inline-block; }
+    .dropdown-content { display: none; position: absolute; right: 0; background-color: #f9f9f9; min-width: 200px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); z-index: 50; border: 1px solid #ddd; }
+    .dropdown-content a { color: black; padding: 12px 16px; text-decoration: none; display: block; font-size: 13px; text-align: left; }
+    .dropdown-content a:hover { background-color: #f1f1f1; }
+    .dropdown:hover .dropdown-content { display: block; }
+</style>
+
+<div class="grade-management-container space-y-6">
+    
+    <!-- TOOLBAR (Updated with responsive wrapping) -->
+    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 no-print">
+        <div>
+            <h1 class="text-xl sm:text-2xl font-bold text-gray-900">Grade Management</h1>
+            <p class="text-xs sm:text-sm text-gray-500">Select a class to view and edit the Class Record.</p>
+        </div>
+        
+        <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
+            {% if selected_assignment %}
+                <div class="flex flex-wrap items-center gap-2">
+                    <div class="inline-flex rounded-md shadow-sm" role="group">
+                        <button type="button" onclick="addNextColumn('col-q')" class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-2 text-xs font-bold hover:bg-indigo-100 rounded-l-md transition">+ Quiz</button>
+                        <button type="button" onclick="removeLastColumn('col-q')" class="bg-red-50 text-red-700 border-t border-b border-r border-red-200 px-3 py-2 text-xs font-bold hover:bg-red-100 rounded-r-md transition">-</button>
+                    </div>
+
+                    <div class="inline-flex rounded-md shadow-sm" role="group">
+                        <button type="button" onclick="addNextColumn('col-a')" class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-2 text-xs font-bold hover:bg-indigo-100 rounded-l-md transition">+ Act</button>
+                        <button type="button" onclick="removeLastColumn('col-a')" class="bg-red-50 text-red-700 border-t border-b border-r border-red-200 px-3 py-2 text-xs font-bold hover:bg-red-100 rounded-r-md transition">-</button>
+                    </div>
+                </div>
+            {% endif %}
+
+            <div class="relative w-full sm:w-64">
+                <select name="assignment_id" onchange="window.location.href='?assignment_id='+this.value" class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm bg-gray-50">
+                    <option value="">-- Select Class --</option>
+                    {% for a in assignments %}
+                    <option value="{{ a.id }}" {% if selected_assignment and a.id == selected_assignment.id %}selected{% endif %}>
+                        {{ a.subject.code }} ({{ a.section.program.code }} - {{ a.section.name }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {% if selected_assignment %}
+            <div class="dropdown w-full sm:w-auto">
+                <button class="w-full sm:w-auto bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2z" /></svg>
+                    Print ▾
+                </button>
+                <div class="dropdown-content">
+                    <a href="#" onclick="window.print(); return false;"><strong>📄 Class Record (Full)</strong></a>
+                    <hr>
+                    <a href="{{ url_for('faculty_main.grading_print_faculty_report', assignment_id=selected_assignment.id, report_type='prelim') }}" target="_blank">📊 Prelim Report</a>
+                    <a href="{{ url_for('faculty_main.grading_print_faculty_report', assignment_id=selected_assignment.id, report_type='midterm') }}" target="_blank">📊 Midterm Report</a>
+                    <a href="{{ url_for('faculty_main.grading_print_faculty_report', assignment_id=selected_assignment.id, report_type='finals') }}" target="_blank">📊 Final Report</a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+
+    {% if selected_assignment %}
+    <form method="POST">
+        <input type="hidden" name="assignment_id" value="{{ selected_assignment.id }}">
+        
+        <div class="bg-white table-wrapper">
+            <table class="grade-table">
+                <thead>
+                    <!-- ROW 1: MAIN HEADERS -->
+                    <tr>
+                        <th rowspan="4" class="sticky-col">STUDENT NAME</th>
+                        <th id="th-prelim" colspan="13" class="bg-prelim-head">PRELIM (20% Q, 20% R, 10% A, 50% E)</th>
+                        <th rowspan="4" class="col-blue">PG</th>
+                        <th rowspan="4" class="col-blue">GRADE<br>POINT</th>
+                        
+                        <th id="th-midterm" colspan="13" class="bg-mid-head">MIDTERM (20% Q, 10% R, 20% A, 50% E)</th>
+                        <th rowspan="4" class="col-green">MG</th>
+                        <th rowspan="4" class="col-green">GRADE<br>POINT</th>
+                        <th rowspan="4" class="col-blue">M_STA<br>NDING</th>
+                        <th rowspan="4" class="col-green">GRADING<br>POINT</th>
+
+                        <th id="th-final" colspan="13" class="bg-fin-head">FINALS (20% Q, 20% R, 10% A, 50% E)</th>
+                        <th rowspan="4" class="col-blue">FG</th>
+                        <th rowspan="4" class="col-blue">GRADE<br>POINT</th>
+                        <th rowspan="4" class="col-blue">OVER<br>ALL</th>
+                        <th rowspan="4" class="col-green">FINAL<br>GRADE</th>
+                        <th rowspan="4" style="width: 40px;">RANK</th>
+                    </tr>
+
+                    <tr>
+                        <th id="th-prelim-cs" colspan="10">CLASS STANDING</th> <th colspan="3">PRELIM EXAM</th>
+                        <th id="th-mid-cs" colspan="10">CLASS STANDING</th> <th colspan="3">MIDTERM EXAM</th>
+                        <th id="th-fin-cs" colspan="10">CLASS STANDING</th> <th colspan="3">FINAL EXAM</th>
+                    </tr>
+
+                    <tr>
+                        <th id="th-prelim-q" colspan="5" class="bg-orange-sub">20%</th> <th class="bg-orange-sub">20%</th> <th id="th-prelim-a" colspan="4" class="bg-orange-sub">10%</th> <th colspan="3">points 100</th>
+                        <th id="th-mid-q" colspan="5" class="bg-orange-sub">20%</th> <th class="bg-orange-sub">10%</th> <th id="th-mid-a" colspan="4" class="bg-orange-sub">20%</th> <th colspan="3">points 100</th>
+                        <th id="th-fin-q" colspan="5" class="bg-orange-sub">20%</th> <th class="bg-orange-sub">20%</th> <th id="th-fin-a" colspan="4" class="bg-orange-sub">10%</th> <th colspan="3">points 100</th>
+                    </tr>
+
+                    <!-- ROW 4: DATA COLUMNS -->
+                    <tr>
+                        <!-- PRELIM -->
+                        <th>Q1</th> <th>Q2</th> <th>Q3</th> 
+                        <th class="col-q4 hidden-col">Q4</th> <th class="col-q5 hidden-col">Q5</th> 
+                        <th>TOT</th> 
+                        <th><div class="vertical-text">AVE_Q</div></th>
+                        <th><div class="vertical-text">RECIT</div></th>
+                        <th><div class="vertical-text">SW/ACT1</div></th> 
+                        <th><div class="vertical-text">ACT2</div></th> 
+                        <th><div class="vertical-text">ACT3</div></th> 
+                        <th class="col-a4 hidden-col"><div class="vertical-text">ACT4</div></th> 
+                        <th class="col-a5 hidden-col"><div class="vertical-text">ACT5</div></th> 
+                        <th><div class="vertical-text">TOT_ACT</div></th> 
+                        <th><div class="vertical-text">AVE</div></th>
+                        <th><div class="vertical-text">EXAM</div></th> 
+                        <th><div class="vertical-text">Equiv</div></th>
+
+                        <!-- MIDTERM -->
+                        <th>Q1</th> <th>Q2</th> <th>Q3</th> 
+                        <th class="col-q4 hidden-col">Q4</th> <th class="col-q5 hidden-col">Q5</th>
+                        <th>TOT</th> 
+                        <th><div class="vertical-text">AVE_QUIZZES</div></th>
+                        <th><div class="vertical-text">RECITATION</div></th>
+                        <th><div class="vertical-text">BOOK REVIEW</div></th> 
+                        <th><div class="vertical-text">ACTIVITY</div></th> 
+                        <th><div class="vertical-text">ACTIVITY</div></th> 
+                        <th class="col-a4 hidden-col"><div class="vertical-text">ACT 4</div></th> 
+                        <th class="col-a5 hidden-col"><div class="vertical-text">ACT 5</div></th>
+                        <th><div class="vertical-text">TOT_ACT/ASS</div></th> 
+                        <th><div class="vertical-text">AVE</div></th>
+                        <th><div class="vertical-text">EXAM SCORE</div></th> 
+                        <th><div class="vertical-text">Equiv</div></th>
+
+                        <!-- FINAL -->
+                        <th>Q1</th> <th>Q2</th> <th>Q3</th> 
+                        <th class="col-q4 hidden-col">Q4</th> <th class="col-q5 hidden-col">Q5</th>
+                        <th>TOT</th> 
+                        <th><div class="vertical-text">AVE_QUIZZES</div></th>
+                        <th><div class="vertical-text">RECITATION</div></th>
+                        <th><div class="vertical-text">BOOK REVIEW</div></th> 
+                        <th><div class="vertical-text">ACTIVITY</div></th> 
+                        <th><div class="vertical-text">ACTIVITY</div></th> 
+                        <th class="col-a4 hidden-col"><div class="vertical-text">ACT 4</div></th> 
+                        <th class="col-a5 hidden-col"><div class="vertical-text">ACT 5</div></th>
+                        <th><div class="vertical-text">TOT_ACT/ASS</div></th> 
+                        <th><div class="vertical-text">AVE</div></th>
+                        <th><div class="vertical-text">EXAM SCORE</div></th> 
+                        <th><div class="vertical-text">Equiv</div></th>
+                    </tr>
+
+                    <!-- PERFECT SCORES -->
+                    <tr class="bg-red-50 font-bold text-red-600 border-b-2 border-red-200">
+                        <td class="sticky-col text-right">PERFECT:</td>
+                        
+                        <!-- PRELIM INPUTS -->
+                        <td><input type="number" name="p_max_q1" value="{{ selected_assignment.p_max_q1 or 0 }}"></td>
+                        <td><input type="number" name="p_max_q2" value="{{ selected_assignment.p_max_q2 or 0 }}"></td>
+                        <td><input type="number" name="p_max_q3" value="{{ selected_assignment.p_max_q3 or 0 }}"></td>
+                        <td class="col-q4 hidden-col"><input type="number" name="p_max_q4" value="{{ selected_assignment.p_max_q4 or 0 }}"></td>
+                        <td class="col-q5 hidden-col"><input type="number" name="p_max_q5" value="{{ selected_assignment.p_max_q5 or 0 }}"></td>
+                        
+                        <td class="bg-gray-100">{{ selected_assignment.p_total_max_q }}</td>
+                        <td class="bg-gray-100">100</td>
+                        <td><input type="number" name="p_max_r" value="{{ selected_assignment.p_max_r or 0 }}"></td>
+                        
+                        <td><input type="number" name="p_max_act1" value="{{ selected_assignment.p_max_act1 or 0 }}"></td>
+                        <td><input type="number" name="p_max_act2" value="{{ selected_assignment.p_max_act2 or 0 }}"></td>
+                        <td><input type="number" name="p_max_act3" value="{{ selected_assignment.p_max_act3 or 0 }}"></td>
+                        <td class="col-a4 hidden-col"><input type="number" name="p_max_act4" value="{{ selected_assignment.p_max_act4 or 0 }}"></td>
+                        <td class="col-a5 hidden-col"><input type="number" name="p_max_act5" value="{{ selected_assignment.p_max_act5 or 0 }}"></td>
+
+                        <td class="bg-gray-100">{{ selected_assignment.p_total_max_a }}</td>
+                        <td class="bg-gray-100">100</td>
+                        <td><input type="number" name="p_max_e" value="{{ selected_assignment.p_max_exam or 0 }}"></td>
+                        <td class="bg-gray-100">100</td> 
+                        <td class="bg-gray-200">100</td> <td class="bg-gray-200">5.0</td>
+
+                        <!-- MIDTERM MAX -->
+                        <td><input type="number" name="m_max_q1" value="{{ selected_assignment.m_max_q1 or 0 }}"></td>
+                        <td><input type="number" name="m_max_q2" value="{{ selected_assignment.m_max_q2 or 0 }}"></td>
+                        <td><input type="number" name="m_max_q3" value="{{ selected_assignment.m_max_q3 or 0 }}"></td>
+                        <td class="col-q4 hidden-col"><input type="number" name="m_max_q4" value="{{ selected_assignment.m_max_q4 or 0 }}"></td>
+                        <td class="col-q5 hidden-col"><input type="number" name="m_max_q5" value="{{ selected_assignment.m_max_q5 or 0 }}"></td>
+                        
+                        <td class="bg-gray-100">{{ selected_assignment.m_total_max_q }}</td>
+                        <td class="bg-gray-100">100</td>
+                        <td><input type="number" name="m_max_r" value="{{ selected_assignment.m_max_r or 0 }}"></td>
+                        
+                        <td><input type="number" name="m_max_act1" value="{{ selected_assignment.m_max_act1 or 0 }}"></td>
+                        <td><input type="number" name="m_max_act2" value="{{ selected_assignment.m_max_act2 or 0 }}"></td>
+                        <td><input type="number" name="m_max_act3" value="{{ selected_assignment.m_max_act3 or 0 }}"></td>
+                        <td class="col-a4 hidden-col"><input type="number" name="m_max_act4" value="{{ selected_assignment.m_max_act4 or 0 }}"></td>
+                        <td class="col-a5 hidden-col"><input type="number" name="m_max_act5" value="{{ selected_assignment.m_max_act5 or 0 }}"></td>
+
+                        <td class="bg-gray-100">{{ selected_assignment.m_total_max_a }}</td>
+                        <td class="bg-gray-100">100</td>
+                        <td><input type="number" name="m_max_e" value="{{ selected_assignment.m_max_exam or 0 }}"></td>
+                        <td class="bg-gray-100">100</td>
+                        <td class="bg-gray-200">100</td> <td class="bg-gray-200">5.0</td> <td class="bg-gray-200">100</td> <td class="bg-gray-200">5.0</td>
+
+                        <!-- FINAL MAX -->
+                        <td><input type="number" name="f_max_q1" value="{{ selected_assignment.f_max_q1 or 0 }}"></td>
+                        <td><input type="number" name="f_max_q2" value="{{ selected_assignment.f_max_q2 or 0 }}"></td>
+                        <td><input type="number" name="f_max_q3" value="{{ selected_assignment.f_max_q3 or 0 }}"></td>
+                        <td class="col-q4 hidden-col"><input type="number" name="f_max_q4" value="{{ selected_assignment.f_max_q4 or 0 }}"></td>
+                        <td class="col-q5 hidden-col"><input type="number" name="f_max_q5" value="{{ selected_assignment.f_max_q5 or 0 }}"></td>
+                        
+                        <td class="bg-gray-100">{{ selected_assignment.f_total_max_q }}</td>
+                        <td class="bg-gray-100">100</td>
+                        <td><input type="number" name="f_max_r" value="{{ selected_assignment.f_max_r or 0 }}"></td>
+                        
+                        <td><input type="number" name="f_max_act1" value="{{ selected_assignment.f_max_act1 or 0 }}"></td>
+                        <td><input type="number" name="f_max_act2" value="{{ selected_assignment.f_max_act2 or 0 }}"></td>
+                        <td><input type="number" name="f_max_act3" value="{{ selected_assignment.f_max_act3 or 0 }}"></td>
+                        <td class="col-a4 hidden-col"><input type="number" name="f_max_act4" value="{{ selected_assignment.f_max_act4 or 0 }}"></td>
+                        <td class="col-a5 hidden-col"><input type="number" name="f_max_act5" value="{{ selected_assignment.f_max_act5 or 0 }}"></td>
+
+                        <td class="bg-gray-100">{{ selected_assignment.f_total_max_a }}</td>
+                        <td class="bg-gray-100">100</td>
+                        <td><input type="number" name="f_max_e" value="{{ selected_assignment.f_max_exam or 0 }}"></td>
+                        <td class="bg-gray-100">100</td>
+                        <td class="bg-gray-200">100</td> <td class="bg-gray-200">5.0</td> <td class="bg-gray-200">100</td> <td class="bg-gray-200">5.0</td> <td class="bg-gray-200">1</td>
+                    </tr>
+                </thead>
+                
+                <tbody>
+                    {% for student in students %}
+                    {% set g = grades_dict.get(student.id) %}
+                    
+                    {% set p_max_e_val = selected_assignment.p_max_exam or 0 %}
+                    {% set m_max_e_val = selected_assignment.m_max_exam or 0 %}
+                    {% set f_max_e_val = selected_assignment.f_max_exam or 0 %}
+
+                    <!-- AVE CALCS -->
+                    {% set p_ave_q = ((g.p_quiz_total / selected_assignment.p_total_max_q * 100))|round|int if (g and selected_assignment.p_total_max_q > 0) else 0 %}
+                    {% set p_ave_a = ((g.p_act_total / selected_assignment.p_total_max_a * 100))|round|int if (g and selected_assignment.p_total_max_a > 0) else 0 %}
+                    {% set p_eq_e = ((g.p_exam / p_max_e_val * 100))|round|int if (g and p_max_e_val > 0) else 0 %}
+
+                    {% set m_ave_q = ((g.m_quiz_total / selected_assignment.m_total_max_q * 100))|round|int if (g and selected_assignment.m_total_max_q > 0) else 0 %}
+                    {% set m_ave_a = ((g.m_act_total / selected_assignment.m_total_max_a * 100))|round|int if (g and selected_assignment.m_total_max_a > 0) else 0 %}
+                    {% set m_eq_e = ((g.m_exam / m_max_e_val * 100))|round|int if (g and m_max_e_val > 0) else 0 %}
+
+                    {% set f_ave_q = ((g.f_quiz_total / selected_assignment.f_total_max_q * 100))|round|int if (g and selected_assignment.f_total_max_q > 0) else 0 %}
+                    {% set f_ave_a = ((g.f_act_total / selected_assignment.f_total_max_a * 100))|round|int if (g and selected_assignment.f_total_max_a > 0) else 0 %}
+                    {% set f_eq_e = ((g.f_exam / f_max_e_val * 100))|round|int if (g and f_max_e_val > 0) else 0 %}
+                    
+                    {% macro get_gp(score) -%}
+                        {% if score >= 96 %}1.00{% elif score >= 92 %}1.25{% elif score >= 88 %}1.50{% elif score >= 84 %}1.75{% elif score >= 80 %}2.00{% elif score >= 75 %}2.25{% elif score >= 70 %}2.50{% elif score >= 65 %}2.75{% elif score >= 60 %}3.00{% else %}5.00{% endif %}
+                    {%- endmacro %}
+
+                    <tr class="hover:bg-blue-50 transition-colors">
+                        <input type="hidden" name="student_id" value="{{ student.id }}">
+                        <td class="sticky-col">{{ student.name }}</td>
+                        
+                        <!-- PRELIM DATA -->
+                        <td><input type="number" name="p_q1_{{student.id}}" value="{{ g.p_q1 if g else '' }}"></td>
+                        <td><input type="number" name="p_q2_{{student.id}}" value="{{ g.p_q2 if g else '' }}"></td>
+                        <td><input type="number" name="p_q3_{{student.id}}" value="{{ g.p_q3 if g else '' }}"></td>
+                        <td class="col-q4 hidden-col"><input type="number" name="p_q4_{{student.id}}" value="{{ g.p_q4 if g else '' }}"></td>
+                        <td class="col-q5 hidden-col"><input type="number" name="p_q5_{{student.id}}" value="{{ g.p_q5 if g else '' }}"></td>
+                        <td class="bg-gray-50 font-medium">{{ g.p_quiz_total|int if g else 0 }}</td>
+                        <td class="bg-gray-50 text-gray-600">{{ p_ave_q }}</td>
+                        <td><input type="number" name="p_recit_{{student.id}}" value="{{ g.p_recit if g else '' }}"></td>
+                        <td><input type="number" name="p_act1_{{student.id}}" value="{{ g.p_act1 if g else '' }}"></td>
+                        <td><input type="number" name="p_act2_{{student.id}}" value="{{ g.p_act2 if g else '' }}"></td>
+                        <td><input type="number" name="p_act3_{{student.id}}" value="{{ g.p_act3 if g else '' }}"></td>
+                        <td class="col-a4 hidden-col"><input type="number" name="p_act4_{{student.id}}" value="{{ g.p_act4 if g else '' }}"></td>
+                        <td class="col-a5 hidden-col"><input type="number" name="p_act5_{{student.id}}" value="{{ g.p_act5 if g else '' }}"></td>
+                        <td class="bg-gray-50 font-medium">{{ g.p_act_total|int if g else 0 }}</td>
+                        <td class="bg-gray-50 text-gray-600">{{ p_ave_a }}</td>
+                        <td><input type="number" name="p_exam_{{student.id}}" value="{{ g.p_exam if g else '' }}"></td>
+                        <td class="bg-gray-50 text-gray-600">{{ p_eq_e }}</td>
+                        <td class="col-blue">{{ g.prelim_grade|int if g and g.prelim_grade else 0 }}</td>
+                        <td class="col-blue">{{ get_gp(g.prelim_grade|int if g else 0) }}</td>
+
+                        <!-- MIDTERM DATA -->
+                        <td><input type="number" name="m_q1_{{student.id}}" value="{{ g.m_q1 if g else '' }}"></td>
+                        <td><input type="number" name="m_q2_{{student.id}}" value="{{ g.m_q2 if g else '' }}"></td>
+                        <td><input type="number" name="m_q3_{{student.id}}" value="{{ g.m_q3 if g else '' }}"></td>
+                        <td class="col-q4 hidden-col"><input type="number" name="m_q4_{{student.id}}" value="{{ g.m_q4 if g else '' }}"></td>
+                        <td class="col-q5 hidden-col"><input type="number" name="m_q5_{{student.id}}" value="{{ g.m_q5 if g else '' }}"></td>
+                        <td class="bg-gray-50 font-medium">{{ g.m_quiz_total|int if g else 0 }}</td>
+                        <td class="bg-gray-50 text-gray-600">{{ m_ave_q }}</td>
+                        <td><input type="number" name="m_recit_{{student.id}}" value="{{ g.m_recit if g else '' }}"></td>
+                        <td><input type="number" name="m_act1_{{student.id}}" value="{{ g.m_act1 if g else '' }}"></td>
+                        <td><input type="number" name="m_act2_{{student.id}}" value="{{ g.m_act2 if g else '' }}"></td>
+                        <td><input type="number" name="m_act3_{{student.id}}" value="{{ g.m_act3 if g else '' }}"></td>
+                        <td class="col-a4 hidden-col"><input type="number" name="m_act4_{{student.id}}" value="{{ g.m_act4 if g else '' }}"></td>
+                        <td class="col-a5 hidden-col"><input type="number" name="m_act5_{{student.id}}" value="{{ g.m_act5 if g else '' }}"></td>
+                        <td class="bg-gray-50 font-medium">{{ g.m_act_total|int if g else 0 }}</td>
+                        <td class="bg-gray-50 text-gray-600">{{ m_ave_a }}</td>
+                        <td><input type="number" name="m_exam_{{student.id}}" value="{{ g.m_exam if g else '' }}"></td>
+                        <td class="bg-gray-50 text-gray-600">{{ m_eq_e }}</td>
+                        <td class="col-green">{{ g.midterm_grade|int if g and g.midterm_grade else 0 }}</td>
+                        <td class="col-green">{{ get_gp(g.midterm_grade|int if g else 0) }}</td>
+                        <td class="col-blue">{{ g.midterm_standing|int if g and g.midterm_standing else 0 }}</td>
+                        <td class="col-green">{{ get_gp(g.midterm_standing|int if g else 0) }}</td>
+
+                        <!-- FINAL DATA -->
+                        <td><input type="number" name="f_q1_{{student.id}}" value="{{ g.f_q1 if g else '' }}"></td>
+                        <td><input type="number" name="f_q2_{{student.id}}" value="{{ g.f_q2 if g else '' }}"></td>
+                        <td><input type="number" name="f_q3_{{student.id}}" value="{{ g.f_q3 if g else '' }}"></td>
+                        <td class="col-q4 hidden-col"><input type="number" name="f_q4_{{student.id}}" value="{{ g.f_q4 if g else '' }}"></td>
+                        <td class="col-q5 hidden-col"><input type="number" name="f_q5_{{student.id}}" value="{{ g.f_q5 if g else '' }}"></td>
+                        <td class="bg-gray-50 font-medium">{{ g.f_quiz_total|int if g else 0 }}</td>
+                        <td class="bg-gray-50 text-gray-600">{{ f_ave_q }}</td>
+                        <td><input type="number" name="f_recit_{{student.id}}" value="{{ g.f_recit if g else '' }}"></td>
+                        <td><input type="number" name="f_act1_{{student.id}}" value="{{ g.f_act1 if g else '' }}"></td>
+                        <td><input type="number" name="f_act2_{{student.id}}" value="{{ g.f_act2 if g else '' }}"></td>
+                        <td><input type="number" name="f_act3_{{student.id}}" value="{{ g.f_act3 if g else '' }}"></td>
+                        <td class="col-a4 hidden-col"><input type="number" name="f_act4_{{student.id}}" value="{{ g.f_act4 if g else '' }}"></td>
+                        <td class="col-a5 hidden-col"><input type="number" name="f_act5_{{student.id}}" value="{{ g.f_act5 if g else '' }}"></td>
+                        <td class="bg-gray-50 font-medium">{{ g.f_act_total|int if g else 0 }}</td>
+                        <td class="bg-gray-50 text-gray-600">{{ f_ave_a }}</td>
+                        <td><input type="number" name="f_exam_{{student.id}}" value="{{ g.f_exam if g else '' }}"></td>
+                        <td class="bg-gray-50 text-gray-600">{{ f_eq_e }}</td>
+                        <td class="col-blue">{{ g.final_term_grade|int if g and g.final_term_grade else 0 }}</td>
+                        <td class="col-blue">{{ get_gp(g.final_term_grade|int if g else 0) }}</td>
+                        <td class="col-blue">{{ g.final_grade|int if g and g.final_grade else 0 }}</td>
+                        
+                        <td class="col-green font-bold {{ 'grade-fail' if g and g.final_grade_point is not none and g.final_grade_point > 3.0 else 'grade-pass' }}">
+                            {{ "%.2f"|format(g.final_grade_point) if g and g.final_grade_point else '' }}
+                        </td>
+                        <td>1</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <!-- ... Save Button ... -->
+        <div class="fixed bottom-6 right-6">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full shadow-2xl flex items-center gap-2 transition transform hover:scale-105 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                SAVE & CALCULATE
+            </button>
+        </div>
+    </form>
+    {% endif %}
+
+    <div class="sm:hidden bg-gray-100 border border-gray-200 px-4 py-2 text-[10px] text-gray-400 text-center italic rounded-md">
+        &larr; Swipe table to view all grading columns &rarr;
+    </div>
+</div>
+
+<!-- JAVASCRIPT FOR SEQUENTIAL COLUMN ADDITION -->
+<script>
+    function addNextColumn(type) {
+        if (type === 'col-q') {
+            // Check Q4
+            var q4 = document.getElementsByClassName('col-q4');
+            if (window.getComputedStyle(q4[0]).display === 'none') {
+                showElements('col-q4', 1);
+            } else {
+                // If Q4 visible, show Q5
+                showElements('col-q5', 1);
+            }
+        } else if (type === 'col-a') {
+             var a4 = document.getElementsByClassName('col-a4');
+            if (window.getComputedStyle(a4[0]).display === 'none') {
+                showElements('col-a4', 1);
+            } else {
+                showElements('col-a5', 1);
+            }
+        }
+    }
+
+    function removeLastColumn(type) {
+        if (type === 'col-q') {
+            // Check Q5
+            var q5 = document.getElementsByClassName('col-q5');
+            if (window.getComputedStyle(q5[0]).display !== 'none') {
+                hideElements('col-q5', -1);
+            } else {
+                var q4 = document.getElementsByClassName('col-q4');
+                if (window.getComputedStyle(q4[0]).display !== 'none') {
+                    hideElements('col-q4', -1);
+                }
+            }
+        } else if (type === 'col-a') {
+             var a5 = document.getElementsByClassName('col-a5');
+            if (window.getComputedStyle(a5[0]).display !== 'none') {
+                hideElements('col-a5', -1);
+            } else {
+                var a4 = document.getElementsByClassName('col-a4');
+                if (window.getComputedStyle(a4[0]).display !== 'none') {
+                    hideElements('col-a4', -1);
+                }
+            }
+        }
+    }
+
+    function showElements(className, change) {
+        var elements = document.getElementsByClassName(className);
+        for (var i = 0; i < elements.length; i++) {
+            elements[i].style.display = "table-cell";
+        }
+        updateColspans(className, change);
+    }
+
+    function hideElements(className, change) {
+        var elements = document.getElementsByClassName(className);
+        for (var i = 0; i < elements.length; i++) {
+            elements[i].style.display = "none";
+            // Clear inputs when hiding to ensure 0 is sent to backend
+            var inputs = elements[i].getElementsByTagName('input');
+            for(var j=0; j<inputs.length; j++) { inputs[j].value = ""; }
+        }
+        updateColspans(className, change);
+    }
+
+    function updateColspans(className, change) {
+        var isQuiz = className.includes('col-q');
+        updateHeaderColspan('th-prelim', change);
+        updateHeaderColspan('th-midterm', change);
+        updateHeaderColspan('th-final', change);
+
+        updateHeaderColspan(isQuiz ? 'th-prelim-q' : 'th-prelim-a', change);
+        updateHeaderColspan(isQuiz ? 'th-mid-q' : 'th-mid-a', change);
+        updateHeaderColspan(isQuiz ? 'th-fin-q' : 'th-fin-a', change);
+        
+        updateHeaderColspan('th-prelim-cs', change);
+        updateHeaderColspan('th-mid-cs', change);
+        updateHeaderColspan('th-fin-cs', change);
+    }
+
+    function updateHeaderColspan(id, change) {
+        var el = document.getElementById(id);
+        if(el) {
+            var current = parseInt(el.getAttribute('colspan'));
+            el.setAttribute('colspan', current + change);
+        }
+    }
+</script>
+
+<!-- VALIDATION: prevent negative scores and scores above the max -->
+<script>
+    function syncScoreLimits() {
+        var maxInputs = {};
+        document.querySelectorAll('input[name^="p_max_"], input[name^="m_max_"], input[name^="f_max_"]').forEach(function(inp) {
+            maxInputs[inp.name] = inp;
+            inp.min = 0;
+        });
+
+        var scoreSelectors = [
+            'input[name$="_q1"]', 'input[name$="_q2"]', 'input[name$="_q3"]',
+            'input[name$="_q4"]', 'input[name$="_q5"]',
+            'input[name$="_recit"]', 'input[name$="_exam"]',
+            'input[name$="_act1"]', 'input[name$="_act2"]', 'input[name$="_act3"]',
+            'input[name$="_act4"]', 'input[name$="_act5"]'
+        ];
+        document.querySelectorAll(scoreSelectors.join(',')).forEach(function(inp) {
+            var parts = inp.name.split('_');
+            if (parts.length < 3) return;
+            var sid = parts[parts.length - 1];
+            if (!/^\d+$/.test(sid)) return;
+            var prefix = parts.slice(0, parts.length - 1).join('_');
+            var term = prefix.charAt(0);
+            var field = prefix.slice(2);
+            var maxName;
+            if (field === 'recit') maxName = term + '_max_r';
+            else if (field === 'exam') maxName = term + '_max_e';
+            else maxName = term + '_max_' + field;
+            var maxInp = maxInputs[maxName];
+            var maxVal = maxInp ? (parseFloat(maxInp.value) || 0) : 0;
+            inp.min = 0;
+            inp.max = maxVal;
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        syncScoreLimits();
+        document.querySelectorAll('input[name^="p_max_"], input[name^="m_max_"], input[name^="f_max_"]').forEach(function(inp) {
+            inp.addEventListener('input', syncScoreLimits);
+        });
+    });
+</script>
+{% endblock content %}

@@ -3,7 +3,7 @@ import mysql.connector
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import datetime
-from datetime import timedelta
+from datetime import timedelta, date
 import base64
 import traceback
 import secrets
@@ -13,6 +13,7 @@ import io
 import time
 from collections import defaultdict
 import pandas as pd
+import re
 from flask import send_file
 import os
 from flask import send_from_directory
@@ -4361,15 +4362,12 @@ def admin_enrollment_action(applicant_id):
             if str(app_data.get('enrollment_student_type')).capitalize() == 'New':
                 current_id = str(app_data.get('old_student_id') or app_data.get('control_number') or "")
                 if not current_id.startswith('P'):
-                    try:
-                        new_permanent_id = _generate_student_id(cursor)
-                        cursor.execute("UPDATE applicants SET old_student_id = %s, control_number = %s WHERE applicant_id = %s", 
-                                       (new_permanent_id, new_permanent_id, applicant_id))
-                        cursor.execute("UPDATE student_users SET old_student_id = %s WHERE id = %s", 
-                                       (new_permanent_id, student_user_id))
-                        generated_id_msg = f" New ID: {new_permanent_id} assigned."
-                    except Exception as e:
-                        print(f"ID Generation Error: {e}")
+                    new_permanent_id = _generate_student_id(cursor)
+                    cursor.execute("UPDATE applicants SET old_student_id = %s, control_number = %s WHERE applicant_id = %s", 
+                                   (new_permanent_id, new_permanent_id, applicant_id))
+                    cursor.execute("UPDATE student_users SET old_student_id = %s WHERE id = %s", 
+                                   (new_permanent_id, student_user_id))
+                    generated_id_msg = f" New ID: {new_permanent_id} assigned."
 
             # C. CUMULATIVE FINANCIAL TRIGGER
             # Assigns batch fees matching the student's CURRENT level.
@@ -9138,7 +9136,44 @@ def submit_application():
             if field == 'agreements' and val != 'Yes': flash("⚠️ Agree to terms.", "danger"); return redirect(url_for('views.new_student'))
             form_data[field] = val.strip() if val and isinstance(val, str) else val
 
-        
+        # Validate Date of Birth (must be at least 16 years old)
+        dob_str = form_data.get('date_of_birth')
+        if dob_str:
+            try:
+                dob = date.fromisoformat(dob_str)
+                today = date.today()
+                age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+                if age < 16:
+                    flash("⚠️ You must be at least 16 years old to apply.", "danger")
+                    return redirect(url_for('views.new_student'))
+            except ValueError:
+                flash("⚠️ Invalid Date of Birth format.", "danger")
+                return redirect(url_for('views.new_student'))
+
+        # Validate Mobile Number (must be 11 digits starting with 09)
+        mobile = form_data.get('mobile_number', '')
+        if mobile and not re.match(r'^09\d{9}$', mobile):
+            flash("⚠️ Mobile number must be exactly 11 digits and start with 09 (e.g., 09123456789).", "danger")
+            return redirect(url_for('views.new_student'))
+
+        # Validate Guardian Contact Number (must be 11 digits starting with 09)
+        guardian_contact = form_data.get('guardian_contact_number', '')
+        if guardian_contact and not re.match(r'^09\d{9}$', guardian_contact):
+            flash("⚠️ Guardian contact number must be exactly 11 digits and start with 09 (e.g., 09123456789).", "danger")
+            return redirect(url_for('views.new_student'))
+
+        # Validate Father Contact Number (if provided, must be 11 digits starting with 09)
+        father_contact = form_data.get('father_contact_number', '')
+        if father_contact and not re.match(r'^09\d{9}$', father_contact):
+            flash("⚠️ Father's contact number must be exactly 11 digits and start with 09 (e.g., 09123456789).", "danger")
+            return redirect(url_for('views.new_student'))
+
+        # Validate Mother Contact Number (if provided, must be 11 digits starting with 09)
+        mother_contact = form_data.get('mother_contact_number', '')
+        if mother_contact and not re.match(r'^09\d{9}$', mother_contact):
+            flash("⚠️ Mother's contact number must be exactly 11 digits and start with 09 (e.g., 09123456789).", "danger")
+            return redirect(url_for('views.new_student'))
+
         # Check for duplicate full name
         first_name = form_data.get('first_name', '').strip().lower()
         last_name = form_data.get('last_name', '').strip().lower()

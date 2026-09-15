@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Report on Grades</title>
+    <style>
+        body { font-family: Arial, sans-serif; font-size: 11px; margin: 0; padding: 20px; }
+        @media print { 
+            .no-print { display: none; } 
+            @page { size: A4 landscape; margin: 0.3in; }
+        }
+        
+        .header { text-align: center; margin-bottom: 10px; position: relative; }
+        .logo { width: 60px; position: absolute; left: 15%; top: 0; }
+        .school-name { font-size: 16px; font-weight: bold; text-transform: uppercase; }
+        .sub-header { font-size: 14px; font-weight: bold; margin-top: 5px; }
+        
+        .info-box { width: 100%; border: 1px solid black; padding: 5px; margin-bottom: 10px; box-sizing: border-box; }
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+        .label { font-weight: bold; width: 110px; }
+        .val { border-bottom: 1px solid #999; width: 200px; display: inline-block; padding-left: 5px; }
+
+        .split-container { display: flex; gap: 15px; width: 100%; }
+        .column { flex: 1; }
+
+        .main-table { width: 100%; border-collapse: collapse; margin-top: 0; }
+        .main-table th, .main-table td { border: 1px solid black; padding: 4px; text-align: center; font-size: 10px; }
+        .col-header { background-color: #eee; font-weight: bold; }
+        .name-col { text-align: left !important; padding-left: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+        
+        /* SIGNATORIES SECTION */
+        .footer-section { margin-top: 40px; page-break-inside: avoid; }
+        .sig-row { display: flex; justify-content: space-around; margin-bottom: 30px; }
+        .sig-block { text-align: center; width: 220px; }
+        .sig-line { border-top: 1px solid black; margin-top: 30px; font-weight: bold; text-transform: uppercase; }
+        .sig-role { font-size: 10px; font-style: italic; }
+    </style>
+</head>
+<body onload="window.print()">
+
+    <div class="no-print" style="text-align: center; margin-bottom: 10px;">
+        <button onclick="window.print()" style="padding: 5px 15px; background: #000; color: #fff; border: none; cursor: pointer;">Print Report</button>
+    </div>
+
+    <div class="header">
+        <img src="{{ url_for('static', filename='images/logo.jpg') }}" class="logo">
+        <div class="school-name">Padre Garcia Polytechnic College</div>
+        <div>Brgy. Castillo, Padre Garcia, Batangas</div>
+        <div class="sub-header">REPORT ON GRADES</div>
+        <div style="font-weight: bold; margin-top: 5px; text-decoration: underline; text-transform: uppercase;">{{ report_title }}</div>
+    </div>
+
+    <div class="info-box">
+        <div class="info-row">
+            <div><span class="label">Name:</span> <span class="val">{{ current_user.name }}</span></div>
+            <div><span class="label">Sem/Year:</span> <span class="val">1st Sem / 2024-2025</span></div>
+        </div>
+        <div class="info-row">
+            <div><span class="label">Course/Section:</span> <span class="val">{{ assignment.section.program.code }} {{ assignment.section.name }}</span></div>
+            <div><span class="label">Subject:</span> <span class="val">{{ assignment.subject.code }}</span></div>
+        </div>
+    </div>
+
+    {% set split_idx = ((students|length + 1) / 2) | int %}
+
+    <div class="split-container">
+        <div class="column">
+            <table class="main-table">
+                <tr class="col-header">
+                    <th width="30">No</th>
+                    <th>Name of Student</th>
+                    <th width="50">PERCENTAGE</th>
+                    <th width="50">GRADE POINT</th>
+                </tr>
+                {% for s in students[:split_idx] %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td class="name-col">{{ s.name }}</td>
+                    <td>{{ s.percentage|int }}</td>
+                    <td style="font-weight: bold; color: {{ 'red' if s.grade_point > 3 else 'black' }}">
+                        {{ "%.2f"|format(s.grade_point) if s.grade_point > 0 else '-' }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+
+        <div class="column">
+            {% if students[split_idx:] %}
+            <table class="main-table">
+                <tr class="col-header">
+                    <th width="30">No</th>
+                    <th>Name of Student</th>
+                    <th width="50">PERCENTAGE</th>
+                    <th width="50">GRADE POINT</th>
+                </tr>
+                {% for s in students[split_idx:] %}
+                <tr>
+                    <td>{{ loop.index + split_idx }}</td>
+                    <td class="name-col">{{ s.name }}</td>
+                    <td>{{ s.percentage|int }}</td>
+                    <td style="font-weight: bold; color: {{ 'red' if s.grade_point > 3 else 'black' }}">
+                        {{ "%.2f"|format(s.grade_point) if s.grade_point > 0 else '-' }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- SIGNATORIES FOOTER -->
+    <div class="footer-section">
+        <!-- Prepared By -->
+        <div style="margin-left: 30px; margin-bottom: 20px;">
+            <div style="font-size: 10px; margin-bottom: 5px;">Prepared by:</div>
+            <div class="sig-block" style="text-align: left;">
+                <div class="sig-line" style="width: 200px; text-align: center;">{{ current_user.name }}</div>
+                <div class="sig-role" style="text-align: center;">Instructor</div>
+            </div>
+        </div>
+
+        <!-- Deans -->
+        <div style="font-size: 10px; text-align: center; margin-bottom: 5px;">Recommending Approval:</div>
+        <div class="sig-row">
+            <div class="sig-block">
+                <div class="sig-line"></div>
+                <div class="sig-role">Dean, CCBA</div>
+            </div>
+            <div class="sig-block">
+                <div class="sig-line"></div>
+                <div class="sig-role">Dean, COC</div>
+            </div>
+        </div>
+
+        <!-- Admin -->
+        <div class="sig-row">
+            <div class="sig-block">
+                <div class="sig-line"></div>
+                <div class="sig-role">College Registrar</div>
+            </div>
+            <div class="sig-block">
+                <div class="sig-line"></div>
+                <div class="sig-role">VPAA</div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

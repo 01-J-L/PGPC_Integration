@@ -98,9 +98,11 @@ def create_app():
         app.register_blueprint(faculty_auth, url_prefix='/admin-load')
         app.register_blueprint(faculty_main, url_prefix='/faculty')
         
-        print("✅ Faculty System Integrated Successfully")
+        print("[OK] Faculty System Integrated Successfully")
     except ImportError as e:
-        print(f"⚠️ Faculty System Import Error: {e}")
+        print(f"[WARN] Faculty System Import Error: {e}")
+
+    # C. GRADING SYSTEM (merged into faculty system - routes in faculty/main/routes.py)
 
     # --- 5.5 GLOBAL MAINTENANCE MODE GATE ---
     # When maintenance_mode = '1' in system_settings, block everything for
@@ -146,8 +148,8 @@ def create_app():
         from . import models as _models  # noqa: F401
         with app.app_context():
             db.create_all()
-        print("✅ Database tables verified (create_all ran successfully).")
+        print("[OK] Database tables verified (create_all ran successfully).")
     except Exception as e:
-        print(f"⚠️ Database auto-create failed: {e}")
+        print(f"[WARN] Database auto-create failed: {e}")
 
     return app

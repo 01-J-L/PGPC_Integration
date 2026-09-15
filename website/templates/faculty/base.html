@@ -134,8 +134,34 @@
             </a>
         {% endmacro %}
 
+        <!-- ADMIN/SUPERADMIN SIDEBAR (Grading Admin) -->
+        {% if current_user.role|lower in ('admin', 'superadmin') %}
+            {% call sidebar_base() %}
+                <div class="sidebar-header p-6 flex items-center space-x-3">
+                    <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Logo" class="h-8 w-8 rounded-full">
+                    <h1 class="text-xl logo-title text-primary dark:text-indigo-400">Faculty System</h1>
+                </div>
+                <nav class="flex-grow overflow-y-auto">
+                    <div class="px-6 py-2 text-xs uppercase text-slate-400 dark:text-slate-500 font-semibold">Scheduling & Grading</div>
+                    {{ nav_link('faculty_main.grading_admin_dashboard', 'ri-graduation-cap-line', 'Dashboard') }}
+                    {{ nav_link('faculty_main.grading_student_records', 'ri-file-list-3-line', 'Student Records') }}
+                    {{ nav_link('faculty_main.grading_admin_faculty_records', 'ri-team-line', 'Faculty') }}
+                    {{ nav_link('faculty_main.grading_manage_programs', 'ri-book-open-line', 'Programs') }}
+                    {{ nav_link('faculty_main.grading_admin_approvals', 'ri-user-add-line', 'Approvals') }}
+                    {{ nav_link('faculty_main.grading_settings', 'ri-settings-5-line', 'Settings') }}
+                    {% if current_user.role == 'superadmin' %}
+                    {{ nav_link('faculty_main.grading_admin_maintenance', 'ri-tools-line', 'Maintenance') }}
+                    {% endif %}
+                </nav>
+                <div class="p-4 mt-auto">
+                    <a href="{{ url_for('faculty_auth.logout') }}" class="flex items-center w-full px-4 py-2 text-sm rounded-lg text-slate-600 dark:text-slate-300 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:bg-rose-500/20 dark:hover:text-rose-400 transition-colors duration-200">
+                        <i class="ri-logout-box-line mr-3"></i>Logout
+                    </a>
+                </div>
+            {% endcall %}
+
         <!-- DEAN'S SIDEBAR -->
-        {% if current_user.role|lower == 'dean' %}
+        {% elif current_user.role|lower == 'dean' %}
             {% call sidebar_base() %}
                 <div class="sidebar-header p-6 flex items-center space-x-3">
                     <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Logo" class="h-8 w-8 rounded-full">
@@ -145,11 +171,18 @@
                     <div class="px-6 py-2 text-xs uppercase text-slate-400 dark:text-slate-500 font-semibold">Main Menu</div>
                     {{ nav_link('faculty_main.dashboard', 'ri-dashboard-line', 'Dashboard') }}
                     {{ nav_link('faculty_main.user_management', 'ri-group-line', 'User Management') }}
+                    {{ nav_link('faculty_main.view_notifications', 'ri-notification-3-line', 'Notifications') }}
+
+                    <div class="px-6 py-2 mt-4 text-xs uppercase text-slate-400 dark:text-slate-500 font-semibold">Scheduling & Grading</div>
                     {{ nav_link('faculty_main.scheduling', 'ri-calendar-todo-line', 'Scheduling') }}
                     {{ nav_link('faculty_main.manage_section_schedule_hub', 'ri-group-2-line', 'Section Schedule') }}
                     {{ nav_link('faculty_main.room_schedule', 'ri-building-line', 'Room Utilization') }}
-                    {{ nav_link('faculty_main.view_notifications', 'ri-notification-3-line', 'Notifications') }}
-                    
+                    {{ nav_link('faculty_main.grading_admin_dashboard', 'ri-graduation-cap-line', 'Grading Dashboard') }}
+                    {{ nav_link('faculty_main.grading_student_records', 'ri-file-list-3-line', 'Student Records') }}
+                    {{ nav_link('faculty_main.grading_admin_faculty_records', 'ri-team-line', 'Grading Faculty') }}
+                    {{ nav_link('faculty_main.grading_manage_programs', 'ri-book-open-line', 'Grading Programs') }}
+                    {{ nav_link('faculty_main.grading_settings', 'ri-settings-5-line', 'Grading Settings') }}
+
                     <div class="px-6 py-2 mt-4 text-xs uppercase text-slate-400 dark:text-slate-500 font-semibold">Administration</div>
                     {{ nav_link('faculty_main.pending_approvals', 'ri-user-add-line', 'Pending Approvals') }}
                     {{ nav_link('faculty_main.manage_programs', 'ri-book-2-line', 'Manage Programs') }}
@@ -159,6 +192,11 @@
                     {{ nav_link('faculty_main.analytics', 'ri-bar-chart-2-line', 'Analytics') }}
                     {{ nav_link('faculty_main.school_year_analytics', 'ri-calendar-event-line', 'S.Y. Analytics') }}
                 </nav>
+                <div class="p-4 mt-auto">
+                    <a href="{{ url_for('faculty_auth.logout') }}" class="flex items-center w-full px-4 py-2 text-sm rounded-lg text-slate-600 dark:text-slate-300 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:bg-rose-500/20 dark:hover:text-rose-400 transition-colors duration-200">
+                        <i class="ri-logout-box-line mr-3"></i>Logout
+                    </a>
+                </div>
             {% endcall %}
         
         <!-- FACULTY SIDEBAR -->
@@ -174,10 +212,15 @@
                 <nav class="flex-grow mt-2">
                     <div class="px-6 py-2 text-xs uppercase text-slate-400 dark:text-slate-500 font-semibold">Main Menu</div>
                     {{ nav_link('faculty_main.dashboard', 'ri-dashboard-line', 'Dashboard') }}
-                    {{ nav_link('faculty_main.my_schedule', 'ri-calendar-check-line', 'My Schedule') }}
                     {{ nav_link('faculty_main.my_analytics', 'ri-line-chart-line', 'My Analytics') }}
                     {{ nav_link('faculty_main.my_salary', 'ri-money-dollar-circle-line', 'My Salary') }}
                     {{ nav_link('faculty_main.view_notifications', 'ri-notification-3-line', 'Notifications') }}
+
+                    <div class="px-6 py-2 mt-4 text-xs uppercase text-slate-400 dark:text-slate-500 font-semibold">Scheduling & Grading</div>
+                    {{ nav_link('faculty_main.my_schedule', 'ri-calendar-check-line', 'My Schedule') }}
+                    {{ nav_link('faculty_main.grading_faculty_dashboard', 'ri-graduation-cap-line', 'Grading Dashboard') }}
+                    {{ nav_link('faculty_main.grading_manage_classes', 'ri-book-2-line', 'My Classes') }}
+                    {{ nav_link('faculty_main.grading_grade_management', 'ri-edit-2-line', 'Grade Management') }}
                 </nav>
                 <div class="p-4 mt-auto">
                     <a href="{{ url_for('faculty_auth.logout') }}" class="flex items-center w-full px-4 py-2 text-sm rounded-lg text-slate-600 dark:text-slate-300 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:bg-rose-500/20 dark:hover:text-rose-400 transition-colors duration-200">

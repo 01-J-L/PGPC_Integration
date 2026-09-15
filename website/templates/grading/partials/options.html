@@ -1,0 +1,4 @@
+<option value="">Select an option</option>
+{% for item in items %}
+    <option value="{{ item.id }}">{{ item.description if is_subject else item.name }}</option>
+{% endfor %}
