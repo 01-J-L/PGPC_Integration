@@ -91,6 +91,19 @@ class Program(db.Model):
     program_name = db.Column(db.String(200))
 
     courses = db.relationship('Course', backref='program', lazy='dynamic')
+    subjects = db.relationship('Subject', backref='program', lazy=True)
+
+    @property
+    def code(self):
+        return self.program_code
+
+    @property
+    def program_id(self):
+        return self.id
+
+    @property
+    def name(self):
+        return self.program_name
 
     def __repr__(self):
         return f'<Program {self.program_code}>'
@@ -886,6 +899,19 @@ class FacultyAssignment(db.Model):
     subject = db.relationship('Subject', backref='assignments')
     section = db.relationship('Section', backref='assignments')
 
+    @property
+    def p_total_max_q(self): return (self.p_max_q1 or 0) + (self.p_max_q2 or 0) + (self.p_max_q3 or 0) + (self.p_max_q4 or 0) + (self.p_max_q5 or 0)
+    @property
+    def p_total_max_a(self): return (self.p_max_act1 or 0) + (self.p_max_act2 or 0) + (self.p_max_act3 or 0) + (self.p_max_act4 or 0) + (self.p_max_act5 or 0)
+    @property
+    def m_total_max_q(self): return (self.m_max_q1 or 0) + (self.m_max_q2 or 0) + (self.m_max_q3 or 0) + (self.m_max_q4 or 0) + (self.m_max_q5 or 0)
+    @property
+    def m_total_max_a(self): return (self.m_max_act1 or 0) + (self.m_max_act2 or 0) + (self.m_max_act3 or 0) + (self.m_max_act4 or 0) + (self.m_max_act5 or 0)
+    @property
+    def f_total_max_q(self): return (self.f_max_q1 or 0) + (self.f_max_q2 or 0) + (self.f_max_q3 or 0) + (self.f_max_q4 or 0) + (self.f_max_q5 or 0)
+    @property
+    def f_total_max_a(self): return (self.f_max_act1 or 0) + (self.f_max_act2 or 0) + (self.f_max_act3 or 0) + (self.f_max_act4 or 0) + (self.f_max_act5 or 0)
+
 
 class Grade(db.Model):
     __tablename__ = 'grades'
@@ -921,6 +947,24 @@ class Grade(db.Model):
     student = db.relationship('Applicant', backref=db.backref('grades', lazy=True))
     subject = db.relationship('Subject', backref=db.backref('grades', lazy=True))
     faculty = db.relationship('SystemUser', backref=db.backref('grades', lazy=True))
+
+    @property
+    def p_quiz_total(self): return (self.p_q1 or 0) + (self.p_q2 or 0) + (self.p_q3 or 0) + (self.p_q4 or 0) + (self.p_q5 or 0)
+    @property
+    def p_act_total(self): return (self.p_act1 or 0) + (self.p_act2 or 0) + (self.p_act3 or 0) + (self.p_act4 or 0) + (self.p_act5 or 0)
+    @property
+    def m_quiz_total(self): return (self.m_q1 or 0) + (self.m_q2 or 0) + (self.m_q3 or 0) + (self.m_q4 or 0) + (self.m_q5 or 0)
+    @property
+    def m_act_total(self): return (self.m_act1 or 0) + (self.m_act2 or 0) + (self.m_act3 or 0) + (self.m_act4 or 0) + (self.m_act5 or 0)
+    @property
+    def f_quiz_total(self): return (self.f_q1 or 0) + (self.f_q2 or 0) + (self.f_q3 or 0) + (self.f_q4 or 0) + (self.f_q5 or 0)
+    @property
+    def f_act_total(self): return (self.f_act1 or 0) + (self.f_act2 or 0) + (self.f_act3 or 0) + (self.f_act4 or 0) + (self.f_act5 or 0)
+    @property
+    def remarks(self):
+        if self.final_grade_point is None:
+            return "Pending"
+        return "Passed" if self.final_grade_point <= 3.0 else "Failed"
 
 
 # =========================================================

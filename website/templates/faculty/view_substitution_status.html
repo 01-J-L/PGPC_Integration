@@ -49,7 +49,7 @@
                 </a>
                 
                 <!-- DEAN ACTION: Assign Substitute -->
-                {% if current_user.role == 'dean' %}
+                {% if current_user.role in ('dean', 'admin', 'superadmin') %}
                     <a href="{{ url_for('faculty_main.select_substitutes', sub_request_id=sub_request.id) }}" 
                        class="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-md">
                         Select Substitute

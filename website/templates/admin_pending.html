@@ -161,7 +161,7 @@
                     <td class="px-3 py-2 md:px-6 md:py-4 whitespace-nowrap text-sm text-gray-500 text-right">
                         <div class="flex space-x-1 justify-end items-center">
                             <a href="{{ url_for('auth.admin_view_application_page', applicant_id=app.applicant_id) }}" class="text-gray-500 hover:text-blue-600 p-0.5 sm:p-1" title="View"><i class="ri-external-link-line ri-lg"></i></a>
-                            <button class="text-gray-500 hover:text-yellow-600 p-0.5 sm:p-1 action-admin-notes" title="Admin Notes" data-id="{{ app.applicant_id }}"><i class="ri-sticky-note-line ri-lg"></i></button>
+                            {% if session.user_role in ['admin', 'registrar'] or session.get('is_superadmin') %}<button class="text-gray-500 hover:text-yellow-600 p-0.5 sm:p-1 action-admin-notes" title="Admin Notes" data-id="{{ app.applicant_id }}"><i class="ri-sticky-note-line ri-lg"></i></button>{% endif %}
                             <div class="dropdown relative action-status-dropdown">
                                 <button class="text-gray-500 hover:text-primary p-0.5 sm:p-1" title="Change Status"><i class="ri-arrow-down-s-fill ri-lg"></i></button>
                                 <div class="dropdown-content w-36 text-left">

@@ -1,7 +1,7 @@
 # app/main/routes.py
 
 from flask import Blueprint, render_template, flash, redirect, url_for, jsonify, request, session, get_flashed_messages, current_app
-from flask_login import login_required, current_user
+from flask_login import login_required, login_user, logout_user, current_user
 from website import db, mail
 from website.faculty.models import User, TeachingLoad, Program, Course, TimeSlot, SubstitutionRequest, Notification, SystemSetting, Section, Room, ProgramCourse, Subject
 from website.faculty.auth.forms import AdminAddUserForm, UserFilterForm
@@ -36,8 +36,38 @@ DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturda
 
 DEPARTMENT_MAP = {
     'Dean - CCBA': ['BSCS', 'BSMA', 'BPA'],
-    'Dean - COC': ['BSCRIM'] 
+    'Dean - COC': ['BSCRIM']
 }
+
+# The system admin outranks the CCBA & COC admins (deans): full access to
+# both the faculty system and the grading system, across every department.
+FACULTY_ADMIN_ROLES = ('admin', 'superadmin')
+FACULTY_MANAGER_ROLES = ('dean', 'admin', 'superadmin')
+
+
+def is_faculty_admin():
+    return current_user.is_authenticated and current_user.role in FACULTY_ADMIN_ROLES
+
+
+def can_manage_faculty_system():
+    return current_user.is_authenticated and current_user.role in FACULTY_MANAGER_ROLES
+
+
+def get_faculty_program_scope():
+    """Programs the current admin/dean may manage.
+
+    CCBA/COC accounts only see their own department; the system admin
+    (no department) outranks them and sees every program.
+    """
+    if not current_user.is_authenticated or current_user.role not in FACULTY_MANAGER_ROLES:
+        return []
+    if current_user.department == 'CCBA':
+        return DEPARTMENT_MAP.get('Dean - CCBA', [])
+    if current_user.department == 'COC':
+        return DEPARTMENT_MAP.get('Dean - COC', [])
+    if current_user.role in FACULTY_ADMIN_ROLES:
+        return [code for codes in DEPARTMENT_MAP.values() for code in codes]
+    return []
 
 
 def send_schedule_update_email(faculty, schedule_details, action):
@@ -152,7 +182,7 @@ def dashboard():
                 pass
     # -----------------------------
 
-    if current_user.role == 'dean':
+    if can_manage_faculty_system():
         filter_form = UserFilterForm(request.args)
         
         # ... (Keep your existing Dean Logic exactly as it is - omitted for brevity) ...
@@ -162,17 +192,16 @@ def dashboard():
         # or just ensure the variable 'expiration_alert' is passed below)
         
         # --- RE-ADDING THE DEAN LOGIC FOR CONTEXT (In case you need it) ---
-        allowed_program_codes = []
-        if current_user.department == 'CCBA':
-            allowed_program_codes = DEPARTMENT_MAP.get('Dean - CCBA', [])
-        elif current_user.department == 'COC':
-            allowed_program_codes = DEPARTMENT_MAP.get('Dean - COC', [])
+        allowed_program_codes = get_faculty_program_scope()
 
-        department_choices = [('', 'All My Departments')]
+        department_choices = [('', 'All Departments' if is_faculty_admin() else 'All My Departments')]
         if current_user.department == 'CCBA':
             department_choices.append(('Dean - CCBA', 'Dean - CCBA'))
         elif current_user.department == 'COC':
             department_choices.append(('Dean - COC', 'Dean - COC'))
+        elif is_faculty_admin():
+            # System admin (no department) outranks CCBA & COC: both available.
+            department_choices.extend([(dept, dept) for dept in DEPARTMENT_MAP])
 
         if allowed_program_codes:
             program_depts = db.session.query(Program.program_code)\
@@ -337,6 +366,24 @@ def dashboard():
                                     .join(course_units_subquery, TeachingLoad.course_code == course_units_subquery.c.course_code)\
                                     .filter(TeachingLoad.user_id == current_user.id, TeachingLoad.school_year == active_school_year, TeachingLoad.is_published == True).scalar()
         total_units = total_units_query if total_units_query is not None else 0
+
+        # Subjects the grading admin assigned to this faculty for the current
+        # semester that are not already part of a scheduled teaching load, so
+        # assigning a subject is reflected here instead of showing 0/0.
+        scheduled_course_codes = {code for code, in db.session.query(TeachingLoad.course_code).filter(
+            TeachingLoad.user_id == current_user.id,
+            TeachingLoad.school_year == active_school_year,
+            TeachingLoad.is_published == True
+        ).all()}
+        assigned_subjects = db.session.query(Subject).join(
+            FacultyAssignment, FacultyAssignment.subject_id == Subject.id
+        ).filter(
+            FacultyAssignment.faculty_id == grading_faculty_id(),
+            Subject.semester == current_semester
+        ).all()
+        extra_subjects = [s for s in assigned_subjects if s.subject_code not in scheduled_course_codes]
+        total_classes += len(extra_subjects)
+        total_units += sum(float(s.units or 0) for s in extra_subjects)
         pending_sub_requests = 0
         if active_school_year:
             pending_sub_requests = Notification.query.join(SubstitutionRequest, Notification.substitution_request_id == SubstitutionRequest.id)\
@@ -367,7 +414,7 @@ def dashboard():
 @main.route('/users', methods=['GET', 'POST'])
 @login_required
 def user_management():
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
 
@@ -491,7 +538,7 @@ def user_management():
 @main.route('/scheduling')
 @login_required
 def scheduling():
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
     
@@ -602,7 +649,7 @@ def scheduling():
 @main.route('/schedule-grid/<int:faculty_id>/sem/<int:semester>', methods=['GET', 'POST'])
 @login_required
 def schedule_grid(faculty_id, semester):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         return redirect(url_for('faculty_main.dashboard'))
         
     faculty_member = User.query.get_or_404(faculty_id)
@@ -868,7 +915,7 @@ def schedule_grid(faculty_id, semester):
 @main.route('/section-grid/prog<program_id>/sec<section_name>/sem<int:semester>', methods=['GET', 'POST'])
 @login_required
 def section_schedule_grid(program_id, section_name, semester):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
 
@@ -1197,7 +1244,7 @@ def get_courses(program_id, semester):
 @main.route('/delete-time-slot/<int:slot_id>', methods=['POST'])
 @login_required
 def delete_time_slot(slot_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         return redirect(url_for('faculty_main.dashboard'))
     slot_to_delete = TimeSlot.query.get_or_404(slot_id)
     if TeachingLoad.query.filter(TeachingLoad.time_start >= slot_to_delete.start_time, TeachingLoad.time_end <= slot_to_delete.end_time).first():
@@ -1350,7 +1397,7 @@ def my_schedule():
 @main.route('/section-schedule-hub', methods=['GET', 'POST'])
 @login_required
 def manage_section_schedule_hub():
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
 
@@ -1489,7 +1536,7 @@ def manage_section_schedule_hub():
 @main.route('/approvals')
 @login_required
 def pending_approvals():
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
     pending_list = User.query.filter_by(status='pending').all()
@@ -1498,7 +1545,7 @@ def pending_approvals():
 @main.route('/approve/<int:user_id>', methods=['POST'])
 @login_required
 def approve_faculty(user_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         return redirect(url_for('faculty_main.dashboard'))
     user_to_approve = User.query.get_or_404(user_id)
     user_to_approve.status = 'active'
@@ -1509,7 +1556,7 @@ def approve_faculty(user_id):
 @main.route('/delete-schedule/<int:schedule_id>/sem/<int:semester>', methods=['POST'])
 @login_required
 def delete_schedule(schedule_id, semester):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         return redirect(url_for('faculty_main.dashboard'))
         
     form = DeleteScheduleForm()
@@ -1592,7 +1639,7 @@ def create_substitution_request(teaching_load_id):
     load = TeachingLoad.query.get_or_404(teaching_load_id)
     
     # --- FIX: ALLOW DEANS TO ACCESS ---
-    if current_user.role != 'dean' and load.user_id != current_user.id:
+    if current_user.role not in ('dean', 'admin', 'superadmin') and load.user_id != current_user.id:
         flash('You do not have permission to request a substitute for this class.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
 
@@ -1632,8 +1679,8 @@ def create_substitution_request(teaching_load_id):
         flash('Substitution request has been submitted.', 'success')
         
         # Redirect based on role
-        if current_user.role == 'dean':
-            # If Dean created it, go to the selection page immediately
+        if can_manage_faculty_system():
+            # If Dean/Admin created it, go to the selection page immediately
             return redirect(url_for('faculty_main.select_substitutes', sub_request_id=sub_request.id))
         else:
             return redirect(url_for('faculty_main.my_schedule'))
@@ -1644,7 +1691,7 @@ def create_substitution_request(teaching_load_id):
 @main.route('/substitute/select/<int:sub_request_id>', methods=['GET'])
 @login_required
 def select_substitutes(sub_request_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
     sub_request = SubstitutionRequest.query.get_or_404(sub_request_id)
@@ -1665,7 +1712,7 @@ def select_substitutes(sub_request_id):
 @main.route('/substitute/notify/<int:sub_request_id>', methods=['POST'])
 @login_required
 def send_notifications(sub_request_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
     sub_request = SubstitutionRequest.query.get_or_404(sub_request_id)
@@ -1802,7 +1849,7 @@ def _sync_academic_term(school_year, semester):
 @main.route('/system-settings', methods=['GET', 'POST'])
 @login_required
 def system_settings():
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
 
@@ -1989,7 +2036,7 @@ def system_settings():
 @main.route('/analytics')
 @login_required
 def analytics():
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
 
@@ -2103,7 +2150,7 @@ def analytics():
 @main.route('/absence-reports')
 @login_required
 def absence_reports_list():
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
     
@@ -2188,7 +2235,7 @@ def absence_reports_list():
 @main.route('/absence-report/complete/<int:report_id>', methods=['POST'])
 @login_required
 def mark_report_completed(report_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
         
@@ -2202,7 +2249,7 @@ def mark_report_completed(report_id):
 @main.route('/schedule-for/<int:faculty_id>')
 @login_required
 def schedule_dispatcher(faculty_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
     
@@ -2304,7 +2351,7 @@ def _format_faculty_name(full_name):
 @main.route('/schedule/print/<int:faculty_id>')
 @login_required
 def print_faculty_schedule(faculty_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
     
@@ -2316,7 +2363,7 @@ def print_faculty_schedule(faculty_id):
 @main.route('/scheduling/print-all')
 @login_required
 def print_all_schedules():
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
     
@@ -2350,7 +2397,7 @@ def print_all_schedules():
 @main.route('/manage-programs', methods=['GET', 'POST'])
 @login_required
 def manage_programs():
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
 
@@ -2447,7 +2494,7 @@ def manage_programs():
 @main.route('/edit-program/<program_id>', methods=['GET', 'POST'])
 @login_required
 def edit_program(program_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         return redirect(url_for('faculty_main.dashboard'))
         
     program = Program.query.get_or_404(program_id)
@@ -2470,7 +2517,7 @@ def edit_program(program_id):
 @main.route('/delete-program/<program_id>', methods=['POST'])
 @login_required
 def delete_program(program_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         return redirect(url_for('faculty_main.dashboard'))
         
     program = Program.query.get_or_404(program_id)
@@ -2489,7 +2536,7 @@ def delete_program(program_id):
 @main.route('/program/<program_id>/courses', methods=['GET', 'POST'])
 @login_required
 def manage_program_courses(program_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
     
@@ -2526,7 +2573,7 @@ def manage_program_courses(program_id):
 @main.route('/delete-course/<int:course_id>', methods=['POST'])
 @login_required
 def delete_course(course_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
         
@@ -2547,7 +2594,7 @@ def delete_course(course_id):
 @main.route('/school-year-analytics', methods=['GET', 'POST'])
 @login_required
 def school_year_analytics():
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
 
@@ -2582,12 +2629,30 @@ def school_year_analytics():
     selected_school_year = None
 
     # --- 5. HANDLE SELECTION ---
-    if form.validate_on_submit():
-        selected_school_year = form.school_year.data
-    
-    elif request.method == 'GET' and active_global_year:
-        selected_school_year = active_global_year
-        form.school_year.data = active_global_year
+    # The report form submits as GET (?school_year=...) so it never depends on
+    # a CSRF token staying in sync with the session. POST is still accepted for
+    # older bookmarks/clients.
+    if request.method == 'POST':
+        if form.validate_on_submit():
+            selected_school_year = form.school_year.data
+        else:
+            # Never fail silently: surface the errors and still honour the
+            # submitted year when it is one we actually offer.
+            for field, errors in form.errors.items():
+                for err in errors:
+                    flash(f'{field}: {err}', 'error')
+            submitted_year = (request.form.get('school_year') or '').strip()
+            if submitted_year in dict(form.school_year.choices):
+                selected_school_year = submitted_year
+    else:
+        requested_year = (request.args.get('school_year') or '').strip()
+        if requested_year in dict(form.school_year.choices):
+            selected_school_year = requested_year
+        elif active_global_year:
+            selected_school_year = active_global_year
+
+    if selected_school_year:
+        form.school_year.data = selected_school_year
 
     # --- 6. GENERATE REPORT ---
     if selected_school_year:
@@ -2714,7 +2779,7 @@ def delete_section_schedule(schedule_id):
     Deletes a schedule and ensures redirection back to the correct Section Grid
     by parsing the Section Name instead of the Course Program.
     """
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to perform this action.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
 
@@ -2769,7 +2834,7 @@ def delete_section_schedule(schedule_id):
 @main.route('/section/delete/<int:section_id>', methods=['POST'])
 @login_required
 def delete_section(section_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
     
@@ -2845,7 +2910,7 @@ def get_sections(program_id, semester):
 @main.route('/manage-rooms', methods=['GET', 'POST'])
 @login_required
 def manage_rooms():
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('Access denied.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
 
@@ -2879,7 +2944,7 @@ def manage_rooms():
 @main.route('/delete-room/<int:room_id>', methods=['POST'])
 @login_required
 def delete_room(room_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('Access denied.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
     
@@ -2971,7 +3036,7 @@ def debug_schedule(faculty_id):
 @login_required
 def debug_delete_load(load_id):
     # Security check: Only Deans can do this
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         return "Access Denied", 403
     
     # Find and delete the specific schedule item
@@ -2987,7 +3052,7 @@ def debug_delete_load(load_id):
 @main.route('/debug/school-years')
 @login_required
 def debug_school_years_raw():
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         return "Access Denied", 403
 
     # 1. Get all sources of years
@@ -3061,7 +3126,7 @@ def debug_school_years_raw():
 @main.route('/debug/delete-year-raw', methods=['POST'])
 @login_required
 def debug_delete_year_raw():
-    if current_user.role != 'dean': return "Access Denied", 403
+    if current_user.role not in ('dean', 'admin', 'superadmin'): return "Access Denied", 403
     
     target_year = request.form.get('year')
     if not target_year: return "No year specified"
@@ -3091,7 +3156,7 @@ def debug_delete_year_raw():
 @main.route('/reset-slots')
 @login_required
 def reset_time_slots():
-    if current_user.role != 'dean': return "Unauthorized"
+    if current_user.role not in ('dean', 'admin', 'superadmin'): return "Unauthorized"
     
     # 1. Clear existing slots
     TimeSlot.query.delete()
@@ -3184,7 +3249,7 @@ def check_availability():
 @main.route('/room-schedule/<int:room_id>')
 @login_required
 def room_schedule(room_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('Access denied.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
 
@@ -3296,7 +3361,7 @@ def room_schedule(room_id):
 @main.route('/section-grid/publish/<program_id>/sec<section_name>/sem<int:semester>', methods=['POST'])
 @login_required
 def publish_section_schedule(program_id, section_name, semester):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         return redirect(url_for('faculty_main.dashboard'))
 
     program = Program.query.get_or_404(program_id)
@@ -3515,7 +3580,7 @@ def upload_proof(request_id):
 @main.route('/user/delete/<int:user_id>', methods=['POST'])
 @login_required
 def delete_user(user_id):
-    if current_user.role != 'dean':
+    if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to perform this action.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
 
@@ -3575,7 +3640,10 @@ def grading_check_prerequisites(student_id, subject_id):
 
 
 def grading_get_admin_program_scope():
-    if not current_user.is_authenticated or current_user.role not in ('admin', 'superadmin'):
+    # Deans (CCBA/COC admins) and grading admins share this route set.
+    # Scope follows the department: CCBA & COC are limited, the system
+    # admin (no department) outranks them and sees every program.
+    if not current_user.is_authenticated or current_user.role not in ('dean', 'admin', 'superadmin'):
         return []
     if current_user.department == 'CCBA':
         return ['BPA', 'BSCS', 'BSMA']
@@ -3588,11 +3656,34 @@ def grading_admin_required(f):
     from functools import wraps
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.role not in ('admin', 'superadmin'):
+        if not current_user.is_authenticated or current_user.role not in ('dean', 'admin', 'superadmin'):
             flash('You do not have permission to access this page.', 'danger')
             return redirect(url_for('faculty_auth.login'))
         return f(*args, **kwargs)
     return decorated_function
+
+
+def grading_faculty_id():
+    """system_users.id of the logged-in faculty member.
+
+    Faculty sign in with their faculty-system account (users table), but grades
+    and class assignments are keyed by system_users.id (the grading account the
+    admin assigns subjects to). Resolve the twin account by e-mail, then
+    username, then full name, so the two logins see the same classes.
+    """
+    user = current_user
+    if not user.is_authenticated:
+        return None
+    if isinstance(user, SystemUser):
+        return user.id
+    for attr in ('email', 'username', 'full_name'):
+        value = getattr(user, attr, None)
+        if not value:
+            continue
+        match = SystemUser.query.filter_by(**{attr: value}).first()
+        if match:
+            return match.id
+    return user.id
 
 
 @main.route('/logout')
@@ -3820,7 +3911,7 @@ def grading_student_records():
             )
         )
     if program_filter:
-        students_query = students_query.filter(Program.program_id == program_filter)
+        students_query = students_query.filter(Program.id == program_filter)
     if section_filter:
         sections = [s.strip().upper() for s in section_filter.split(',')]
         students_query = students_query.filter(func.upper(Section.name).in_(sections))
@@ -4119,7 +4210,11 @@ def grading_add_program():
     if request.method == 'POST':
         code = request.form.get('code', '').strip().upper()
         name = request.form.get('name', '').strip()
-        if code and name:
+        if not (code and name):
+            flash('Program code and name are required.', 'warning')
+        elif Program.query.filter_by(program_code=code).first():
+            flash(f'Program {code} already exists.', 'warning')
+        else:
             program = Program(program_code=code, title=name, program_name=name)
             db.session.add(program)
             db.session.commit()
@@ -4136,7 +4231,7 @@ def grading_add_program():
 @grading_admin_required
 def grading_view_program_subjects(program_id):
     program = Program.query.get_or_404(program_id)
-    subjects = Subject.query.filter_by(program_id=program.program_id).order_by(
+    subjects = Subject.query.filter_by(program_id=program.id).order_by(
         Subject.year_level, Subject.semester, Subject.subject_code
     ).all()
     return render_template(
@@ -4160,12 +4255,12 @@ def grading_add_subject(program_id):
         subject = Subject(
             subject_code=code, subject_title=description,
             units=units, year_level=year, semester=semester,
-            program_id=program.program_id
+            program_id=program.id
         )
         db.session.add(subject)
         db.session.commit()
         flash(f'Subject {subject.subject_code} added to {program.program_code}.', 'success')
-        return redirect(url_for('faculty_main.grading_view_program_subjects', program_id=program.program_id))
+        return redirect(url_for('faculty_main.grading_view_program_subjects', program_id=program.id))
     return render_template(
         'grading/admin/add_subject.html',
         title="Add Subject", active_nav='programs', program=program
@@ -4278,7 +4373,7 @@ def grading_print_student_records():
             )
         )
     if program_filter:
-        students_query = students_query.filter(Program.program_id == program_filter)
+        students_query = students_query.filter(Program.id == program_filter)
         program = Program.query.get(program_filter)
         if program:
             program_name = program.title
@@ -4337,7 +4432,7 @@ def grading_admin_add_irregular_student(assignment_id):
 @main.route("/grades/dashboard")
 @login_required
 def grading_faculty_dashboard():
-    assignments = FacultyAssignment.query.filter_by(faculty_id=current_user.id).all()
+    assignments = FacultyAssignment.query.filter_by(faculty_id=grading_faculty_id()).all()
     total_classes = len(assignments)
     total_students = 0
     program_counts = {}
@@ -4357,7 +4452,7 @@ def grading_faculty_dashboard():
             grade = Grade.query.filter_by(
                 student_id=student.applicant_id,
                 subject_id=assign.subject_id,
-                faculty_id=current_user.id
+                faculty_id=grading_faculty_id()
             ).first()
             if grade and grade.final_grade_point is not None:
                 graded_count += 1
@@ -4392,7 +4487,7 @@ def grading_faculty_dashboard():
 @main.route("/grades/manage_classes")
 @login_required
 def grading_manage_classes():
-    current_assignments = FacultyAssignment.query.filter_by(faculty_id=current_user.id).all()
+    current_assignments = FacultyAssignment.query.filter_by(faculty_id=grading_faculty_id()).all()
     return render_template(
         'grading/faculty/manage_classes.html',
         title="My Class Load", active_nav='manage_classes',
@@ -4404,7 +4499,7 @@ def grading_manage_classes():
 @login_required
 def grading_remove_assignment(assignment_id):
     assignment_to_remove = FacultyAssignment.query.get_or_404(assignment_id)
-    if assignment_to_remove.faculty_id != current_user.id:
+    if assignment_to_remove.faculty_id != grading_faculty_id():
         flash('You do not have permission to remove this class.', 'danger')
         return redirect(url_for('faculty_main.grading_manage_classes'))
     db.session.delete(assignment_to_remove)
@@ -4416,7 +4511,7 @@ def grading_remove_assignment(assignment_id):
 @main.route("/grades/grade_management", methods=['GET', 'POST'])
 @login_required
 def grading_grade_management():
-    assignments = FacultyAssignment.query.filter_by(faculty_id=current_user.id).all()
+    assignments = FacultyAssignment.query.filter_by(faculty_id=grading_faculty_id()).all()
     assignment_id = request.args.get('assignment_id') or request.form.get('assignment_id')
 
     selected_assignment = None
@@ -4425,10 +4520,10 @@ def grading_grade_management():
 
     if assignment_id:
         selected_assignment = FacultyAssignment.query.get(int(assignment_id))
-        if selected_assignment and selected_assignment.faculty_id == current_user.id:
+        if selected_assignment and selected_assignment.faculty_id == grading_faculty_id():
             regular_students = Applicant.query.filter_by(section_id=selected_assignment.section_id).all()
             irregular_grades = Grade.query.filter_by(
-                subject_id=selected_assignment.subject_id, faculty_id=current_user.id
+                subject_id=selected_assignment.subject_id, faculty_id=grading_faculty_id()
             ).all()
             irregular_student_ids = [g.student_id for g in irregular_grades]
             irregular_students = Applicant.query.filter(Applicant.applicant_id.in_(irregular_student_ids)).all()
@@ -4436,7 +4531,7 @@ def grading_grade_management():
             students = sorted(list(all_students_set), key=lambda x: x.last_name)
 
             all_grades = Grade.query.filter_by(
-                subject_id=selected_assignment.subject_id, faculty_id=current_user.id
+                subject_id=selected_assignment.subject_id, faculty_id=grading_faculty_id()
             ).all()
             grades_dict = {g.student_id: g for g in all_grades}
 
@@ -4507,7 +4602,7 @@ def grading_grade_management():
             student_name = student_names.get(sid_int, f'Student #{sid}')
             grade = grades_dict.get(sid_int)
             if not grade:
-                grade = Grade(student_id=sid_int, subject_id=selected_assignment.subject_id, faculty_id=current_user.id)
+                grade = Grade(student_id=sid_int, subject_id=selected_assignment.subject_id, faculty_id=grading_faculty_id())
                 db.session.add(grade)
 
             def get_score(field, max_val):
@@ -4564,57 +4659,7 @@ def grading_grade_management():
             grade.f_recit = get_score('f_recit', selected_assignment.f_max_r)
             grade.f_exam = get_score('f_exam', selected_assignment.f_max_exam)
 
-            def calc_equiv(raw, max_score):
-                if max_score <= 0:
-                    return 0
-                return (raw / max_score * 100)
-
-            grade.prelim_grade = round(
-                (calc_equiv(grade.p_quiz_total, selected_assignment.p_total_max_q) * 0.20) +
-                (calc_equiv(grade.p_recit, selected_assignment.p_max_r) * 0.20) +
-                (calc_equiv(grade.p_act_total, selected_assignment.p_total_max_a) * 0.10) +
-                (calc_equiv(grade.p_exam, selected_assignment.p_max_exam) * 0.50)
-            )
-
-            grade.midterm_grade = round(
-                (calc_equiv(grade.m_quiz_total, selected_assignment.m_total_max_q) * 0.20) +
-                (calc_equiv(grade.m_recit, selected_assignment.m_max_r) * 0.10) +
-                (calc_equiv(grade.m_act_total, selected_assignment.m_total_max_a) * 0.20) +
-                (calc_equiv(grade.m_exam, selected_assignment.m_max_exam) * 0.50)
-            )
-
-            grade.final_term_grade = round(
-                (calc_equiv(grade.f_quiz_total, selected_assignment.f_total_max_q) * 0.20) +
-                (calc_equiv(grade.f_recit, selected_assignment.f_max_r) * 0.20) +
-                (calc_equiv(grade.f_act_total, selected_assignment.f_total_max_a) * 0.10) +
-                (calc_equiv(grade.f_exam, selected_assignment.f_max_exam) * 0.50)
-            )
-
-            grade.midterm_standing = round((grade.prelim_grade * 0.50) + (grade.midterm_grade * 0.50))
-            grade.final_grade = round((grade.midterm_standing * 0.60) + (grade.final_term_grade * 0.40))
-
-            score = grade.final_grade
-            if score >= 96:
-                pt = 1.00
-            elif score >= 92:
-                pt = 1.25
-            elif score >= 88:
-                pt = 1.50
-            elif score >= 84:
-                pt = 1.75
-            elif score >= 80:
-                pt = 2.00
-            elif score >= 75:
-                pt = 2.25
-            elif score >= 70:
-                pt = 2.50
-            elif score >= 65:
-                pt = 2.75
-            elif score >= 60:
-                pt = 3.00
-            else:
-                pt = 5.00
-            grade.final_grade_point = pt
+            grading_recalculate(selected_assignment, grade)
 
         if errors:
             db.session.rollback()
@@ -4635,16 +4680,392 @@ def grading_grade_management():
     )
 
 
+# ---------------------------------------------------------------------------
+# Grade Management — Export / Import / Template
+# ---------------------------------------------------------------------------
+
+# (Excel header label, grade column field) for every raw-score column.
+GRADING_COLUMN_SPECS = []
+for _term, _label in (('p', 'PRELIM'), ('m', 'MIDTERM'), ('f', 'FINALS')):
+    for _i in range(1, 6):
+        GRADING_COLUMN_SPECS.append((f'{_label} QUIZ {_i}', f'{_term}_q{_i}'))
+    GRADING_COLUMN_SPECS.append((f'{_label} RECITATION', f'{_term}_recit'))
+    for _i in range(1, 6):
+        GRADING_COLUMN_SPECS.append((f'{_label} ACTIVITY {_i}', f'{_term}_act{_i}'))
+    GRADING_COLUMN_SPECS.append((f'{_label} EXAM', f'{_term}_exam'))
+
+# (grade field -> FacultyAssignment perfect-score column)
+GRADING_MAX_FIELDS = {}
+for _term in ('p', 'm', 'f'):
+    for _i in range(1, 6):
+        GRADING_MAX_FIELDS[f'{_term}_q{_i}'] = f'{_term}_max_q{_i}'
+        GRADING_MAX_FIELDS[f'{_term}_act{_i}'] = f'{_term}_max_act{_i}'
+    GRADING_MAX_FIELDS[f'{_term}_recit'] = f'{_term}_max_r'
+    GRADING_MAX_FIELDS[f'{_term}_exam'] = f'{_term}_max_exam'
+
+
+def grading_owned_assignment(assignment_id):
+    """Fetch an assignment only if it belongs to the logged-in faculty member."""
+    assignment = FacultyAssignment.query.get(int(assignment_id))
+    if not assignment or assignment.faculty_id != grading_faculty_id():
+        flash('You do not have permission to manage this class.', 'danger')
+        return None
+    return assignment
+
+
+def grading_class_students(assignment):
+    """Regular students of the section plus any irregular students already graded."""
+    regular_students = Applicant.query.filter_by(section_id=assignment.section_id).all()
+    irregular_ids = [
+        g.student_id for g in Grade.query.filter_by(
+            subject_id=assignment.subject_id, faculty_id=grading_faculty_id()
+        ).all()
+    ]
+    irregular_students = Applicant.query.filter(Applicant.applicant_id.in_(irregular_ids)).all() if irregular_ids else []
+    merged = set(regular_students + irregular_students)
+    return sorted(merged, key=lambda s: s.last_name or '')
+
+
+def grading_recalculate(assignment, grade):
+    """Recompute prelim/midterm/final grades and the grade point from raw scores."""
+    def calc_equiv(raw, max_score):
+        if not max_score or max_score <= 0:
+            return 0
+        return (raw or 0) / max_score * 100
+
+    grade.prelim_grade = round(
+        (calc_equiv(grade.p_quiz_total, assignment.p_total_max_q) * 0.20) +
+        (calc_equiv(grade.p_recit, assignment.p_max_r) * 0.20) +
+        (calc_equiv(grade.p_act_total, assignment.p_total_max_a) * 0.10) +
+        (calc_equiv(grade.p_exam, assignment.p_max_exam) * 0.50)
+    )
+    grade.midterm_grade = round(
+        (calc_equiv(grade.m_quiz_total, assignment.m_total_max_q) * 0.20) +
+        (calc_equiv(grade.m_recit, assignment.m_max_r) * 0.10) +
+        (calc_equiv(grade.m_act_total, assignment.m_total_max_a) * 0.20) +
+        (calc_equiv(grade.m_exam, assignment.m_max_exam) * 0.50)
+    )
+    grade.final_term_grade = round(
+        (calc_equiv(grade.f_quiz_total, assignment.f_total_max_q) * 0.20) +
+        (calc_equiv(grade.f_recit, assignment.f_max_r) * 0.20) +
+        (calc_equiv(grade.f_act_total, assignment.f_total_max_a) * 0.10) +
+        (calc_equiv(grade.f_exam, assignment.f_max_exam) * 0.50)
+    )
+    grade.midterm_standing = round((grade.prelim_grade * 0.50) + (grade.midterm_grade * 0.50))
+    grade.final_grade = round((grade.midterm_standing * 0.60) + (grade.final_term_grade * 0.40))
+
+    score = grade.final_grade or 0
+    if score >= 96:
+        pt = 1.00
+    elif score >= 92:
+        pt = 1.25
+    elif score >= 88:
+        pt = 1.50
+    elif score >= 84:
+        pt = 1.75
+    elif score >= 80:
+        pt = 2.00
+    elif score >= 75:
+        pt = 2.25
+    elif score >= 70:
+        pt = 2.50
+    elif score >= 65:
+        pt = 2.75
+    elif score >= 60:
+        pt = 3.00
+    else:
+        pt = 5.00
+    grade.final_grade_point = pt
+
+
+def _grading_header_map(ws, header_row):
+    """Build {column_index: grade_field} from a header row, plus id/name columns."""
+    mapping = {}
+    id_col = None
+    name_col = None
+    for cell in ws[header_row]:
+        label = str(cell.value or '').strip().upper()
+        if not label:
+            continue
+        if label in ('STUDENT ID', 'ID', 'STUDENT NO', 'STUDENT NUMBER'):
+            id_col = cell.column
+        elif label in ('STUDENT NAME', 'NAME'):
+            name_col = cell.column
+        else:
+            for header, field in GRADING_COLUMN_SPECS:
+                if label == header:
+                    mapping[cell.column] = field
+                    break
+    return id_col, name_col, mapping
+
+
+def _grading_write_sheet(ws, assignment, students, grades_dict, include_scores):
+    """Write the shared header/metadata/table layout used by export and template."""
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    subject_code = assignment.subject.subject_code if assignment.subject else ''
+    subject_title = assignment.subject.subject_title if assignment.subject else ''
+    section_name = assignment.section.name if assignment.section else ''
+    program_code = assignment.section.program.program_code if assignment.section and assignment.section.program else ''
+
+    ws['A1'] = 'GRADE MANAGEMENT SHEET'
+    ws['A1'].font = Font(bold=True, size=14)
+    ws['A2'] = f'Subject: {subject_code} - {subject_title}'
+    ws['A3'] = f'Section: {program_code} {section_name}'
+
+    headers = ['STUDENT ID', 'STUDENT NAME'] + [h for h, _ in GRADING_COLUMN_SPECS]
+    thin = Side(style='thin', color='B0B0B0')
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    header_fill = PatternFill('solid', fgColor='DBEAFE')
+
+    header_row = 5
+    for col, header in enumerate(headers, start=1):
+        cell = ws.cell(row=header_row, column=col, value=header)
+        cell.font = Font(bold=True, size=10)
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        cell.border = border
+
+    for row_offset, student in enumerate(students, start=1):
+        g = grades_dict.get(student.applicant_id)
+        row = header_row + row_offset
+        ws.cell(row=row, column=1, value=student.old_student_id or '')
+        ws.cell(row=row, column=2, value=student.name)
+        for col, (_, field) in enumerate(GRADING_COLUMN_SPECS, start=3):
+            value = ''
+            if include_scores and g is not None:
+                raw = getattr(g, field, None)
+                value = raw if raw not in (None,) else ''
+            cell = ws.cell(row=row, column=col, value=value)
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = border
+        ws.cell(row=row, column=1).border = border
+        ws.cell(row=row, column=2).border = border
+
+    ws.column_dimensions['A'].width = 16
+    ws.column_dimensions['B'].width = 34
+    for col in range(3, 3 + len(GRADING_COLUMN_SPECS)):
+        ws.column_dimensions[ws.cell(row=header_row, column=col).column_letter].width = 13
+    ws.row_dimensions[header_row].height = 34
+    ws.freeze_panes = ws.cell(row=header_row + 1, column=3)
+    return header_row
+
+
+@main.route("/grades/grade_management/export/<int:assignment_id>")
+@login_required
+def grading_export_grades(assignment_id):
+    from openpyxl import Workbook
+
+    assignment = grading_owned_assignment(assignment_id)
+    if not assignment:
+        return redirect(url_for('faculty_main.grading_grade_management'))
+
+    students = grading_class_students(assignment)
+    all_grades = Grade.query.filter_by(
+        subject_id=assignment.subject_id, faculty_id=grading_faculty_id()
+    ).all()
+    grades_dict = {g.student_id: g for g in all_grades}
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Grades'
+    _grading_write_sheet(ws, assignment, students, grades_dict, include_scores=True)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    subject_code = assignment.subject.subject_code if assignment.subject else 'class'
+    section_name = assignment.section.name if assignment.section else 'section'
+    filename = f'Grades_{subject_code}_{section_name}.xlsx'.replace(' ', '')
+    return send_file(
+        output, as_attachment=True, download_name=filename,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+
+@main.route("/grades/grade_management/template/<int:assignment_id>")
+@login_required
+def grading_grades_template(assignment_id):
+    from openpyxl import Workbook
+
+    assignment = grading_owned_assignment(assignment_id)
+    if not assignment:
+        return redirect(url_for('faculty_main.grading_grade_management'))
+
+    students = grading_class_students(assignment)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Grades'
+    _grading_write_sheet(ws, assignment, students, {}, include_scores=False)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    subject_code = assignment.subject.subject_code if assignment.subject else 'class'
+    section_name = assignment.section.name if assignment.section else 'section'
+    filename = f'Template_Grades_{subject_code}_{section_name}.xlsx'.replace(' ', '')
+    return send_file(
+        output, as_attachment=True, download_name=filename,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+
+@main.route("/grades/grade_management/import/<int:assignment_id>", methods=['POST'])
+@login_required
+def grading_import_grades(assignment_id):
+    from openpyxl import load_workbook
+
+    assignment = grading_owned_assignment(assignment_id)
+    if not assignment:
+        return redirect(url_for('faculty_main.grading_grade_management'))
+
+    file = request.files.get('file')
+    if not file or not file.filename:
+        flash('Please choose an Excel file to import.', 'danger')
+        return redirect(url_for('faculty_main.grading_grade_management', assignment_id=assignment.id))
+    if not file.filename.lower().endswith(('.xlsx', '.xlsm')):
+        flash('Only .xlsx Excel files are supported.', 'danger')
+        return redirect(url_for('faculty_main.grading_grade_management', assignment_id=assignment.id))
+
+    students = grading_class_students(assignment)
+    by_id = {s.old_student_id: s for s in students if s.old_student_id}
+    by_name = {(s.name or '').strip().upper(): s for s in students}
+    by_last_first = {}
+    for s in students:
+        key = f"{(s.last_name or '').strip().upper()}, {(s.first_name or '').strip().upper()}"
+        by_last_first[key] = s
+    grades_dict = {
+        g.student_id: g for g in Grade.query.filter_by(
+            subject_id=assignment.subject_id, faculty_id=grading_faculty_id()
+        ).all()
+    }
+
+    try:
+        wb = load_workbook(file, data_only=True)
+        ws = wb.active
+    except Exception:
+        flash('The uploaded file could not be opened as an Excel workbook.', 'danger')
+        return redirect(url_for('faculty_main.grading_grade_management', assignment_id=assignment.id))
+
+    # Locate the header row within the first 15 rows.
+    header_row = None
+    for row_idx in range(1, 16):
+        _, name_col, mapping = _grading_header_map(ws, row_idx)
+        if name_col and mapping:
+            header_row = row_idx
+            break
+    if header_row is None:
+        flash('No header row found. Please use the downloaded template file.', 'danger')
+        return redirect(url_for('faculty_main.grading_grade_management', assignment_id=assignment.id))
+
+    id_col, name_col, col_fields = _grading_header_map(ws, header_row)
+
+    errors = []
+    updated = 0
+    skipped = 0
+    touched = set()
+
+    for row in ws.iter_rows(min_row=header_row + 1, max_row=ws.max_row):
+        def cell_value(col):
+            if not col or col > len(row):
+                return None
+            return row[col - 1].value
+
+        raw_id = cell_value(id_col)
+        raw_name = cell_value(name_col)
+
+        id_str = str(raw_id).strip() if raw_id is not None else ''
+        name_str = str(raw_name).strip() if raw_name is not None else ''
+        if not id_str and not name_str:
+            continue
+
+        student = None
+        if id_str:
+            student = by_id.get(id_str)
+        if student is None and name_str:
+            upper = name_str.upper()
+            student = by_name.get(upper) or by_last_first.get(upper)
+        if student is None:
+            skipped += 1
+            errors.append(f"'{name_str or id_str}' is not in this class list — skipped.")
+            continue
+
+        if student.applicant_id in touched:
+            continue
+        touched.add(student.applicant_id)
+
+        row_has_score = False
+        for col, field in col_fields.items():
+            raw = cell_value(col)
+            if raw is None or str(raw).strip() == '':
+                continue
+            try:
+                score = float(raw)
+            except (TypeError, ValueError):
+                errors.append(f"{student.name} — {field}: '{raw}' is not a valid number.")
+                continue
+            max_val = getattr(assignment, GRADING_MAX_FIELDS[field], 0) or 0
+            if score < 0:
+                errors.append(f"{student.name} — {field}: {score} is negative.")
+                continue
+            if max_val > 0 and score > max_val:
+                errors.append(f"{student.name} — {field}: {score} exceeds max {max_val}.")
+                continue
+            grade = grades_dict.get(student.applicant_id)
+            if not grade:
+                grade = Grade(
+                    student_id=student.applicant_id,
+                    subject_id=assignment.subject_id,
+                    faculty_id=grading_faculty_id()
+                )
+                db.session.add(grade)
+                grades_dict[student.applicant_id] = grade
+            setattr(grade, field, score)
+            row_has_score = True
+
+        if row_has_score:
+            grading_recalculate(assignment, grades_dict[student.applicant_id])
+            updated += 1
+
+    if errors and not updated:
+        db.session.rollback()
+        for msg in errors[:10]:
+            flash(msg, 'danger')
+        if skipped:
+            flash(f'{skipped} row(s) did not match a student in this class.', 'warning')
+        flash('No grades were imported. Please correct the file and try again.', 'warning')
+        return redirect(url_for('faculty_main.grading_grade_management', assignment_id=assignment.id))
+
+    db.session.commit()
+
+    if updated:
+        flash(f'Successfully imported grades for {updated} student(s).', 'success')
+    else:
+        flash('No grade values were found in the uploaded file.', 'warning')
+
+    if skipped:
+        flash(f'{skipped} row(s) did not match a student in this class.', 'warning')
+    for msg in errors[:10]:
+        flash(msg, 'warning')
+    if len(errors) > 10:
+        flash(f'...and {len(errors) - 10} more issues.', 'warning')
+
+    return redirect(url_for('faculty_main.grading_grade_management', assignment_id=assignment.id))
+
+
 @main.route("/grades/print_report/<int:assignment_id>/<report_type>")
 @login_required
 def grading_print_faculty_report(assignment_id, report_type):
     assignment = FacultyAssignment.query.get_or_404(assignment_id)
-    if assignment.faculty_id != current_user.id:
+    if assignment.faculty_id != grading_faculty_id():
         flash('Unauthorized access.', 'danger')
         return redirect(url_for('faculty_main.grading_faculty_dashboard'))
 
     students = Applicant.query.filter_by(section_id=assignment.section_id).order_by(Applicant.last_name).all()
-    grades = Grade.query.filter_by(subject_id=assignment.subject_id, faculty_id=current_user.id).all()
+    grades = Grade.query.filter_by(subject_id=assignment.subject_id, faculty_id=grading_faculty_id()).all()
     grades_dict = {g.student_id: g for g in grades}
 
     student_data = []

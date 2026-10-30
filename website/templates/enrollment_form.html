@@ -598,7 +598,8 @@
                                     name="favorite_foods" value="{{ application.inventory_favorite_foods or '' }}"
                                     class=" mt-1 block w-full rounded-lg border border-red-500 bg-white px-4 py-2 text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 "></div>
 
-                            <div class="md:col-span-2"><label class="font-medium">Family Description *</label>
+                            <div class="md:col-span-2"><label class="font-medium">Family Description <span
+                                        class="text-gray-400 text-sm font-normal">(optional)</span></label>
                                 <div class="flex flex-wrap gap-4 mt-2">
                                     {% set fd = application.inventory_family_description %}
                                     <label class="flex items-center"><input type="radio" name="family_description"
@@ -933,7 +934,6 @@
                 'parents_marital_status': "Please select your parents' marital status.",
                 'number_of_children': 'Please enter the number of children.',
                 'family_income': 'Please select your family income.',
-                'family_description': 'Please select your family description.',
                 'emergency_contact_name': 'Please enter the emergency contact name.',
                 'emergency_contact_number': 'Please enter the emergency contact number.',
                 'emergency_contact_relationship': 'Please enter the emergency contact relationship.',
@@ -956,16 +956,17 @@
             }
 
             const requiredFields = Array.from(form.querySelectorAll('input[required], select[required], textarea[required]'));
-            const radioGroups = new Map();
+            const allRadios = Array.from(form.querySelectorAll('input[type="radio"]'));
+            const requiredRadioGroups = new Map();
             requiredFields.forEach(f => {
-                if (f.type === 'radio') {
-                    if (!radioGroups.has(f.name)) radioGroups.set(f.name, []);
-                    radioGroups.get(f.name).push(f);
+                if (f.type === 'radio' && !requiredRadioGroups.has(f.name)) {
+                    // Validate the WHOLE group, not only the radio that carries [required]
+                    requiredRadioGroups.set(f.name, allRadios.filter(r => r.name === f.name));
                 }
             });
 
             function validateRadioGroup(name) {
-                const radios = radioGroups.get(name) || [];
+                const radios = requiredRadioGroups.get(name) || [];
                 const isChecked = radios.some(r => r.checked);
                 radios.forEach(r => r.classList.toggle('input-error', !isChecked));
                 const container = radios[0] ? radios[0].closest('div') : null;
@@ -988,7 +989,7 @@
                 if (f.type === 'radio') return;
                 validateRequiredField(f);
             });
-            radioGroups.forEach((radios, name) => validateRadioGroup(name));
+            requiredRadioGroups.forEach((radios, name) => validateRadioGroup(name));
 
             // Re-validate on change/input
             requiredFields.forEach(f => {
@@ -1033,7 +1034,7 @@
                         if (!firstInvalidField) firstInvalidField = f;
                     }
                 });
-                radioGroups.forEach((radios, name) => {
+                requiredRadioGroups.forEach((radios, name) => {
                     if (!validateRadioGroup(name)) {
                         isValid = false;
                         if (!firstInvalidField) firstInvalidField = radios[0];

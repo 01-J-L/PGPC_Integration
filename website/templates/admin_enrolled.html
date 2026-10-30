@@ -270,9 +270,9 @@
                             <a href="{{ url_for('auth.admin_print_inventory_form', applicant_id=app.applicant_id) }}"
                                 target="_blank" class="text-gray-500 hover:text-green-500 p-0.5 sm:p-1"
                                 title="Print Inventory Form"><i class="ri-printer-line ri-lg"></i></a>
-                            <button class="text-gray-500 hover:text-yellow-600 p-0.5 sm:p-1 action-admin-notes"
+                            {% if session.user_role in ['admin', 'registrar'] or session.get('is_superadmin') %}<button class="text-gray-500 hover:text-yellow-600 p-0.5 sm:p-1 action-admin-notes"
                                 title="Admin Notes" data-id="{{ app.applicant_id }}"><i
-                                    class="ri-sticky-note-line ri-lg"></i></button>
+                                    class="ri-sticky-note-line ri-lg"></i></button>{% endif %}
                             <div class="dropdown relative action-status-dropdown">
                                 <button class="text-gray-500 hover:text-primary p-0.5 sm:p-1" title="Change Status"><i
                                         class="ri-arrow-down-s-fill ri-lg"></i></button>

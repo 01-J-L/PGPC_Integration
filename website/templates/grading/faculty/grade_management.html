@@ -29,6 +29,9 @@
     .dropdown-content a { color: black; padding: 12px 16px; text-decoration: none; display: block; font-size: 13px; text-align: left; }
     .dropdown-content a:hover { background-color: #f1f1f1; }
     .dropdown:hover .dropdown-content { display: block; }
+    .import-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; display: none; align-items: center; justify-content: center; padding: 16px; }
+    .import-modal-backdrop.open { display: flex; }
+    .import-modal { background: white; border-radius: 0.75rem; width: 100%; max-width: 32rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2); }
 </style>
 
 <div class="grade-management-container space-y-6">
@@ -78,6 +81,19 @@
                     <a href="{{ url_for('faculty_main.grading_print_faculty_report', assignment_id=selected_assignment.id, report_type='prelim') }}" target="_blank">📊 Prelim Report</a>
                     <a href="{{ url_for('faculty_main.grading_print_faculty_report', assignment_id=selected_assignment.id, report_type='midterm') }}" target="_blank">📊 Midterm Report</a>
                     <a href="{{ url_for('faculty_main.grading_print_faculty_report', assignment_id=selected_assignment.id, report_type='finals') }}" target="_blank">📊 Final Report</a>
+                </div>
+            </div>
+
+            <div class="dropdown w-full sm:w-auto">
+                <button class="w-full sm:w-auto bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-6l-4-4m0 0L8 10m4-4v12" /></svg>
+                    Excel ▾
+                </button>
+                <div class="dropdown-content">
+                    <a href="{{ url_for('faculty_main.grading_export_grades', assignment_id=selected_assignment.id) }}"><strong>📥 Export Grades</strong></a>
+                    <a href="{{ url_for('faculty_main.grading_grades_template', assignment_id=selected_assignment.id) }}">📄 Download Blank Template</a>
+                    <hr>
+                    <a href="#" onclick="openImportModal(); return false;">📤 Import Grades</a>
                 </div>
             </div>
             {% endif %}
@@ -370,6 +386,40 @@
     </div>
 </div>
 
+{% if selected_assignment %}
+<!-- IMPORT GRADES MODAL -->
+<div id="importGradesModal" class="import-modal-backdrop no-print">
+    <div class="import-modal">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h2 class="text-lg font-bold text-gray-900">Import Grades from Excel</h2>
+            <button type="button" onclick="closeImportModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <form method="POST" action="{{ url_for('faculty_main.grading_import_grades', assignment_id=selected_assignment.id) }}" enctype="multipart/form-data" id="importGradesForm">
+            <div class="px-6 py-4 space-y-4">
+                <p class="text-sm text-gray-600">
+                    Upload an <strong>.xlsx</strong> file using the template layout.
+                    Students are matched by <strong>Student ID</strong>, or by <strong>Student Name</strong> when the ID is blank.
+                    Only the score columns are imported; grades are recalculated automatically.
+                </p>
+                <a href="{{ url_for('faculty_main.grading_grades_template', assignment_id=selected_assignment.id) }}" class="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">
+                    📄 Download the blank template for this class
+                </a>
+                <div>
+                    <label for="importGradesFile" class="block text-sm font-medium text-gray-700 mb-1">Excel file (.xlsx)</label>
+                    <input type="file" id="importGradesFile" name="file" accept=".xlsx,.xlsm" required
+                           class="block w-full text-sm text-gray-700 border border-gray-300 rounded-md cursor-pointer bg-gray-50 focus:outline-none focus:ring-blue-500 focus:border-blue-500 p-2">
+                    <p id="importFileName" class="mt-1 text-xs text-gray-500">No file selected.</p>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+                <button type="button" onclick="closeImportModal()" class="px-4 py-2 rounded-md text-sm font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button type="submit" class="px-4 py-2 rounded-md text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm">Import Grades</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
 <!-- JAVASCRIPT FOR SEQUENTIAL COLUMN ADDITION -->
 <script>
     function addNextColumn(type) {
@@ -500,6 +550,51 @@
         document.querySelectorAll('input[name^="p_max_"], input[name^="m_max_"], input[name^="f_max_"]').forEach(function(inp) {
             inp.addEventListener('input', syncScoreLimits);
         });
+    });
+</script>
+
+<!-- IMPORT MODAL SCRIPT -->
+<script>
+    function openImportModal() {
+        var modal = document.getElementById('importGradesModal');
+        if (modal) modal.classList.add('open');
+    }
+
+    function closeImportModal() {
+        var modal = document.getElementById('importGradesModal');
+        if (modal) modal.classList.remove('open');
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        var modal = document.getElementById('importGradesModal');
+        if (!modal) return;
+
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeImportModal();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeImportModal();
+        });
+
+        var fileInput = document.getElementById('importGradesFile');
+        var nameLabel = document.getElementById('importFileName');
+        if (fileInput && nameLabel) {
+            fileInput.addEventListener('change', function() {
+                nameLabel.textContent = this.files && this.files.length ? this.files[0].name : 'No file selected.';
+            });
+        }
+
+        var form = document.getElementById('importGradesForm');
+        if (form) {
+            form.addEventListener('submit', function() {
+                var btn = form.querySelector('button[type="submit"]');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = 'Importing...';
+                }
+            });
+        }
     });
 </script>
 {% endblock content %}

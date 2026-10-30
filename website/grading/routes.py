@@ -253,7 +253,7 @@ def student_records():
             )
         )
     if program_filter:
-        students_query = students_query.filter(Program.program_id == program_filter)
+        students_query = students_query.filter(Program.id == program_filter)
     if section_filter:
         sections = [s.strip().upper() for s in section_filter.split(',')]
         students_query = students_query.filter(func.upper(Section.name).in_(sections))
@@ -569,7 +569,7 @@ def add_program():
 @grading_admin_required
 def view_program_subjects(program_id):
     program = Program.query.get_or_404(program_id)
-    subjects = Subject.query.filter_by(program_id=program.program_id).order_by(
+    subjects = Subject.query.filter_by(program_id=program.id).order_by(
         Subject.year_level, Subject.semester, Subject.subject_code
     ).all()
     return render_template(
@@ -593,12 +593,12 @@ def add_subject(program_id):
         subject = Subject(
             subject_code=code, subject_title=description,
             units=units, year_level=year, semester=semester,
-            program_id=program.program_id
+            program_id=program.id
         )
         db.session.add(subject)
         db.session.commit()
         flash(f'Subject {subject.subject_code} added to {program.program_code}.', 'success')
-        return redirect(url_for('grading.view_program_subjects', program_id=program.program_id))
+        return redirect(url_for('grading.view_program_subjects', program_id=program.id))
     return render_template(
         'grading/admin/add_subject.html',
         title="Add Subject", active_nav='programs', program=program
@@ -711,7 +711,7 @@ def print_student_records():
             )
         )
     if program_filter:
-        students_query = students_query.filter(Program.program_id == program_filter)
+        students_query = students_query.filter(Program.id == program_filter)
         program = Program.query.get(program_filter)
         if program:
             program_name = program.title

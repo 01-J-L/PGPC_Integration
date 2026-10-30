@@ -26,7 +26,7 @@
         <div class="rounded-lg p-4 mb-6 border {% if maintenance_on %} bg-red-50 border-red-200 {% else %} bg-green-50 border-green-200 {% endif %}">
             <p class="text-sm text-gray-700">
                 {% if maintenance_on %}
-                All systems are currently <strong>offline</strong>. Regular users (students, faculty, public) will see the maintenance page. Only Admin and Superadmin accounts can log in.
+                All systems are currently <strong>offline</strong>. Regular users (students, faculty, admins, public) will see the maintenance page. Only the Superadministrator can still access the systems.
                 {% else %}
                 All systems are currently <strong>online</strong>. Turning on maintenance mode will immediately block all regular users across every system.
                 {% endif %}

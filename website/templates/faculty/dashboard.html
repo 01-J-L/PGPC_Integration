@@ -13,14 +13,14 @@
                     <p class="font-bold text-red-700 dark:text-red-300">Academic Term Ended</p>
                     <p class="text-sm text-red-600 dark:text-red-400">
                         {{ expiration_alert }} <!-- Shows "Semester has ended" or "School Year has ended" -->
-                        {% if current_user.role == 'dean' %}
+                        {% if current_user.role in ('dean', 'admin', 'superadmin') %}
                             Please update the System Settings.
                         {% endif %}
                     </p>
                 </div>
             </div>
             
-            {% if current_user.role == 'dean' %}
+            {% if current_user.role in ('dean', 'admin', 'superadmin') %}
             <a href="{{  url_for('faculty_main.system_settings') }}" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 transition-colors shadow-md whitespace-nowrap">
                 Update Now
             </a>
@@ -39,7 +39,7 @@
     <!-- START: ROLE-BASED CONTENT DISPLAY -->
 
     {# --- DEAN'S VIEW (THEME-ADAPTIVE REDESIGN) --- #}
-    {% if current_user.role == 'dean' %}
+    {% if current_user.role in ('dean', 'admin', 'superadmin') %}
         <!-- START: DEPARTMENT FILTER -->
         <div class="mb-8">
             <form method="GET" action="{{  url_for('faculty_main.dashboard') }}" class="flex items-center space-x-4">

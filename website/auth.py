@@ -740,11 +740,20 @@ def student_messenger():
     return render_template('student_messenger.html', messages=messages, application=app, current_dept=dept, student_logged_in=True)
 
 
+MESSAGE_ALLOWED_ROLES = ['admin', 'registrar', 'guidance', 'osa']
+
+
+def _can_view_messages():
+    return bool(session.get('is_superadmin')) or session.get('user_role') in MESSAGE_ALLOWED_ROLES
+
+
 @auth.route('/admin/messenger')
 def admin_messenger_list():
+    if not _can_view_messages():
+        return redirect(url_for('auth.admin'))
+
     role = session.get('user_role')
-    if role not in ['admin', 'registrar', 'guidance', 'osa']: return redirect(url_for('auth.admin'))
-    
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
@@ -765,9 +774,11 @@ def admin_messenger_list():
 
 @auth.route('/admin/messenger/chat/<int:applicant_id>', methods=['GET', 'POST'])
 def admin_chat_view(applicant_id):
+    if not _can_view_messages():
+        return redirect(url_for('auth.admin'))
+
     role = session.get('user_role')
-    if role not in ['admin', 'registrar', 'guidance', 'osa']: return redirect(url_for('auth.admin'))
-    
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
@@ -955,6 +966,13 @@ def admin_toggle_academic_term(term_id):
                 # AND were originally 'Enrolled'.
                 
                 cursor.execute("""
+                    SELECT applicant_id FROM applicants 
+                    WHERE application_status = 'Eligible for Enrollment'
+                      AND original_enrollment_status = 'Enrolled'
+                """)
+                reverting_ids = [row['applicant_id'] for row in cursor.fetchall()]
+
+                cursor.execute("""
                     UPDATE applicants 
                     SET application_status = 'Enrolled', 
                         original_enrollment_status = NULL,
@@ -963,6 +981,13 @@ def admin_toggle_academic_term(term_id):
                       AND original_enrollment_status = 'Enrolled'
                 """)
                 
+                # NEW STUDENT ID + AUTO COUNT BALANCE: students moved back to 'Enrolled'
+                # get a permanent 'P' ID if they still hold an 'A' one, and their
+                # matching fees re-checked (duplicate fees are skipped).
+                for rid in reverting_ids:
+                    _assign_permanent_student_id(cursor, rid)
+                    _ensure_enrolled_balance(cursor, rid)
+
                 # Close the specified term
                 cursor.execute("UPDATE academic_terms SET is_active = FALSE WHERE id = %s", (term_id,))
                 flash("Academic term has been closed. Eligible students reverted to Enrolled status.", "info")
@@ -1460,21 +1485,50 @@ def _generate_student_id(cursor):
         cursor.execute("SELECT setting_value FROM system_settings WHERE setting_key = 'last_sequence_number' FOR UPDATE")
         seq_row = cursor.fetchone()
 
-        if not year_row or not seq_row:
-            raise Exception("System settings for 'current_enrollment_year' or 'last_sequence_number' not found in the database.")
-
         # --- FIX: Handle Cursor Type (Dict vs Tuple) ---
         # If row is a dictionary (from dictionary=True cursor), access by key
         # If row is a tuple (from standard cursor), access by index 0
-        if isinstance(year_row, dict):
-            year = year_row['setting_value']
-        else:
-            year = year_row[0]
+        year = str(year_row['setting_value'] if isinstance(year_row, dict) else year_row[0]).strip() if year_row else ''
+        raw_seq = seq_row['setting_value'] if isinstance(seq_row, dict) else seq_row[0] if seq_row else None
+        # -----------------------------------------------
 
-        if isinstance(seq_row, dict):
-            last_sequence = int(seq_row['setting_value'])
-        else:
-            last_sequence = int(seq_row[0])
+        # Self-heal: seed missing/broken settings so IDs can still be generated
+        if not year or not year.isdigit():
+            year = None
+            cursor.execute("SELECT setting_value FROM system_settings WHERE setting_key = 'school_year'")
+            sy_row = cursor.fetchone()
+            school_year = str(sy_row['setting_value'] if isinstance(sy_row, dict) else sy_row[0]).strip() if sy_row else ''
+            if len(school_year) >= 4 and school_year[:4].isdigit():
+                year = school_year[:4]
+            else:
+                year = str(datetime.date.today().year)
+
+            if year_row:
+                cursor.execute("UPDATE system_settings SET setting_value = %s WHERE setting_key = 'current_enrollment_year'", (year,))
+            else:
+                cursor.execute("INSERT INTO system_settings (setting_key, setting_value) VALUES ('current_enrollment_year', %s)", (year,))
+
+        try:
+            last_sequence = int(raw_seq)
+        except (TypeError, ValueError):
+            last_sequence = 0
+            # Seed from the highest P-ID already in use so a number is never reissued
+            try:
+                cursor.execute("SELECT old_student_id, control_number FROM applicants")
+                for row in cursor.fetchall() or []:
+                    vals = (row['old_student_id'], row['control_number']) if isinstance(row, dict) else (row[0], row[1])
+                    for v in vals:
+                        v = str(v or '')
+                        # P + 4-digit year + 5-digit sequence (e.g. P202500363)
+                        if len(v) == 10 and v[0] == 'P' and v[1:].isdigit():
+                            last_sequence = max(last_sequence, int(v[5:]))
+            except Exception as scan_err:
+                print(f"Could not scan existing student IDs: {scan_err}")
+
+            if seq_row:
+                cursor.execute("UPDATE system_settings SET setting_value = %s WHERE setting_key = 'last_sequence_number'", (str(last_sequence),))
+            else:
+                cursor.execute("INSERT INTO system_settings (setting_key, setting_value) VALUES ('last_sequence_number', %s)", (str(last_sequence),))
         # -----------------------------------------------
         
         # 3. Increment the sequence
@@ -1633,23 +1687,92 @@ def _auto_assign_fees(cursor, applicant_id, student_data):
             if batch['scope'] == 'non_garciano' and is_garciano:
                 continue
 
-            # 4. PREVENT DUPLICATES: Only add if this specific fee isn't already on the student's SOA
+            # 4. PREVENT DUPLICATES: skip only if THIS batch is already on the SOA.
+            # The key is the batch row itself (batch_id), not the description, so a
+            # '2nd Semester' batch sharing a description with the '1st Semester' one
+            # is still charged when the student re-enrolls for the new term.
+            # Rows created before batch_id existed fall back to a description match.
             cursor.execute("""
                 SELECT id FROM assessments 
-                WHERE student_id = %s AND description = %s
-            """, (applicant_id, batch['description']))
+                WHERE student_id = %s 
+                  AND (batch_id = %s OR (batch_id IS NULL AND description = %s))
+            """, (applicant_id, batch['id'], batch['description']))
             
             if not cursor.fetchone():
                 cursor.execute("""
-                    INSERT INTO assessments (student_id, description, total_amount, balance, amount_paid, status, created_at)
-                    VALUES (%s, %s, %s, %s, 0.00, 'unpaid', NOW())
-                """, (applicant_id, batch['description'], batch['amount'], batch['amount']))
+                    INSERT INTO assessments (student_id, description, total_amount, balance, amount_paid, status, created_at, batch_id)
+                    VALUES (%s, %s, %s, %s, 0.00, 'unpaid', NOW(), %s)
+                """, (applicant_id, batch['description'], batch['amount'], batch['amount'], batch['id']))
                 assigned_count += 1
         
         return assigned_count
     except Exception as e:
         print(f"Error in _auto_assign_fees: {e}")
         return 0
+
+def _ensure_enrolled_balance(cursor, applicant_id):
+    """
+    Called every time a student reaches 'Enrolled'.
+    Re-reads the student's record and runs the cumulative fee trigger so the
+    ledger (and therefore the displayed balance) is counted automatically.
+    Idempotent: _auto_assign_fees skips fees already present on the SOA.
+    Returns the number of newly added assessment rows.
+    """
+    try:
+        cursor.execute("SELECT * FROM applicants WHERE applicant_id = %s", (applicant_id,))
+        student = cursor.fetchone()
+        if not student:
+            return 0
+        return _auto_assign_fees(cursor, applicant_id, student)
+    except Exception as e:
+        print(f"Error in _ensure_enrolled_balance for {applicant_id}: {e}")
+        return 0
+
+def _assign_permanent_student_id(cursor, applicant_id, student_type_val=None):
+    """
+    Converts a NEW student's temporary admission ID (e.g. A00006) into a permanent
+    P-series ID (e.g. P202600363) the moment they are enrolled.
+    Safe to call repeatedly: students that already hold a P-ID are left untouched.
+    Returns the new ID, or '' when nothing was changed.
+    """
+    try:
+        cursor.execute("""
+            SELECT enrollment_student_type, student_user_id, old_student_id, control_number
+            FROM applicants WHERE applicant_id = %s
+        """, (applicant_id,))
+        stu = cursor.fetchone()
+        if not stu:
+            return ''
+
+        # New vs existing: prefer the caller's knowledge (student_users.student_type),
+        # otherwise read the value stored at enrollment submission.
+        if student_type_val is not None:
+            is_new = str(student_type_val).strip().lower() == 'new'
+        else:
+            stu_type = str(stu.get('enrollment_student_type') or '').strip().lower()
+            if not stu_type and stu.get('student_user_id'):
+                cursor.execute("SELECT student_type FROM student_users WHERE id = %s", (stu['student_user_id'],))
+                su = cursor.fetchone()
+                stu_type = str(su.get('student_type') or '').strip().lower() if su else ''
+            is_new = (stu_type == 'new')
+
+        if not is_new:
+            return ''
+
+        current_id = str(stu.get('old_student_id') or stu.get('control_number') or '')
+        if current_id.startswith('P'):
+            return ''
+
+        new_permanent_id = _generate_student_id(cursor)
+        cursor.execute("UPDATE applicants SET old_student_id = %s, control_number = %s WHERE applicant_id = %s",
+                       (new_permanent_id, new_permanent_id, applicant_id))
+        if stu.get('student_user_id'):
+            cursor.execute("UPDATE student_users SET old_student_id = %s WHERE id = %s",
+                           (new_permanent_id, stu['student_user_id']))
+        return new_permanent_id
+    except Exception as e:
+        print(f"Error assigning permanent student ID for {applicant_id}: {e}")
+        return ''
 
 # ----------------- HELPER: AUTO PROGRESSION LOGIC -----------------
 def _calculate_next_term(current_year_str, current_sem_str):
@@ -3161,22 +3284,28 @@ def create_batch_assessment():
         cursor.execute(query, tuple(params))
         students = cursor.fetchall()
         
+        # Save this rule to the Log FIRST so the student rows can reference it (batch_id)
+        cursor.execute("""
+            INSERT INTO batch_assessments_log (description, amount, target_year, semester, course, year_level, scope, student_count, created_at)
+            VALUES (%s, %s, 'All', %s, %s, %s, %s, 0, NOW())
+        """, (desc, amount, target_sem or 'All', target_course or 'All', target_yl or 'All', target_scope or 'All'))
+        new_batch_id = cursor.lastrowid
+
         count = 0
         for s in students:
             # Check for duplicates before inserting for each student
-            cursor.execute("SELECT id FROM assessments WHERE student_id = %s AND description = %s", (s['applicant_id'], desc))
+            cursor.execute("""
+                SELECT id FROM assessments 
+                WHERE student_id = %s AND (batch_id = %s OR (batch_id IS NULL AND description = %s))
+            """, (s['applicant_id'], new_batch_id, desc))
             if not cursor.fetchone():
                 cursor.execute("""
-                    INSERT INTO assessments (student_id, description, total_amount, balance, status, created_at)
-                    VALUES (%s, %s, %s, %s, 'unpaid', NOW())
-                """, (s['applicant_id'], desc, amount, amount))
+                    INSERT INTO assessments (student_id, description, total_amount, balance, status, created_at, batch_id)
+                    VALUES (%s, %s, %s, %s, 'unpaid', NOW(), %s)
+                """, (s['applicant_id'], desc, amount, amount, new_batch_id))
                 count += 1
-            
-        # Save this rule to the Log for future auto-assignment (target_year set to 'All')
-        cursor.execute("""
-            INSERT INTO batch_assessments_log (description, amount, target_year, semester, course, year_level, scope, student_count, created_at)
-            VALUES (%s, %s, 'All', %s, %s, %s, %s, %s, NOW())
-        """, (desc, amount, target_sem or 'All', target_course or 'All', target_yl or 'All', target_scope or 'All', count))
+
+        cursor.execute("UPDATE batch_assessments_log SET student_count = %s WHERE id = %s", (count, new_batch_id))
         
         conn.commit()
         flash(f"Assessment '{desc}' created. Applied to {count} currently enrolled students.", "success")
@@ -3235,14 +3364,15 @@ def edit_batch_assessment(batch_id):
         """, (new_desc, new_amount, new_sem, new_scope, new_course, new_level, batch_id))
 
         # Cascade Update to individual Assessments (Description & Amount only)
+        # Scoped to THIS batch so a same-named batch for another term isn't touched.
         cursor.execute("""
             UPDATE assessments 
             SET description = %s, 
                 total_amount = %s,
                 balance = %s - amount_paid
-            WHERE description = %s 
+            WHERE (batch_id = %s OR (batch_id IS NULL AND description = %s)) 
             AND status != 'paid'
-        """, (new_desc, new_amount, new_amount, old_desc))
+        """, (new_desc, new_amount, new_amount, batch_id, old_desc))
 
         conn.commit()
         flash(f"Batch log updated and student balances adjusted.", "success")
@@ -3275,10 +3405,11 @@ def delete_batch_assessment(batch_id):
             
             # 3. Delete individual assessments (Optional: Only delete if no payment made?)
             # Here we delete ONLY if no payments have been made (amount_paid = 0) to preserve financial history.
+            # Scoped to THIS batch so a same-named batch for another term is kept.
             cursor.execute("""
                 DELETE FROM assessments 
-                WHERE description = %s AND amount_paid = 0
-            """, (batch['description'],))
+                WHERE (batch_id = %s OR (batch_id IS NULL AND description = %s)) AND amount_paid = 0
+            """, (batch_id, batch['description']))
             
             deleted_count = cursor.rowcount
             conn.commit()
@@ -3716,6 +3847,26 @@ def admin_dashboard():
                            selected_school_year=selected_sy)
 
 
+@auth.route('/president/dashboard', methods=['GET'])
+def president_dashboard():
+    if session.get('user_role') != 'president':
+        return redirect(url_for('auth.admin'))
+    selected_sy = request.args.get('sy')
+    all_sy = _get_all_school_years()
+    applications, stats = _get_all_applications_and_stats(school_year=selected_sy)
+
+    active_term = _get_active_term()
+    active_school_year = f"{active_term['year_name']} - {active_term['semester']}" if active_term else "Not Set"
+
+    return render_template('admin_dashboard2.html',
+                           applications=applications,
+                           stats=stats,
+                           active_page='dashboard',
+                           active_school_year=active_school_year,
+                           all_school_years=all_sy,
+                           selected_school_year=selected_sy)
+
+
 # --- ADMIN APPLICATION VIEW ROUTES ---
 @auth.route('/admin/applications/all')
 def admin_all_applications():
@@ -3773,7 +3924,7 @@ def admin_rejected_applications():
 
 @auth.route('/admin/applications/passed')
 def admin_passed_applications():
-    if session.get('user_role') not in ['admin', 'registrar']: return redirect(url_for('auth.admin'))
+    if session.get('user_role') not in ['admin', 'registrar', 'president']: return redirect(url_for('auth.admin'))
     selected_sy = request.args.get('sy')
     all_sy = _get_all_school_years()
     applications, stats = _get_all_applications_and_stats(school_year=selected_sy)
@@ -4359,15 +4510,9 @@ def admin_enrollment_action(applicant_id):
             
             # B. PERMANENT STUDENT ID GENERATION
             # If New Student and ID still starts with 'A' (Temporary), generate a permanent 'P' ID.
-            if str(app_data.get('enrollment_student_type')).capitalize() == 'New':
-                current_id = str(app_data.get('old_student_id') or app_data.get('control_number') or "")
-                if not current_id.startswith('P'):
-                    new_permanent_id = _generate_student_id(cursor)
-                    cursor.execute("UPDATE applicants SET old_student_id = %s, control_number = %s WHERE applicant_id = %s", 
-                                   (new_permanent_id, new_permanent_id, applicant_id))
-                    cursor.execute("UPDATE student_users SET old_student_id = %s WHERE id = %s", 
-                                   (new_permanent_id, student_user_id))
-                    generated_id_msg = f" New ID: {new_permanent_id} assigned."
+            new_permanent_id = _assign_permanent_student_id(cursor, applicant_id)
+            if new_permanent_id:
+                generated_id_msg = f" New ID: {new_permanent_id} assigned."
 
             # C. CUMULATIVE FINANCIAL TRIGGER
             # Assigns batch fees matching the student's CURRENT level.
@@ -4825,7 +4970,8 @@ def admin_update_student_level_section(applicant_id):
 
 @auth.route('/admin/application/<int:applicant_id>/notes', methods=['POST', 'GET'])
 def admin_save_application_notes(applicant_id):
-    if session.get('user_role') not in ['admin', 'registrar']: return jsonify({"success": False, "message": "Unauthorized"}), 401
+    if session.get('user_role') not in ['admin', 'registrar'] and not session.get('is_superadmin'):
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
     
     conn = None; cursor = None
     try:
@@ -7941,9 +8087,9 @@ def superadmin_login():
 
 @auth.route('/admin/maintenance', methods=['GET', 'POST'])
 def admin_maintenance():
-    # Admin and Superadmin only
-    if not (session.get('is_superadmin') or session.get('user_role') == 'admin'):
-        flash("Unauthorized access.", "danger")
+    # Superadmin only: nobody else may turn the whole website on or off
+    if not session.get('is_superadmin'):
+        flash("Only the Superadministrator can turn the website on or off.", "danger")
         return redirect(url_for('auth.admin'))
 
     conn = None
@@ -9516,24 +9662,58 @@ def admin_manage_sections():
                 year_str = request.form.get('year_level')
                 cursor.execute("SELECT program_id FROM programs WHERE title = %s", (program_title,))
                 prog_row = cursor.fetchone()
-                if prog_row:
+                if not prog_row:
+                    flash("Program not found.", "danger")
+                else:
                     program_id = prog_row['program_id']
                     cursor.execute("SELECT id, max_students FROM sections WHERE program_id = %s AND year_level = %s AND is_active = TRUE ORDER BY section_letter", (program_id, year_str))
                     sections = cursor.fetchall()
-                    cursor.execute("SELECT applicant_id FROM applicants WHERE program_choice = %s AND enrollment_year_level = %s AND application_status IN ('Enrolling', 'Enrolled') ORDER BY last_name", (program_title, year_str))
+                    # Scope matches the counts on this page: every active enrollee PLUS anyone
+                    # already holding a section (their seat is counted either way).
+                    cursor.execute("""
+                        SELECT applicant_id FROM applicants
+                        WHERE program_choice = %s AND enrollment_year_level = %s
+                          AND (application_status IN ('Enrolling', 'Enrolled', 'Eligible for Enrollment')
+                               OR section_id IS NOT NULL)
+                        ORDER BY last_name, applicant_id
+                    """, (program_title, year_str))
                     all_students = cursor.fetchall()
-                    if sections and all_students:
+
+                    if not sections:
+                        flash("No active sections to distribute into.", "warning")
+                    elif not all_students:
+                        flash("No students to distribute for this year level.", "warning")
+                    else:
                         base_count = len(all_students) // len(sections)
                         remainder = len(all_students) % len(sections)
                         idx = 0
+                        placed = 0
+                        overflow = 0
                         for i, sec in enumerate(sections):
                             target = base_count + (1 if i < remainder else 0)
+                            target = min(target, sec['max_students'])
                             for _ in range(target):
                                 if idx < len(all_students):
-                                    cursor.execute("UPDATE applicants SET section_id = %s WHERE applicant_id = %s", (sec['id'], all_students[idx]['applicant_id']))
+                                    cursor.execute("UPDATE applicants SET section_id = %s, is_section_permanent = TRUE WHERE applicant_id = %s", (sec['id'], all_students[idx]['applicant_id']))
                                     idx += 1
-                    conn.commit()
-                    flash("Students distributed equally.", "success")
+                                    placed += 1
+                        # More students than seats: fill whatever space is left anywhere.
+                        while idx < len(all_students):
+                            sid = all_students[idx]['applicant_id']
+                            idx += 1
+                            for sec in sections:
+                                cursor.execute("SELECT COUNT(*) AS count FROM applicants WHERE section_id = %s", (sec['id'],))
+                                if cursor.fetchone()['count'] < sec['max_students']:
+                                    cursor.execute("UPDATE applicants SET section_id = %s, is_section_permanent = TRUE WHERE applicant_id = %s", (sec['id'], sid))
+                                    placed += 1
+                                    break
+                            else:
+                                overflow += 1
+
+                        conn.commit()
+                        flash(f"Students distributed equally across {len(sections)} sections ({placed} placed).", "success")
+                        if overflow:
+                            flash(f"{overflow} student(s) left unassigned - all sections are full.", "warning")
             
             return redirect(url_for('auth.admin_manage_sections'))
 
@@ -9747,14 +9927,24 @@ def submit_enrollment(applicant_id):
         if manual_section_id and student_type_val == 'old':
             section_id_to_update = manual_section_id
             is_permanent = True 
-        elif student_type_val == 'new' and year_level == '1st Year':
+        elif program_choice and year_level:
+            # AUTO-PLACE anyone who still has no section: 1A fills first, then 1B, 1C...
+            # Students who already hold a section keep it (a re-submit after "Equalize"
+            # must not drag them back into section A), unless they shifted programs.
             cursor.execute("SELECT program_id FROM programs WHERE title = %s", (program_choice,))
             prog_res = cursor.fetchone()
             if prog_res:
                 program_code = prog_res['program_id']
-                section_id_to_update = _assign_section_automatically(cursor, applicant_id, program_code, year_level)
-                if section_id_to_update:
-                    is_permanent = True
+                keep_existing = False
+                if application.get('section_id'):
+                    cursor.execute("SELECT program_id FROM sections WHERE id = %s", (application['section_id'],))
+                    sec_res = cursor.fetchone()
+                    keep_existing = bool(sec_res and str(sec_res['program_id']) == str(program_code))
+
+                if not keep_existing:
+                    section_id_to_update = _assign_section_automatically(cursor, applicant_id, program_code, year_level)
+                    if section_id_to_update:
+                        is_permanent = True
 
         # --- 4. CORE FIELDS (Existing) ---
         update_clauses.extend([
@@ -9781,10 +9971,25 @@ def submit_enrollment(applicant_id):
         
         update_cursor = conn.cursor()
         update_cursor.execute(query, tuple(update_values))
+
+        # --- 6. PERMANENT STUDENT ID (NEW STUDENTS) ---
+        # A00006 -> P202600363 as soon as the new student enrolls.
+        # Skipped when a P-ID already exists, so re-submits / admin approval stay safe.
+        new_permanent_id = _assign_permanent_student_id(cursor, applicant_id, student_type_val)
+        generated_id_msg = f" Your Student ID: {new_permanent_id}." if new_permanent_id else ""
+
+        # --- 7. AUTO BALANCE FROM BATCH ASSESSMENT MANAGEMENT ---
+        # Re-reads the saved record (new year level / semester / program) and appends
+        # every matching batch assessment to the student's ledger. Idempotent.
+        cursor.execute("SELECT * FROM applicants WHERE applicant_id = %s", (applicant_id,))
+        updated_student = cursor.fetchone()
+        fees_added = _auto_assign_fees(cursor, applicant_id, updated_student) if updated_student else 0
+
         conn.commit()
         update_cursor.close()
 
-        flash("✅ Enrollment and Inventory submitted successfully!", "success")
+        flash(f"✅ Enrollment and Inventory submitted successfully!{generated_id_msg}"
+              f" {fees_added} fee(s) added to your balance.", "success")
         return redirect(url_for('views.application_status_page'))
 
     except Exception as e:
@@ -9849,6 +10054,14 @@ def submit_re_enrollment(applicant_id):
                     if match: final_section_id = match['id']
 
         # 1. Update Database (New Level and Status: Enrolling)
+        # No section to roll over (shifter, or the next-year section does not exist
+        # yet) -> place them straight into the first section that still has space.
+        if final_section_id is None and final_year:
+            cursor.execute("SELECT program_id FROM programs WHERE title = %s", (final_program,))
+            prog_row = cursor.fetchone()
+            if prog_row:
+                final_section_id = _assign_section_automatically(cursor, applicant_id, prog_row['program_id'], final_year)
+
         cursor.execute("""
             UPDATE applicants SET
                 program_choice = %s,
@@ -10021,22 +10234,14 @@ def admin_update_application_status(applicant_id):
 
         # MODIFIED: When finalizing as Enrolled, assign a permanent 'P' ID to New students
         # who are still using a temporary admission 'A' ID (mirrors the enrollment approve flow).
+        fees_added = 0
+        new_permanent_id = ''
         if new_status == 'Enrolled':
-            cursor.execute("SELECT enrollment_student_type, old_student_id, control_number FROM applicants WHERE applicant_id = %s", (applicant_id,))
-            stu = cursor.fetchone()
-            if stu and str(stu.get('enrollment_student_type')).capitalize() == 'New':
-                current_id = str(stu.get('old_student_id') or stu.get('control_number') or "")
-                if not current_id.startswith('P'):
-                    new_permanent_id = _generate_student_id(cursor)
-                    cursor.execute("UPDATE applicants SET old_student_id = %s, control_number = %s WHERE applicant_id = %s", 
-                                   (new_permanent_id, new_permanent_id, applicant_id))
-                    if app_info.get('student_user_id'):
-                        cursor.execute("UPDATE student_users SET old_student_id = %s WHERE id = %s", 
-                                       (new_permanent_id, app_info['student_user_id']))
-                    msg = f"Action processed for {new_permanent_id}: Status set to {new_status}."
-                    if new_permit_control_no_generated_flag:
-                        msg += f" Permit Control No. {generated_permit_control_no} assigned."
-                    msg += f" Permanent Student ID: {new_permanent_id} assigned."
+            # A00006 -> P202600363 for new students reaching 'Enrolled'
+            new_permanent_id = _assign_permanent_student_id(cursor, applicant_id)
+
+            # AUTO COUNT BALANCE: reaching 'Enrolled' triggers the fee ledger count.
+            fees_added = _ensure_enrolled_balance(cursor, applicant_id)
 
         conn.commit()
         update_cursor.close()
@@ -10065,19 +10270,24 @@ def admin_update_application_status(applicant_id):
                 app_info.get('program_choice'), 
                 current_exam_status,
                 permit_details=permit_details_for_email,
-                old_student_id=app_info.get('old_student_id'),
-                control_number=app_info.get('control_number'),
+                old_student_id=new_permanent_id or app_info.get('old_student_id'),
+                control_number=new_permanent_id or app_info.get('control_number'),
                 academic_year=app_info.get('academic_year')
             )
         
         # MODIFIED: Updated ID formatting logic
-        old_student_id = app_info.get('old_student_id')
-        control_number = app_info.get('control_number')
+        old_student_id = new_permanent_id or app_info.get('old_student_id')
+        control_number = new_permanent_id or app_info.get('control_number')
         display_id = old_student_id or control_number or f"App #{applicant_id}"
         msg = f"Action processed for {display_id}: Status set to {new_status}."
+        if new_permanent_id:
+            msg += f" Permanent Student ID: {new_permanent_id} assigned."
 
         if new_permit_control_no_generated_flag:
              msg += f" Permit Control No. {generated_permit_control_no} assigned."
+
+        if new_status == 'Enrolled':
+            msg += f" {fees_added} new assessment(s) added to balance." if fees_added > 0 else " Balance counted from ledger."
         
         if new_status in ['Approved', 'Scheduled', 'Rejected', 'Passed', 'Failed', 'Dropped', 'Enrolled', 'Not Enrolled']:
              msg += " Notification email sent." if email_sent else " Notification email failed to send."
@@ -10235,6 +10445,14 @@ def admin_bulk_update_status():
             sql_query = f"UPDATE applicants SET {', '.join(sql_parts)} WHERE applicant_id IN ({id_placeholders})"
             params.extend(ids)
             cursor.execute(sql_query, tuple(params))
+
+            # NEW STUDENT ID + AUTO COUNT BALANCE: every student moved to 'Enrolled'
+            # gets a permanent 'P' ID (A00006 -> P202600363) and the fee ledger
+            # counted automatically (duplicate fees are skipped).
+            if action == 'Enrolled':
+                for aid in ids:
+                    _assign_permanent_student_id(cursor, aid)
+                    _ensure_enrolled_balance(cursor, aid)
 
         elif action_type == 'exam_status':
             valid_exam_statuses = ['Passed', 'Failed', 'Not Taken']
