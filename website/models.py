@@ -255,6 +255,16 @@ class User(UserMixin, db.Model):
     contact_number = db.Column(db.String(20))
     department = db.Column(db.String(100))
 
+    # Identity is unified here: deans/teachers and admission/grading staff all
+    # live in `users`.  `system` says which portal an account belongs to
+    # ('faculty', 'grading' or 'admission'); the two login pages stay separate.
+    system = db.Column(db.String(20), nullable=False, default='faculty')
+    can_edit = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+    # Legacy credential kept when a merged account had a different password in
+    # the old system_users table, so both existing passwords keep working.
+    password_hash_alt = db.Column(db.String(256))
+
     baccalaureate_degree = db.Column(db.String(150))
     baccalaureate_year_grad = db.Column(db.Integer)
     highest_edu_attainment = db.Column(db.String(150))
@@ -276,9 +286,27 @@ class User(UserMixin, db.Model):
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
+        self.password_hash_alt = None
 
     def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
+        for stored in (self.password_hash, self.password_hash_alt):
+            if not stored:
+                continue
+            try:
+                if check_password_hash(stored, password):
+                    return True
+            except (ValueError, TypeError):
+                continue
+        return False
+
+    @property
+    def name(self):
+        # Templates written against the old SystemUser model read ``.name``.
+        return self.full_name
+
+    @property
+    def is_approved(self):
+        return True
 
     def generate_otp(self):
         self.otp = str(random.randint(100000, 999999))
@@ -311,13 +339,18 @@ class User(UserMixin, db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    user = User.query.get(int(user_id))
-    if user:
-        return user
-    return SystemUser.query.get(int(user_id))
+    # Single identity table: no more "users first, then system_users" fallback,
+    # which used to resolve system_users.id=1 to users.id=1 (the wrong person).
+    return User.query.get(int(user_id))
 
 
 class SystemUser(UserMixin, db.Model):
+    """Deprecated: accounts now live in `users`.
+
+    Kept only so the pre-migration `system_users` table still maps during a
+    rollback. Nothing in the app should create or query this model any more.
+    """
+
     __tablename__ = 'system_users'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -872,7 +905,7 @@ class FacultyAssignment(db.Model):
     __tablename__ = 'faculty_assignments'
 
     id = db.Column(db.Integer, primary_key=True)
-    faculty_id = db.Column(db.Integer, db.ForeignKey('system_users.id'), nullable=False)
+    faculty_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
     section_id = db.Column(db.Integer, db.ForeignKey('sections.id'), nullable=False)
 
@@ -895,7 +928,7 @@ class FacultyAssignment(db.Model):
     f_max_act4 = db.Column(db.Integer, default=0); f_max_act5 = db.Column(db.Integer, default=0)
     f_max_exam = db.Column(db.Integer, default=100)
 
-    faculty = db.relationship('SystemUser', backref='assignments')
+    faculty = db.relationship('User', backref='assignments')
     subject = db.relationship('Subject', backref='assignments')
     section = db.relationship('Section', backref='assignments')
 
@@ -919,7 +952,7 @@ class Grade(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('applicants.applicant_id'), nullable=False)
     subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
-    faculty_id = db.Column(db.Integer, db.ForeignKey('system_users.id'), nullable=False)
+    faculty_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     p_q1 = db.Column(db.Float, default=0); p_q2 = db.Column(db.Float, default=0); p_q3 = db.Column(db.Float, default=0)
     p_q4 = db.Column(db.Float, default=0); p_q5 = db.Column(db.Float, default=0)
@@ -946,7 +979,7 @@ class Grade(db.Model):
 
     student = db.relationship('Applicant', backref=db.backref('grades', lazy=True))
     subject = db.relationship('Subject', backref=db.backref('grades', lazy=True))
-    faculty = db.relationship('SystemUser', backref=db.backref('grades', lazy=True))
+    faculty = db.relationship('User', backref=db.backref('grades', lazy=True))
 
     @property
     def p_quiz_total(self): return (self.p_q1 or 0) + (self.p_q2 or 0) + (self.p_q3 or 0) + (self.p_q4 or 0) + (self.p_q5 or 0)

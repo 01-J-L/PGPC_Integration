@@ -1,9 +1,9 @@
 # app/main/routes.py
 
-from flask import Blueprint, render_template, flash, redirect, url_for, jsonify, request, session, get_flashed_messages, current_app
-from flask_login import login_required, login_user, logout_user, current_user
+from flask import Blueprint, render_template, flash, redirect, url_for, jsonify, request, session, current_app
+from flask_login import login_required, logout_user, current_user
 from website import db, mail
-from website.faculty.models import User, TeachingLoad, Program, Course, TimeSlot, SubstitutionRequest, Notification, SystemSetting, Section, Room, ProgramCourse, Subject
+from website.faculty.models import User, TeachingLoad, Program, Course, TimeSlot, SubstitutionRequest, Notification, SystemSetting, Section, Room, ProgramCourse, Subject, FacultyAssignment, Applicant, Grade, GradingSettings
 from website.faculty.auth.forms import AdminAddUserForm, UserFilterForm
 
 from website.faculty.main.forms import ScheduleForm, DeleteScheduleForm, AddTimeSlotForm, SubstitutionRequestForm, SystemSettingsForm, EditProfileForm, ProgramForm, FileUploadForm, SchoolYearAnalyticsForm, SectionGridScheduleForm, EditScheduleForm, CourseForm, CreateSectionForm, DeleteSectionForm, RoomForm, UpdateRateForm, UploadProofForm
@@ -18,7 +18,6 @@ import json
 from flask import send_file, send_from_directory
 import io
 import re
-from itertools import groupby
 import os
 from werkzeug.utils import secure_filename
 
@@ -51,6 +50,16 @@ def is_faculty_admin():
 
 def can_manage_faculty_system():
     return current_user.is_authenticated and current_user.role in FACULTY_MANAGER_ROLES
+
+
+def _natural_sort_key(value):
+    """Split text/number pairs so 'Room 10' sorts after 'Room 9'."""
+    return [int(part) if part.isdigit() else part.lower() for part in re.split(r'([0-9]+)', str(value))]
+
+
+def _fix_time(t):
+    """Treat midnight as 12:00 (end-of-day) instead of 00:00 on schedule grids."""
+    return t.replace(hour=12) if t.hour == 0 else t
 
 
 def get_faculty_program_scope():
@@ -185,13 +194,6 @@ def dashboard():
     if can_manage_faculty_system():
         filter_form = UserFilterForm(request.args)
         
-        # ... (Keep your existing Dean Logic exactly as it is - omitted for brevity) ...
-        # ... (COPY EVERYTHING from your current dashboard function between here and render_template) ...
-        
-        # Dean Data Gathering (Paste your existing code back here if you overwrote it, 
-        # or just ensure the variable 'expiration_alert' is passed below)
-        
-        # --- RE-ADDING THE DEAN LOGIC FOR CONTEXT (In case you need it) ---
         allowed_program_codes = get_faculty_program_scope()
 
         department_choices = [('', 'All Departments' if is_faculty_admin() else 'All My Departments')]
@@ -1129,10 +1131,9 @@ def section_schedule_grid(program_id, section_name, semester):
     print_grid_data = []
     if schedules:
         time_points = set()
-        def fix_time(t): return t.replace(hour=12) if t.hour == 0 else t
         for s in schedules:
-            time_points.add(fix_time(s.time_start))
-            time_points.add(fix_time(s.time_end))
+            time_points.add(_fix_time(s.time_start))
+            time_points.add(_fix_time(s.time_end))
         sorted_times = sorted(list(time_points))
         for i in range(len(sorted_times) - 1):
             start = sorted_times[i]
@@ -1144,7 +1145,7 @@ def section_schedule_grid(program_id, section_name, semester):
                 active_sched = None
                 for s in schedules:
                     if s.day == day:
-                        if fix_time(s.time_start) <= start and fix_time(s.time_end) >= end:
+                        if _fix_time(s.time_start) <= start and _fix_time(s.time_end) >= end:
                             active_sched = s; break
                 row_days.append(active_sched)
                 if active_sched: has_data = True
@@ -1345,11 +1346,10 @@ def my_schedule():
         if not schedules: return []
         
         time_points = set()
-        def fix_time(t): return t.replace(hour=12) if t.hour == 0 else t
         
         for s in schedules:
-            time_points.add(fix_time(s.time_start))
-            time_points.add(fix_time(s.time_end))
+            time_points.add(_fix_time(s.time_start))
+            time_points.add(_fix_time(s.time_end))
             
         sorted_times = sorted(list(time_points))
         grid = []
@@ -1365,7 +1365,7 @@ def my_schedule():
                 active_sched = None
                 for s in schedules:
                     if s.day == day:
-                        if fix_time(s.time_start) <= start and fix_time(s.time_end) >= end:
+                        if _fix_time(s.time_start) <= start and _fix_time(s.time_end) >= end:
                             active_sched = s; break
                 row_days.append(active_sched)
                 if active_sched: has_data = True
@@ -1539,7 +1539,11 @@ def pending_approvals():
     if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
-    pending_list = User.query.filter_by(status='pending').all()
+    # Two ways an account can await approval: registration left it 'pending',
+    # or a legacy grading account was created without edit rights.
+    pending_list = User.query.filter(
+        db.or_(User.status == 'pending', User.can_edit.is_(False))
+    ).order_by(User.full_name).all()
     return render_template('faculty/approvals.html', title='Pending Approvals', pending_list=pending_list)
 
 @main.route('/approve/<int:user_id>', methods=['POST'])
@@ -1549,6 +1553,7 @@ def approve_faculty(user_id):
         return redirect(url_for('faculty_main.dashboard'))
     user_to_approve = User.query.get_or_404(user_id)
     user_to_approve.status = 'active'
+    user_to_approve.can_edit = True
     db.session.commit()
     flash(f'Faculty member "{user_to_approve.full_name}" has been approved.', 'success')
     return redirect(url_for('faculty_main.pending_approvals'))
@@ -2851,11 +2856,23 @@ def delete_section(section_id):
 
     if has_loads:
         flash(f'Cannot delete section "{full_section_name}" because it has classes scheduled. Please remove them from the schedule grid first.', 'error')
+    elif Applicant.query.filter_by(section_id=section_to_delete.id).count() > 0:
+        flash(f'Cannot delete section "{full_section_name}" because it still has students assigned. Move them to another section first.', 'error')
     else:
-        db.session.delete(section_to_delete)
-        db.session.commit()
-        flash(f'Section "{full_section_name}" has been deleted successfully.', 'success')
-        
+        try:
+            # faculty_assignments.section_id is NOT NULL, so the assignments cannot
+            # simply be detached. Deleting them explicitly avoids the IntegrityError
+            # ("Column 'section_id' cannot be null") that SQLAlchemy throws when it
+            # tries to NULL the FK while flushing the section delete.
+            FacultyAssignment.query.filter_by(section_id=section_to_delete.id).delete(synchronize_session=False)
+            db.session.delete(section_to_delete)
+            db.session.commit()
+            flash(f'Section "{full_section_name}" has been deleted successfully.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.exception('Failed to delete section %s', section_id)
+            flash(f'Could not delete section "{full_section_name}": {e}', 'error')
+
     return redirect(url_for('faculty_main.manage_section_schedule_hub'))
 
 @main.route('/download-curriculum-template')
@@ -2897,11 +2914,8 @@ def get_sections(program_id, semester):
         })
 
     # 2. Natural Sort
-    def natural_sort_key(s):
-        return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s['text'])]
-    
     try:
-        valid_sections.sort(key=natural_sort_key)
+        valid_sections.sort(key=lambda s: _natural_sort_key(s['text']))
     except:
         valid_sections.sort(key=lambda x: x['text'])
     
@@ -2931,12 +2945,8 @@ def manage_rooms():
     # 1. Fetch all rooms unsorted
     rooms_raw = Room.query.all()
 
-    # 2. Define a helper to split text and numbers (e.g., "Room 10" -> ["Room ", 10])
-    def natural_sort_key(r):
-        return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', r.room_name)]
-
-    # 3. Sort the list using the helper
-    rooms = sorted(rooms_raw, key=natural_sort_key)
+    # 2. Sort the list naturally (e.g., "Room 10" after "Room 9")
+    rooms = sorted(rooms_raw, key=lambda r: _natural_sort_key(r.room_name))
     # ----------------------------------
 
     return render_template('faculty/manage_rooms.html', title='Manage Rooms', form=form, rooms=rooms)
@@ -2963,195 +2973,6 @@ def delete_room(room_id):
     flash('Room deleted successfully.', 'success')
     return redirect(url_for('faculty_main.manage_rooms'))
 
-
-@main.route('/debug/schedule/<int:faculty_id>')
-@login_required
-def debug_schedule(faculty_id):
-    # 1. Get the faculty member
-    faculty = User.query.get_or_404(faculty_id)
-    
-    # 2. Get ALL schedules for them (ignoring filters)
-    all_loads = TeachingLoad.query.filter_by(user_id=faculty_id).all()
-    
-    # 3. Simple HTML to view and delete
-    html = f"""
-    <style>
-        body {{ font-family: sans-serif; padding: 20px; }}
-        table {{ border-collapse: collapse; width: 100%; }} 
-        th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; }} 
-        .btn {{ background: red; color: white; padding: 5px 10px; text-decoration: none; border-radius: 4px; cursor: pointer; border: none; }}
-        .header {{ display: flex; justify-content: space-between; align-items: center; }}
-    </style>
-    <div class="header">
-        <h1>Raw Schedule: {faculty.full_name}</h1>
-        <a href="/schedule-grid/{faculty_id}/sem/1" style="color: blue;">Back to Grid</a>
-    </div>
-    <p>Use this to find "Ghost Classes" that conflict but don't show on the grid.</p>
-    <table>
-        <tr>
-            <th>ID</th>
-            <th>Course</th>
-            <th>Section</th>
-            <th>Day</th>
-            <th>Time</th>
-            <th>Sem</th>
-            <th>School Year</th>
-            <th>Action</th>
-        </tr>
-    """
-    
-    for load in all_loads:
-        # Find associated course details if possible
-        course = Course.query.filter_by(course_code=load.course_code).first()
-        sem = course.semester if course else "Unknown"
-        
-        # Formatting time safely
-        t_start = load.time_start.strftime('%I:%M %p') if load.time_start else "None"
-        t_end = load.time_end.strftime('%I:%M %p') if load.time_end else "None"
-
-        # UPDATED: Point to the new debug delete route
-        delete_btn = f"""
-        <form action="/debug/delete-load/{load.id}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this?');">
-            <button type="submit" class="btn">Delete</button>
-        </form>
-        """
-
-        html += f"""
-        <tr>
-            <td>{load.id}</td>
-            <td>{load.course_code}</td>
-            <td>{load.section}</td>
-            <td><strong>{load.day}</strong></td>
-            <td><strong>{t_start} - {t_end}</strong></td>
-            <td>{sem}</td>
-            <td>{load.school_year}</td>
-            <td>{delete_btn}</td>
-        </tr>
-        """
-    
-    html += "</table>"
-    return html
-
-@main.route('/debug/delete-load/<int:load_id>', methods=['POST'])
-@login_required
-def debug_delete_load(load_id):
-    # Security check: Only Deans can do this
-    if current_user.role not in ('dean', 'admin', 'superadmin'):
-        return "Access Denied", 403
-    
-    # Find and delete the specific schedule item
-    load = TeachingLoad.query.get_or_404(load_id)
-    faculty_id = load.user_id
-    
-    db.session.delete(load)
-    db.session.commit()
-    
-    # Go back to the list
-    return redirect(url_for('faculty_main.debug_schedule', faculty_id=faculty_id))
-
-@main.route('/debug/school-years')
-@login_required
-def debug_school_years_raw():
-    if current_user.role not in ('dean', 'admin', 'superadmin'):
-        return "Access Denied", 403
-
-    # 1. Get all sources of years
-    # A. History Setting
-    history_setting = SystemSetting.query.filter_by(key='school_year_history').first()
-    history_list = json.loads(history_setting.value) if history_setting and history_setting.value else []
-    
-    # B. Active Setting
-    active_setting = SystemSetting.query.filter_by(key='school_year').first()
-    active_year = active_setting.value if active_setting else "None"
-
-    # C. Actual Database Usage
-    tl_years = [r[0] for r in db.session.query(TeachingLoad.school_year).distinct().all() if r[0]]
-    sec_years = [r[0] for r in db.session.query(Section.school_year).distinct().all() if r[0]]
-
-    # Combine unique years
-    all_years = sorted(list(set(history_list + tl_years + sec_years)), reverse=True)
-
-    # 2. Build Raw HTML
-    html = f"""
-    <style>
-        body {{ font-family: sans-serif; padding: 20px; }}
-        table {{ border-collapse: collapse; width: 100%; }} 
-        th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; }} 
-        .btn {{ background: red; color: white; padding: 5px 10px; text-decoration: none; border-radius: 4px; cursor: pointer; border: none; }}
-        .active {{ color: green; font-weight: bold; }}
-        .header {{ display: flex; justify-content: space-between; align-items: center; }}
-    </style>
-    <div class="header">
-        <h1>School Year Debugger</h1>
-        <a href="/system-settings" style="color: blue;">Back to Settings</a>
-    </div>
-    <p><strong>Current Active Year:</strong> {active_year}</p>
-    <table>
-        <tr>
-            <th>School Year</th>
-            <th>In Dropdown List?</th>
-            <th>Schedules Count</th>
-            <th>Sections Count</th>
-            <th>Action</th>
-        </tr>
-    """
-
-    for year in all_years:
-        in_history = "Yes" if year in history_list else "No"
-        count_sched = TeachingLoad.query.filter_by(school_year=year).count()
-        count_sec = Section.query.filter_by(school_year=year).count()
-        
-        is_active_label = " (Active)" if year == active_year else ""
-
-        delete_btn = f"""
-        <form action="/debug/delete-year-raw" method="POST" style="display:inline;" onsubmit="return confirm('WARNING: deleting {year} will wipe ALL schedules and sections for that year. Continue?');">
-            <input type="hidden" name="year" value="{year}">
-            <button type="submit" class="btn">Delete</button>
-        </form>
-        """
-
-        html += f"""
-        <tr>
-            <td><strong>{year}</strong>{is_active_label}</td>
-            <td>{in_history}</td>
-            <td>{count_sched}</td>
-            <td>{count_sec}</td>
-            <td>{delete_btn}</td>
-        </tr>
-        """
-    
-    html += "</table>"
-    return html
-
-@main.route('/debug/delete-year-raw', methods=['POST'])
-@login_required
-def debug_delete_year_raw():
-    if current_user.role not in ('dean', 'admin', 'superadmin'): return "Access Denied", 403
-    
-    target_year = request.form.get('year')
-    if not target_year: return "No year specified"
-
-    # 1. Delete Actual Data
-    TeachingLoad.query.filter_by(school_year=target_year).delete()
-    Section.query.filter_by(school_year=target_year).delete()
-
-    # 2. Remove from History List
-    history_setting = SystemSetting.query.filter_by(key='school_year_history').first()
-    if history_setting and history_setting.value:
-        try:
-            history_list = json.loads(history_setting.value)
-            if target_year in history_list:
-                history_list.remove(target_year)
-                history_setting.value = json.dumps(history_list)
-        except: pass
-
-    # 3. Reset Active if it matches
-    active_setting = SystemSetting.query.filter_by(key='school_year').first()
-    if active_setting and active_setting.value == target_year:
-        active_setting.value = ""
-
-    db.session.commit()
-    return redirect('/debug/school-years')
 
 @main.route('/reset-slots')
 @login_required
@@ -3597,7 +3418,13 @@ def delete_user(user_id):
     #     return redirect(url_for('faculty_main.user_management'))
 
     try:
-        # 3. Delete the user
+        # 3. Remove the rows that reference this user directly. Faculty
+        # assignments and grades have no ON DELETE CASCADE, so they must go
+        # first or the delete fails.
+        FacultyAssignment.query.filter_by(faculty_id=user_id).delete()
+        Grade.query.filter_by(faculty_id=user_id).delete()
+
+        # 4. Delete the user
         # Note: Because of cascading rules in models.py, this should also 
         # delete their teaching loads and schedules automatically.
         db.session.delete(user_to_delete)
@@ -3613,10 +3440,6 @@ def delete_user(user_id):
 # GRADING SYSTEM (merged from grading blueprint)
 # ===========================================================================
 
-import json
-from collections import defaultdict
-from werkzeug.security import generate_password_hash
-from website.models import SystemUser, Grade, FacultyAssignment, GradingSettings, Applicant
 
 
 def grading_check_prerequisites(student_id, subject_id):
@@ -3664,25 +3487,14 @@ def grading_admin_required(f):
 
 
 def grading_faculty_id():
-    """system_users.id of the logged-in faculty member.
+    """id of the logged-in faculty member for grading queries.
 
-    Faculty sign in with their faculty-system account (users table), but grades
-    and class assignments are keyed by system_users.id (the grading account the
-    admin assigns subjects to). Resolve the twin account by e-mail, then
-    username, then full name, so the two logins see the same classes.
+    Grades and class assignments are keyed by this id. Identity is now a single
+    `users` row, so there is no twin account to resolve any more.
     """
     user = current_user
     if not user.is_authenticated:
         return None
-    if isinstance(user, SystemUser):
-        return user.id
-    for attr in ('email', 'username', 'full_name'):
-        value = getattr(user, attr, None)
-        if not value:
-            continue
-        match = SystemUser.query.filter_by(**{attr: value}).first()
-        if match:
-            return match.id
     return user.id
 
 
@@ -3729,15 +3541,6 @@ def grading_logout():
             return redirect(url_for('faculty_auth.login'))
         return f(*args, **kwargs)
     return decorated_function
-
-
-# ---------------------------------------------------------------------------
-# Authentication Routes (unified - uses /admin-load login)
-# ---------------------------------------------------------------------------
-
-@main.route("/")
-def grading_home():
-    return redirect(url_for('faculty_auth.login'))
 
 
 # ---------------------------------------------------------------------------
@@ -3793,8 +3596,8 @@ def grading_admin_maintenance():
 def grading_admin_dashboard():
     scope = grading_get_admin_program_scope()
 
-    pending_approvals = SystemUser.query.filter_by(role='faculty', can_edit=False).count()
-    faculty_count = SystemUser.query.filter_by(role='faculty', can_edit=True).count()
+    pending_approvals = User.query.filter_by(role='faculty', can_edit=False).count()
+    faculty_count = User.query.filter_by(role='faculty', can_edit=True).count()
 
     student_query = Applicant.query.join(Section).join(Program)
     if scope:
@@ -3869,23 +3672,9 @@ def grading_admin_dashboard():
 @login_required
 @grading_admin_required
 def grading_admin_approvals():
-    faculty_to_approve = SystemUser.query.filter_by(role='faculty', can_edit=False).all()
-    return render_template(
-        'grading/admin/approvals.html',
-        title='Faculty Approvals', faculty_list=faculty_to_approve,
-        active_nav='approvals'
-    )
-
-
-@main.route("/grading-admin/approve_faculty/<int:user_id>", methods=['POST'])
-@login_required
-@grading_admin_required
-def grading_approve_faculty(user_id):
-    user = SystemUser.query.get_or_404(user_id)
-    user.can_edit = True
-    db.session.commit()
-    flash(f'{user.full_name} has been approved as a faculty member.', 'success')
-    return redirect(url_for('faculty_main.grading_admin_approvals'))
+    # Phase 2: this screen duplicated the dean's approval queue once both
+    # portals shared the `users` table. The queue now lives in one place.
+    return redirect(url_for('faculty_main.pending_approvals'))
 
 
 @main.route("/grading-admin/student_records")
@@ -4043,67 +3832,24 @@ def grading_print_student_grades(student_id):
 @login_required
 @grading_admin_required
 def grading_admin_faculty_records():
-    dept_filter = request.args.get('department', '')
-    query = SystemUser.query.filter_by(role='faculty')
-    if dept_filter:
-        query = query.filter(SystemUser.department == dept_filter)
-    all_faculty = query.order_by(SystemUser.full_name).all()
-    programs = Program.query.order_by(Program.program_code).all()
-
-    return render_template(
-        'grading/admin/faculty_records.html',
-        title="Faculty Management", active_nav='faculty_records',
-        faculties=all_faculty, programs=programs, selected_dept=dept_filter
-    )
+    # Phase 2: folded into the dean's User Management screen (same `users` table).
+    return redirect(url_for('faculty_main.user_management'))
 
 
 @main.route("/grading-admin/add_faculty", methods=['GET', 'POST'])
 @login_required
 @grading_admin_required
 def grading_add_faculty():
-    if request.method == 'POST':
-        name = request.form.get('name', '').strip()
-        email = request.form.get('email', '').strip()
-        password = request.form.get('password', '')
-        faculty_type = request.form.get('faculty_type', 'minor')
-        program_id = request.form.get('program_id', '')
-
-        department_name = "General Education"
-        if faculty_type == 'major' and program_id:
-            program = Program.query.get(program_id)
-            if program:
-                department_name = program.program_code
-
-        base_username = (email or name).split('@')[0].lower()
-        username = base_username
-        suffix = 1
-        while SystemUser.query.filter_by(username=username).first():
-            username = f"{base_username}{suffix}"
-            suffix += 1
-
-        hashed = generate_password_hash(password)
-        new_faculty = SystemUser(
-            username=username, full_name=name, email=email,
-            password=hashed, role='faculty', can_edit=True,
-            department=department_name, system='grading'
-        )
-        db.session.add(new_faculty)
-        db.session.commit()
-        flash('Faculty member account created successfully.', 'success')
-        return redirect(url_for('faculty_main.grading_admin_faculty_records'))
-
-    programs = Program.query.order_by(Program.program_code).all()
-    return render_template(
-        'grading/admin/add_faculty.html',
-        title="Add Faculty", active_nav='faculty_records', programs=programs
-    )
+    # Phase 2: the dean's User Management form is the single place that creates
+    # faculty accounts (it already covers program/ expertise assignment).
+    return redirect(url_for('faculty_main.user_management'))
 
 
 @main.route("/grading-admin/faculty/<int:user_id>/assign", methods=['GET', 'POST'])
 @login_required
 @grading_admin_required
 def grading_admin_assign_loads(user_id):
-    faculty = SystemUser.query.get_or_404(user_id)
+    faculty = User.query.get_or_404(user_id)
 
     programs = Program.query.order_by(Program.program_code).all()
     program_choices = [('', 'Select Program')] + [(str(p.id), p.program_code) for p in programs]
@@ -4179,51 +3925,25 @@ def grading_remove_faculty_load(assignment_id):
 @login_required
 @grading_admin_required
 def grading_delete_faculty(user_id):
-    faculty_to_delete = SystemUser.query.get_or_404(user_id)
-    if faculty_to_delete.role != 'faculty':
-        flash('This user is not a faculty member.', 'danger')
-        return redirect(url_for('faculty_main.grading_admin_faculty_records'))
-
-    FacultyAssignment.query.filter_by(faculty_id=user_id).delete()
-    Grade.query.filter_by(faculty_id=user_id).delete()
-    db.session.delete(faculty_to_delete)
-    db.session.commit()
-    flash(f'Faculty member {faculty_to_delete.full_name} and all associated records deleted.', 'success')
-    return redirect(url_for('faculty_main.grading_admin_faculty_records'))
+    # Phase 2: one delete path - the dean's delete_user, which now removes the
+    # faculty's assignments and grades too.
+    return delete_user(user_id)
 
 
 @main.route("/grading-admin/programs")
 @login_required
 @grading_admin_required
 def grading_manage_programs():
-    programs = Program.query.order_by(Program.program_code).all()
-    return render_template(
-        'grading/admin/manage_programs.html',
-        title="Manage Programs", active_nav='programs', programs=programs
-    )
+    # Phase 2: folded into the dean's Manage Programs screen (same `programs` table).
+    return redirect(url_for('faculty_main.manage_programs'))
 
 
 @main.route("/grading-admin/programs/add", methods=['GET', 'POST'])
 @login_required
 @grading_admin_required
 def grading_add_program():
-    if request.method == 'POST':
-        code = request.form.get('code', '').strip().upper()
-        name = request.form.get('name', '').strip()
-        if not (code and name):
-            flash('Program code and name are required.', 'warning')
-        elif Program.query.filter_by(program_code=code).first():
-            flash(f'Program {code} already exists.', 'warning')
-        else:
-            program = Program(program_code=code, title=name, program_name=name)
-            db.session.add(program)
-            db.session.commit()
-            flash(f'Program {code} added successfully!', 'success')
-            return redirect(url_for('faculty_main.grading_manage_programs'))
-    return render_template(
-        'grading/admin/add_program.html',
-        title="Add Program", active_nav='programs'
-    )
+    # Phase 2: adding a program happens on the dean's Manage Programs screen.
+    return redirect(url_for('faculty_main.manage_programs'))
 
 
 @main.route("/grading-admin/programs/<program_id>")
@@ -4271,6 +3991,13 @@ def grading_add_subject(program_id):
 @login_required
 @grading_admin_required
 def grading_delete_program(program_id):
+    # Force-delete escape hatch: removes a program plus its subjects, sections,
+    # courses and grade records, which the dean's safe delete refuses to do.
+    # Restricted to the superadmin because it bypasses every safety check.
+    if current_user.role != 'superadmin':
+        flash('Only the superadministrator can force-delete a program.', 'danger')
+        return redirect(url_for('faculty_main.manage_programs'))
+
     program = Program.query.get_or_404(program_id)
     try:
         db.session.execute(text("""
@@ -4310,7 +4037,7 @@ def grading_delete_program(program_id):
     except Exception as e:
         db.session.rollback()
         flash(f'Could not delete program: {e}', 'danger')
-    return redirect(url_for('faculty_main.grading_manage_programs'))
+    return redirect(url_for('faculty_main.manage_programs'))
 
 
 @main.route("/grading-admin/delete_subject/<int:subject_id>", methods=['POST'])

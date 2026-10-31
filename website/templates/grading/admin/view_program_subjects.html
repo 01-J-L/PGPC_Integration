@@ -8,7 +8,7 @@
             <p class="text-xs sm:text-sm text-gray-500">{{ program.name }}</p>
         </div>
         <div class="flex space-x-2 w-full sm:w-auto">
-            <a href="{{ url_for('faculty_main.grading_manage_programs') }}" class="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md shadow-sm hover:bg-gray-50 transition flex items-center">
+            <a href="{{ url_for('faculty_main.manage_programs') }}" class="flex-1 sm:flex-none justify-center px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md shadow-sm hover:bg-gray-50 transition flex items-center">
                 Back
             </a>
             <a href="{{ url_for('faculty_main.grading_add_subject', program_id=program.id) }}" class="flex-[2] sm:flex-none justify-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-indigo-700 transition flex items-center text-center">

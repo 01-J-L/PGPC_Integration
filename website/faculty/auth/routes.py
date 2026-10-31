@@ -3,11 +3,10 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from website import db, mail
 from website.faculty.auth.forms import LoginForm, RegistrationForm, PasswordResetRequestForm, PasswordResetForm, VerifyOTPForm
-from website.faculty.models import User, SystemUser
+from website.faculty.models import User
 from flask_login import current_user, login_user, logout_user
 from flask_mail import Message
 import os
-from werkzeug.security import check_password_hash
 
 # Renamed blueprint to avoid conflict with Admission system
 auth = Blueprint('faculty_auth', __name__)
@@ -50,23 +49,11 @@ def login():
         login_identifier = form.email.data
         password = form.password.data
 
-        # 1. Try faculty/dean accounts from `users` table
+        # Single identity table: the account's `system` decides which portal
+        # it belongs to, but the credential check is the same everywhere.
         user = User.query.filter_by(email=login_identifier).first()
         if user is None:
             user = User.query.filter_by(username=login_identifier).first()
-
-        # 2. If not found, try grading admin accounts from `system_users` table
-        if user is None:
-            sys_user = SystemUser.query.filter_by(username=login_identifier).first()
-            if sys_user and check_password_hash(sys_user.password, password):
-                if sys_user.role in ('admin', 'superadmin'):
-                    login_user(sys_user)
-                    if sys_user.role == 'superadmin':
-                        return redirect(url_for('faculty_main.grading_admin_dashboard'))
-                    return redirect(url_for('faculty_main.grading_admin_dashboard'))
-                else:
-                    flash('This account does not have admin access.', 'error')
-                    return redirect(url_for('faculty_auth.login'))
 
         # FALLBACK / INITIAL SETUP (For first-time deployment)
         # Mirrors the admission system: the first dean account is bootstrapped
@@ -85,6 +72,7 @@ def login():
                     department=dean_spec['department'],
                     role='dean',
                     status='active',
+                    system='faculty',
                 )
                 dean.username = dean_username
                 dean.set_password(initial_dean_password)
@@ -97,11 +85,19 @@ def login():
         if user is None or not user.check_password(password):
             flash('Invalid credentials. Please check your email/username and password.', 'error')
             return redirect(url_for('faculty_auth.login'))
-        
+
+        # Portal separation: admission-side accounts use the other login page.
+        # The superadmin is the exception - it administers both systems.
+        if (user.system or 'faculty') == 'admission' and user.role != 'superadmin':
+            flash('That account belongs to the Admission system. Please log in at /admin_login.', 'error')
+            return redirect(url_for('faculty_auth.login'))
+
         if user.status == 'unverified':
             flash('Your account has not been verified. Please check your email.', 'error')
             return redirect(url_for('faculty_auth.login'))
         login_user(user, remember=form.remember_me.data)
+        if user.role in ('admin', 'superadmin'):
+            return redirect(url_for('faculty_main.grading_admin_dashboard'))
         return redirect(url_for('faculty_main.dashboard'))
     return render_template('faculty/login.html', title='Sign In', form=form)
 

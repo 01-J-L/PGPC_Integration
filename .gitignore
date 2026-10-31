@@ -21,3 +21,8 @@ instance/
 # --- Logs / Uploads ---
 *.log
 uploads/
+
+# --- Local database dumps / archives (never commit) ---
+backup*.sql
+*.zip
+/text.txt

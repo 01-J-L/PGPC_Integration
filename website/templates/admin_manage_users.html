@@ -352,8 +352,9 @@
         document.getElementById('editDepartment').value = department;
 
         const roleSelect = document.getElementById('editRole');
-        if (source === 'users') {
-            roleSelect.innerHTML = '<option value="dean">Dean</option>';
+        if (system === 'faculty') {
+            roleSelect.innerHTML = '<option value="dean">Dean</option>' +
+                '<option value="faculty">Faculty</option>';
         } else if (system === 'grading') {
             roleSelect.innerHTML = '<option value="admin">Admin</option>';
         } else {

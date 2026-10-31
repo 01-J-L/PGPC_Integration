@@ -30,12 +30,6 @@ class ScheduleForm(FlaskForm):
     submit = SubmitField('Add Schedule')
 
 
-class ManageSectionForm(FlaskForm):
-    program = QuerySelectField('Select Program', query_factory=program_query, get_label='program_name', allow_blank=True, blank_text='-- Select a Program --', validators=[DataRequired()])
-    section = StringField('Enter Section (e.g., 1A)', validators=[DataRequired()])
-    semester = SelectField('Select Semester', choices=[('1', '1st Semester'), ('2', '2nd Semester')], validators=[DataRequired()])
-    submit = SubmitField('Manage Schedule')
-
 class DeleteScheduleForm(FlaskForm):
     submit = SubmitField('Delete')
 

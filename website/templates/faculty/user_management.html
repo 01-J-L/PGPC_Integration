@@ -266,6 +266,14 @@
                             </span>
                         </td>
                         <td class="px-6 py-4 text-right text-sm font-medium flex justify-end items-center space-x-4">
+                            <!-- Assign teaching loads (subject + section) -->
+                            {% if user.role == 'faculty' %}
+                            <a href="{{ url_for('faculty_main.grading_admin_assign_loads', user_id=user.id) }}"
+                            class="text-emerald-600 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-300">
+                            Assign Loads
+                            </a>
+                            {% endif %}
+
                             <!-- View Link -->
                             <a href="{{ url_for('faculty_main.faculty_profile', user_id=user.id) }}" 
                             class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">

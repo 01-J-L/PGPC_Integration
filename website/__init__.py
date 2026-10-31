@@ -3,6 +3,7 @@ from flask_mail import Mail
 from flask_sqlalchemy import SQLAlchemy 
 from flask_login import LoginManager, current_user   
 from dotenv import load_dotenv
+from urllib.parse import quote_plus
 import os
 from flask import request, session, render_template
 
@@ -64,8 +65,11 @@ def create_app():
     db_host = os.environ.get('DB_HOST', 'localhost')
     db_port = os.environ.get('DB_PORT', '3306')
     db_name = os.environ.get('DB_NAME', 'expired')
+    # Credentials/DB name must be URL-encoded: characters like @ : / # in a
+    # password would otherwise be parsed as part of the host/path.
     app.config['SQLALCHEMY_DATABASE_URI'] = (
-        f'mysql+mysqlconnector://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
+        f'mysql+mysqlconnector://{quote_plus(db_user)}:{quote_plus(db_password)}'
+        f'@{db_host}:{db_port}/{quote_plus(db_name)}'
     )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False 
 
@@ -123,7 +127,7 @@ def create_app():
             if setting and setting.value == '1':
                 return render_template('maintenance.html'), 503
         except Exception as e:
-            print(f"⚠️ Maintenance check error: {e}")
+            print(f"[WARN] Maintenance check error: {e}")
         return
 
     @app.context_processor

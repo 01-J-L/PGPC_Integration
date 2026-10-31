@@ -82,10 +82,16 @@
                         <td class="px-6 py-4 text-right text-sm font-medium">
                             <div class="flex justify-end items-center space-x-4">
                                 <a href="{{ url_for('faculty_main.manage_program_courses', program_id=program.id) }}" class="text-green-600 dark:text-green-400 hover:underline">Courses</a>
+                                <a href="{{ url_for('faculty_main.grading_view_program_subjects', program_id=program.id) }}" class="text-sky-600 dark:text-sky-400 hover:underline">Subjects</a>
                                 <a href="{{ url_for('faculty_main.edit_program', program_id=program.id) }}" class="text-indigo-600 dark:text-indigo-400 hover:underline">Edit</a>
                                 <form action="{{ url_for('faculty_main.delete_program', program_id=program.id) }}" method="POST" onsubmit="return confirm('Are you sure? This can only be done if no courses are assigned to it.');">
                                     <button type="submit" class="text-rose-600 dark:text-rose-400 hover:underline">Delete</button>
                                 </form>
+                                {% if current_user.role == 'superadmin' %}
+                                <form action="{{ url_for('faculty_main.grading_delete_program', program_id=program.id) }}" method="POST" onsubmit="return confirm('FORCE DELETE: this removes the program along with its subjects, sections, courses and grade records. This cannot be undone. Continue?');">
+                                    <button type="submit" class="text-rose-800 dark:text-rose-300 hover:underline" title="Superadmin only: delete even if courses exist">Force Delete</button>
+                                </form>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
