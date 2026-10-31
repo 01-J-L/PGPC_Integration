@@ -3,7 +3,7 @@
 from flask import Blueprint, render_template, flash, redirect, url_for, jsonify, request, session, current_app
 from flask_login import login_required, logout_user, current_user
 from website import db, mail
-from website.faculty.models import User, TeachingLoad, Program, Course, TimeSlot, SubstitutionRequest, Notification, SystemSetting, Section, Room, ProgramCourse, Subject, FacultyAssignment, Applicant, Grade, GradingSettings
+from website.faculty.models import User, TeachingLoad, Program, Course, TimeSlot, SubstitutionRequest, Notification, SystemSetting, Section, Room, ProgramCourse, Subject, FacultyAssignment, Applicant, Grade
 from website.faculty.auth.forms import AdminAddUserForm, UserFilterForm
 
 from website.faculty.main.forms import ScheduleForm, DeleteScheduleForm, AddTimeSlotForm, SubstitutionRequestForm, SystemSettingsForm, EditProfileForm, ProgramForm, FileUploadForm, SchoolYearAnalyticsForm, SectionGridScheduleForm, EditScheduleForm, CourseForm, CreateSectionForm, DeleteSectionForm, RoomForm, UpdateRateForm, UploadProofForm
@@ -4056,24 +4056,12 @@ def grading_delete_subject(subject_id):
 @login_required
 @grading_admin_required
 def grading_settings():
-    system_settings = GradingSettings.query.first()
-    if not system_settings:
-        system_settings = GradingSettings(active_school_year='2024-2025', active_semester='1st Semester')
-        db.session.add(system_settings)
-        db.session.commit()
-
-    if request.method == 'POST':
-        system_settings.active_school_year = request.form.get('active_school_year', system_settings.active_school_year)
-        system_settings.active_semester = request.form.get('active_semester', system_settings.active_semester)
-        db.session.commit()
-        flash('System settings updated successfully.', 'success')
-        return redirect(url_for('faculty_main.grading_settings'))
-
-    return render_template(
-        'grading/admin/settings.html',
-        title="System Settings", active_nav='settings',
-        system_settings=system_settings
-    )
+    # The academic term is owned by /faculty/system-settings, which writes the
+    # `system_settings` keys the dashboard and scheduling actually read and
+    # keeps `academic_terms` / `grading_settings` in sync. This screen edited a
+    # second copy of the same two values and nothing read it back, so saving
+    # here silently reverted the real term.
+    return redirect(url_for('faculty_main.system_settings'))
 
 
 @main.route("/grading-admin/student_records/print")

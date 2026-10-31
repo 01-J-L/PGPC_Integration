@@ -55,7 +55,6 @@ PAGES = {
         "/faculty/grading-admin/faculty_records",
         "/faculty/grading-admin/approvals",
         "/faculty/grading-admin/programs",
-        "/faculty/grading-admin/settings",
     ],
     "sm_super": [
         "/faculty/grading-admin/maintenance",
@@ -72,6 +71,8 @@ REDIRECTS = {
         ("/faculty/grading-admin/approvals", "/faculty/approvals"),
         ("/faculty/grading-admin/programs", "/faculty/manage-programs"),
         ("/faculty/grading-admin/programs/add", "/faculty/manage-programs"),
+        # The academic term has one screen: /faculty/system-settings.
+        ("/faculty/grading-admin/settings", "/faculty/system-settings"),
     ],
 }
 
