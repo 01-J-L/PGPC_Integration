@@ -239,6 +239,10 @@ def scheduling_checks():
         sy = SystemSetting.query.filter_by(key="school_year").first()
         school_year = sy.value.strip() if sy and sy.value else None
         year = course.year if course else 1
+        course_id = course.id if course else None
+        teacher_id = teacher.id
+        rname = room.room_name if room else None
+        syv = school_year
         section_name = f"{year}Z"
         full_section = f"{program.program_code} {section_name}"
 
@@ -266,6 +270,11 @@ def scheduling_checks():
             check("availability URL resolves", b"/faculty/api/check-availability" in body)
             check("day is editable from both modals",
                   b'id="add_day"' in body and b'id="edit_day"' in body)
+            # hidden_tag() would render schedule_id a second time, and browsers
+            # submit the first (empty) value, so the edit was rejected.
+            id_inputs = body.count(b'name="schedule_id"')
+            check("edit form renders exactly one schedule_id input",
+                  id_inputs == 1, f"{id_inputs} inputs")
 
             if not (course and room and school_year):
                 print("   (no course/room/school year fixture, skipping the conflict checks)")
@@ -305,7 +314,59 @@ def scheduling_checks():
                 from website.faculty.models import TeachingLoad
                 created = TeachingLoad.query.filter_by(
                     section=full_section, day="Saturday").count()
+                fixture_id = TeachingLoad.query.filter_by(
+                    section=full_section, day="Saturday",
+                    time_start=dtime(8, 0)).first().id
             check("fixture + accepted class are both stored", created == 2, f"{created} rows")
+
+            # Round-trip an edit: same teacher/room, moved to a free slot.
+            # Find a day where neither the room nor the teacher is taken, so the
+            # assertion does not depend on the live timetable.
+            from sqlalchemy import or_
+            with app.app_context():
+                from website.faculty.models import TeachingLoad, Course as C
+                target = None
+                for candidate in ("Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"):
+                    clash = (TeachingLoad.query
+                             .join(C, TeachingLoad.course_code == C.course_code)
+                             .filter(C.semester == 1,
+                                     TeachingLoad.school_year == syv,
+                                     TeachingLoad.id != fixture_id,
+                                     TeachingLoad.day == candidate,
+                                     TeachingLoad.time_start < dtime(14, 0),
+                                     TeachingLoad.time_end > dtime(13, 0),
+                                     or_(TeachingLoad.room == rname,
+                                         TeachingLoad.user_id == teacher_id))
+                             .first())
+                    if not clash:
+                        target = candidate
+                        break
+            check("a free day was found for the edit", target is not None)
+
+            body = client.post(url, data={
+                "update_schedule_submit": "1", "schedule_id": str(fixture_id),
+                "day": target or "Saturday", "course": str(course_id),
+                "faculty": str(teacher_id),
+                "time_start": "13:00", "time_end": "14:00", "room": rname,
+            }, follow_redirects=True).data
+            check("editing a class is accepted", b"Schedule updated." in body)
+            with app.app_context():
+                from website.faculty.models import TeachingLoad
+                edited = db.session.get(TeachingLoad, fixture_id)
+                moved = (edited is not None and edited.day == (target or "Saturday")
+                         and edited.time_start == dtime(13, 0)
+                         and edited.time_end == dtime(14, 0))
+            check("the edit is persisted", moved)
+
+            # The edited row must now block its own slot.
+            body = client.post(url, data={
+                "update_schedule_submit": "1", "schedule_id": str(fixture_id),
+                "day": target or "Saturday", "course": str(course_id),
+                "faculty": str(teacher_id),
+                "time_start": "13:30", "time_end": "14:30", "room": rname,
+            }, follow_redirects=True).data
+            check("a clash on edit is still rejected",
+                  b"already has a class at that time" in body or b"is busy at that time" in body)
     finally:
         purge()
         print()

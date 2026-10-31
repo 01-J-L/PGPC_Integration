@@ -234,7 +234,9 @@
                 <div class="flex flex-col flex-grow overflow-hidden">
                     <div class="p-6 space-y-4 overflow-y-auto flex-grow">
                         <form method="POST" id="editScheduleForm" action="{{ url_for('faculty_main.section_schedule_grid', program_id=program.id, section_name=section_name, semester=semester) }}">
-                            {{ edit_form.hidden_tag() }}
+                            {# hidden_tag() would also render schedule_id, duplicating it
+                               and sending an empty first value; render only the token. #}
+                            {{ edit_form.csrf_token }}
                             <input type="hidden" name="update_schedule_submit" value="1">
                             {{ edit_form.schedule_id(id="edit_schedule_id") }}
 
