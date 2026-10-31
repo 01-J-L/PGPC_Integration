@@ -255,9 +255,10 @@ class User(UserMixin, db.Model):
     contact_number = db.Column(db.String(20))
     department = db.Column(db.String(100))
 
-    # Identity is unified here: deans/teachers and admission/grading staff all
-    # live in `users`.  `system` says which portal an account belongs to
-    # ('faculty', 'grading' or 'admission'); the two login pages stay separate.
+    # Identity is unified here: deans/teachers and admission staff all live in
+    # `users`.  `system` says which portal an account belongs to ('faculty' or
+    # 'admission'); the two login pages stay separate.  The deans also run the
+    # grading screens, so there is no separate grading administrator.
     system = db.Column(db.String(20), nullable=False, default='faculty')
     can_edit = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())

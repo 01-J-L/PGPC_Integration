@@ -40,7 +40,6 @@
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
                                 {% if user.system == 'admission' %}bg-indigo-100 text-indigo-800
-                                {% elif user.system == 'grading' %}bg-rose-100 text-rose-800
                                 {% else %}bg-emerald-100 text-emerald-800{% endif %}">
                                 {{ user.system|upper }}
                             </span>
@@ -97,9 +96,7 @@
                             </button>
 
                             <!-- Delete Button (Hidden for main Admin / Superadmin) -->
-                            {% if user.role == 'admin' and user.system != 'grading' %}
-                            <span class="text-gray-400 text-xs italic px-2">Protected</span>
-                            {% elif user.role == 'superadmin' %}
+                            {% if user.role in ['admin', 'superadmin'] %}
                             <span class="text-gray-400 text-xs italic px-2">Protected</span>
                             {% else %}
                             <form action="{{ url_for('auth.admin_delete_user', user_id=user.id) }}" method="POST"
@@ -130,7 +127,6 @@
                     <select name="system" id="addSystemSelect" required onchange="toggleAddSystem()"
                         class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
                         <option value="admission">Admission System</option>
-                        <option value="grading">Grading System</option>
                         <option value="faculty">Faculty System</option>
                     </select>
                 </div>
@@ -165,8 +161,6 @@
                         <option value="accounting">Accounting</option>
                         <option value="secretary">Secretary</option>
                         <optgroup label="Admin Accounts">
-                            <option value="ccba_grading_admin">CCBA Grading Admin</option>
-                            <option value="coc_grading_admin">COC Grading Admin</option>
                             <option value="ccba_admin">CCBA Admin</option>
                             <option value="coc_admin">COC Admin</option>
                         </optgroup>
@@ -293,16 +287,11 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     const ADMIN_ROLE_OPTIONS = '<optgroup label="Admin Accounts">' +
-        '<option value="ccba_grading_admin">CCBA Grading Admin</option>' +
-        '<option value="coc_grading_admin">COC Grading Admin</option>' +
         '<option value="ccba_admin">CCBA Admin</option>' +
         '<option value="coc_admin">COC Admin</option>' +
         '</optgroup>';
 
     function getAddBaseRoleOptions(system) {
-        if (system === 'grading') {
-            return '<option value="admin">Admin</option>';
-        }
         if (system === 'faculty') {
             return '<option value="dean">Dean</option>';
         }
@@ -333,9 +322,9 @@
         const deptField = document.getElementById('addDepartmentField');
         const deptSelect = document.getElementById('addDepartmentSelect');
 
-        const specialAdminRoles = ['ccba_grading_admin', 'coc_grading_admin', 'ccba_admin', 'coc_admin'];
+        const specialAdminRoles = ['ccba_admin', 'coc_admin'];
         const isSpecial = specialAdminRoles.includes(role);
-        const needsDept = !isSpecial && (system === 'grading' || system === 'faculty');
+        const needsDept = !isSpecial && system === 'faculty';
 
         emailField.style.display = (isSpecial || system !== 'admission') ? 'block' : 'none';
         deptField.style.display = needsDept ? 'block' : 'none';
@@ -355,8 +344,6 @@
         if (system === 'faculty') {
             roleSelect.innerHTML = '<option value="dean">Dean</option>' +
                 '<option value="faculty">Faculty</option>';
-        } else if (system === 'grading') {
-            roleSelect.innerHTML = '<option value="admin">Admin</option>';
         } else {
             roleSelect.innerHTML = '<option value="admin">Admin</option>' +
                 '<option value="registrar">Registrar</option>' +

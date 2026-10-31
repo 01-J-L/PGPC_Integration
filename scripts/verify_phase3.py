@@ -40,7 +40,15 @@ with app.app_context():
         print(f"   id={u.id:2d} {u.username:14s} role={u.role:10s} system={u.system:9s} "
               f"dept={u.department or '-':5s} status={u.status}")
 
-    check("7 accounts, one per person", User.query.count() == 7)
+    check("5 accounts, one per person", User.query.count() == 5)
+
+    # The CCBA/COC deans administer grading; a separate grading account is a
+    # duplicate identity and must not exist.
+    check("no separate grading-system accounts",
+          User.query.filter_by(system="grading").count() == 0,
+          f"{User.query.filter_by(system='grading').count()} found")
+    check("no role=admin accounts outside admission",
+          User.query.filter(User.role == "admin", User.system != "admission").count() == 0)
 
     # The original bug: Flask-Login stored a bare integer and `users` won the lookup.
     admin = people.get("admin")

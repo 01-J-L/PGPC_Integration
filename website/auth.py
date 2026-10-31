@@ -8134,34 +8134,6 @@ def admin_maintenance():
         if cursor: cursor.close()
         if conn: conn.close()
 
-def _ensure_grading_admins(cursor):
-    """Create the two grading-system admin accounts (CCBA & COC) if missing.
-
-    Requires ADMIN_INITIAL_PASSWORD in .env. Without it we create nothing rather
-    than falling back to a password that is public in the source tree.
-    """
-    initial_password = os.getenv('ADMIN_INITIAL_PASSWORD')
-    if not initial_password:
-        return []
-    specs = [
-        ('gradingccba', 'CCBA Grading Admin', 'CCBA', 'gradingccba@pgpc.edu.ph'),
-        ('gradingcoc', 'COC Grading Admin', 'COC', 'gradingcoc@pgpc.edu.ph'),
-    ]
-    created = []
-    for username, full_name, department, email in specs:
-        cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
-        if cursor.fetchone():
-            continue
-        hashed = generate_password_hash(initial_password, method='pbkdf2:sha256')
-        cursor.execute(
-            "INSERT INTO users (username, email, password_hash, role, status, full_name, department, `system`, can_edit) "
-            "VALUES (%s, %s, %s, 'admin', 'active', %s, %s, 'grading', 1)",
-            (username, email, hashed, full_name, department)
-        )
-        created.append(username)
-    return created
-
-
 @auth.route('/admin/manage-users')
 def admin_manage_users():
     if session.get('user_role') != 'admin':
@@ -8171,14 +8143,9 @@ def admin_manage_users():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Auto-create the grading-system admin accounts (CCBA & COC) on first load.
-    created_admins = _ensure_grading_admins(cursor)
-    if created_admins:
-        conn.commit()
-        flash(f"Grading system admin accounts created ({', '.join(created_admins)}). "
-              f"Default password is the ADMIN_INITIAL_PASSWORD. Change it below.", "info")
-
-    # Every account now lives in `users`; `system` says which portal it belongs to.
+    # There is no separate grading administrator: the CCBA and COC deans
+    # (role='dean', system='faculty') already hold every grading permission.
+    # Every account lives in `users`; `system` says which portal it belongs to.
     cursor.execute("""
         SELECT id, username, role, full_name, created_at, can_edit, department, email,
                COALESCE(`system`, 'faculty') AS `system`
@@ -8213,9 +8180,9 @@ def admin_add_user():
     email = request.form.get('email') or None
 
     # --- PREDEFINED ADMIN ACCOUNT ROLES: route to the correct system/table ---
+    # The deans administer both the faculty system and the grading screens;
+    # there is no separate grading administrator account.
     special_admin_roles = {
-        'ccba_grading_admin': ('grading', 'CCBA'),
-        'coc_grading_admin': ('grading', 'COC'),
         'ccba_admin': ('faculty', 'CCBA'),
         'coc_admin': ('faculty', 'COC'),
     }
@@ -8245,13 +8212,6 @@ def admin_add_user():
                 flash("Email is required for a Faculty admin account.", "danger")
                 return redirect(url_for('auth.admin_manage_users'))
             role = 'dean'
-
-        # --- GRADING SYSTEM: role forced to admin + department required ---
-        elif system == 'grading':
-            if not department or department not in ('CCBA', 'COC'):
-                flash("Please select a department (CCBA or COC) for a Grading admin.", "danger")
-                return redirect(url_for('auth.admin_manage_users'))
-            role = 'admin'
 
         # --- ADMISSION SYSTEM: only one Administrator account ---
         elif system == 'admission' and role == 'admin':
@@ -8304,7 +8264,8 @@ def admin_delete_user(user_id):
         cursor.execute("SELECT role, `system` FROM users WHERE id = %s", (user_id,))
         target_user = cursor.fetchone()
 
-        if target_user and target_user['role'] == 'admin' and (target_user.get('system') or 'admission') != 'grading':
+        # The admission Administrator and the Super Administrator are protected.
+        if target_user and target_user['role'] in ('admin', 'superadmin'):
             flash("Critical Action Blocked: The main Administrator account cannot be deleted.", "danger")
             return redirect(url_for('auth.admin_manage_users'))
 

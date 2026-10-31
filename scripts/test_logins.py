@@ -30,7 +30,6 @@ TEMP = [
     ("p3_admission", "registrar", "admission", "P3 Registrar"),
     ("p3_dean", "dean", "faculty", "P3 Dean"),
     ("p3_teacher", "faculty", "faculty", "P3 Teacher"),
-    ("p3_grading", "admin", "grading", "P3 Grading Admin"),
 ]
 
 failures = []
@@ -57,7 +56,7 @@ def seed():
                 role=role,
                 status="active",
                 system=system,
-                department="CCBA" if system in ("grading", "faculty") else None,
+                department="CCBA" if system == "faculty" else None,
             )
             u.set_password(PASSWORD)
             db.session.add(u)
@@ -110,10 +109,12 @@ def main():
             check("dean logs in", r.status_code == 302 and "/faculty/dashboard" in r.headers.get("Location", ""),
                   f"{r.status_code} -> {r.headers.get('Location')}")
 
+        # There is no separate grading-admin account: the dean administers the
+        # grading screens for their department through the same login.
         with app.test_client() as client:
-            r = post_login(client, "/admin-load/login", "p3_grading", PASSWORD)
-            check("grading admin logs in", r.status_code == 302 and "/grading-admin/dashboard" in r.headers.get("Location", ""),
-                  f"{r.status_code} -> {r.headers.get('Location')}")
+            post_login(client, "/admin-load/login", "p3_dean", PASSWORD)
+            r = client.get("/faculty/grading-admin/dashboard", follow_redirects=False)
+            check("dean reaches the grading dashboard", r.status_code == 200, f"got {r.status_code}")
 
         with app.test_client() as client:
             r = post_login(client, "/admin-load/login", "p3_admission", PASSWORD)

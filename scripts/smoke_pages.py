@@ -28,7 +28,6 @@ PASSWORD = "Phase3-Test-Passw0rd!"
 ACCOUNTS = [
     ("sm_dean", "dean", "faculty", "Smoke Dean", "CCBA"),
     ("sm_teacher", "faculty", "faculty", "Smoke Teacher", "CCBA"),
-    ("sm_admin", "admin", "grading", "Smoke Grading Admin", "CCBA"),
     ("sm_super", "superadmin", "admission", "Smoke Superadmin", None),
 ]
 
@@ -50,16 +49,13 @@ PAGES = {
         "/faculty/analytics",
         "/faculty/system-settings",
         "/faculty/room-schedule",
-    ],
-    "sm_admin": [
+        # The dean is also the grading administrator for their department.
         "/faculty/grading-admin/dashboard",
         "/faculty/grading-admin/student_records",
         "/faculty/grading-admin/faculty_records",
         "/faculty/grading-admin/approvals",
         "/faculty/grading-admin/programs",
         "/faculty/grading-admin/settings",
-        "/faculty/manage-programs",
-        "/faculty/analytics",
     ],
     "sm_super": [
         "/faculty/grading-admin/maintenance",
@@ -70,7 +66,7 @@ PAGES = {
 # Phase 2: grading-admin screens that were folded into the dean UI must 302 to
 # their canonical replacement instead of rendering a second copy.
 REDIRECTS = {
-    "sm_admin": [
+    "sm_dean": [
         ("/faculty/grading-admin/faculty_records", "/faculty/users"),
         ("/faculty/grading-admin/add_faculty", "/faculty/users"),
         ("/faculty/grading-admin/approvals", "/faculty/approvals"),

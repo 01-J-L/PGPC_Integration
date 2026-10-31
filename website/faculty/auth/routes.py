@@ -40,7 +40,8 @@ If you did not make this request then simply ignore this email.
 @auth.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        # Redirect grading admins to grading dashboard, others to faculty dashboard
+        # The superadmin lands on the grading overview; the deans and teachers
+        # land on their own dashboard.
         if current_user.role in ('admin', 'superadmin'):
             return redirect(url_for('faculty_main.grading_admin_dashboard'))
         return redirect(url_for('faculty_main.dashboard'))
