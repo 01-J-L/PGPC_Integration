@@ -218,7 +218,7 @@ def phase2_checks():
 
 
 def scheduling_checks():
-    """The section grid must stay a usable 30-minute grid and reject clashes.
+    """The section grid must stay a usable hourly grid and reject clashes.
 
     Runs against a throwaway section ("<year>Z") and removes every row it
     creates, so the live schedule is untouched.
@@ -260,7 +260,7 @@ def scheduling_checks():
             check("section grid renders", resp.status_code == 200, f"got {resp.status_code}")
             rows = body.count(b"whitespace-nowrap text-xs font-medium")
             # A single long class must not collapse the day into one row.
-            check("grid is built from 30-minute rows", rows >= 24, f"{rows} rows")
+            check("grid keeps hourly rows", rows >= 10, f"{rows} rows")
             check("'Add Time Row' control is gone", b"Add Time Row" not in body)
             check("empty cells open the add modal", b"openAddModal(" in body)
             check("availability URL resolves", b"/faculty/api/check-availability" in body)

@@ -87,7 +87,7 @@
             <span class="flex items-center gap-1.5">
                 <i class="ri-add-line text-sm"></i> Click any empty cell to add a class
             </span>
-            <span class="ml-auto hidden sm:inline">Rows are 30-minute blocks and extend automatically past 21:00 when needed.</span>
+            <span class="ml-auto hidden sm:inline">Rows are one-hour blocks and extend automatically past 21:00 when needed.</span>
         </div>
         <div class="overflow-x-auto">
             <table class="w-full min-w-[800px] table-fixed">
@@ -170,7 +170,7 @@
         <div x-show="showAddModal" @keydown.escape.window="showAddModal = false" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50" style="display: none;">
             <div @click.away="showAddModal = false" class="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-lg flex flex-col max-h-[90vh]">
                 <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center flex-shrink-0">
-                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white" x-text="`Add Schedule for ${day}`"></h2>
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white">Add Schedule</h2>
                     <button @click="showAddModal = false" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white text-2xl">&times;</button>
                 </div>
                 <form id="addScheduleForm" method="POST" action="{{ url_for('faculty_main.section_schedule_grid', program_id=program.id, section_name=section_name, semester=semester) }}" class="flex flex-col flex-grow overflow-hidden">

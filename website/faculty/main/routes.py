@@ -1130,7 +1130,7 @@ def section_schedule_grid(program_id, section_name, semester):
 
     today_date = datetime.now().date()
 
-    # A fixed 30-minute grid, widened only when a class starts earlier or runs
+    # A fixed one-hour grid, widened only when a class starts earlier or runs
     # later than the working day. Rows are built from time boundaries rather
     # than from the classes themselves: a single 7:00-22:00 class used to
     # collapse the whole day into one un-editable row.
@@ -1144,7 +1144,7 @@ def section_schedule_grid(program_id, section_name, semester):
     cursor_dt = grid_start
     while cursor_dt <= grid_end:
         boundaries.add(cursor_dt)
-        cursor_dt += timedelta(minutes=30)
+        cursor_dt += timedelta(minutes=60)
     for s in schedules:
         boundaries.add(datetime.combine(today_date, s.time_start))
         boundaries.add(datetime.combine(today_date, s.time_end))
