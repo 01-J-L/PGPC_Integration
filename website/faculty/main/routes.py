@@ -62,6 +62,23 @@ def _fix_time(t):
     return t.replace(hour=12) if t.hour == 0 else t
 
 
+def parse_time_input(value, default=None):
+    """Parse a time from either a native picker ("19:00") or a typed value.
+
+    Accepts 24-hour and 12-hour strings so the native time pickers and any
+    older/bookmarked forms both work.
+    """
+    if not value:
+        return default
+    raw = re.sub(r"\s+", " ", str(value).strip().upper().replace(".", ""))
+    for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p", "%I %p"):
+        try:
+            return datetime.strptime(raw, fmt).time()
+        except ValueError:
+            continue
+    return default
+
+
 def get_faculty_program_scope():
     """Programs the current admin/dean may manage.
 
@@ -937,7 +954,6 @@ def section_schedule_grid(program_id, section_name, semester):
     add_form = SectionGridScheduleForm()
     edit_form = EditScheduleForm()
     delete_form = DeleteScheduleForm()
-    time_slot_form = AddTimeSlotForm()
 
     # --- 2. POPULATE DROPDOWNS ---
     relevant_faculty = User.query.filter(User.role == 'faculty', User.status == 'active').order_by(User.full_name).all()
@@ -959,17 +975,14 @@ def section_schedule_grid(program_id, section_name, semester):
     add_form.course.choices = course_choices
     add_form.faculty.choices = faculty_choices
     add_form.room.choices = room_choices
-    
+    add_form.day.choices = [(d, d) for d in DAYS_OF_WEEK]
+
     edit_form.course.choices = course_choices
     edit_form.faculty.choices = faculty_choices
     edit_form.room.choices = room_choices
+    edit_form.day.choices = [(d, d) for d in DAYS_OF_WEEK]
 
-    # --- 3. HANDLE TIME SLOTS ---
-    if 'add_time_slot_submit' in request.form:
-        if time_slot_form.validate_on_submit():
-            return redirect(url_for('faculty_main.section_schedule_grid', program_id=program_id, section_name=section_name, semester=semester))
-
-    # --- 4. HANDLE ADD SCHEDULE ---
+    # --- 3. HANDLE ADD SCHEDULE ---
     if 'add_schedule_submit' in request.form:
         add_form.course.choices = [(add_form.course.data, 'selected')]
         add_form.faculty.choices = [(add_form.faculty.data, 'selected')]
@@ -980,42 +993,59 @@ def section_schedule_grid(program_id, section_name, semester):
                 flash('Error: School year not set.', 'error')
             else:
                 try:
-                    t_start_str = add_form.time_start.data.strip()
-                    t_end_str = add_form.time_end.data.strip()
-                    if len(t_start_str.split(':')[0]) == 1: t_start_str = "0" + t_start_str
-                    if len(t_end_str.split(':')[0]) == 1: t_end_str = "0" + t_end_str
-                    time_start = datetime.strptime(t_start_str, '%I:%M %p').time()
-                    time_end = datetime.strptime(t_end_str, '%I:%M %p').time()
-                    
+                    time_start = parse_time_input(add_form.time_start.data)
+                    time_end = parse_time_input(add_form.time_end.data)
+                    if not time_start or not time_end:
+                        flash('Invalid time. Use the time pickers.', 'error')
+                        raise ValueError('unparseable time')
+
                     selected_course = Course.query.get(int(add_form.course.data))
                     faculty_member = User.query.get(int(add_form.faculty.data))
-                    
-                    # Checks
-                    faculty_conflict = TeachingLoad.query.filter(TeachingLoad.user_id == faculty_member.id, TeachingLoad.day == add_form.day.data, TeachingLoad.time_start < time_end, TeachingLoad.time_end > time_start, TeachingLoad.school_year == current_school_year).first()
-                    section_conflict = TeachingLoad.query.filter(TeachingLoad.section == full_section_name, TeachingLoad.day == add_form.day.data, TeachingLoad.time_start < time_end, TeachingLoad.time_end > time_start, TeachingLoad.school_year == current_school_year).first()
-                    room_conflict = TeachingLoad.query.filter(TeachingLoad.room == add_form.room.data, TeachingLoad.day == add_form.day.data, TeachingLoad.time_start < time_end, TeachingLoad.time_end > time_start, TeachingLoad.school_year == current_school_year).first()
 
-                    if faculty_conflict: flash(f'Conflict: {faculty_member.full_name} is busy.', 'error')
-                    elif section_conflict: flash(f"Conflict: Section is busy.", 'error')
-                    elif room_conflict: flash(f'Conflict: Room {add_form.room.data} is occupied.', 'error')
+                    # Overlap checks are scoped to this semester as well as the
+                    # school year: without the Course join, a 1st-semester class
+                    # blocked the same slot in the 2nd semester.
+                    def _overlap(*criteria, **extra):
+                        return (TeachingLoad.query
+                                .join(Course, TeachingLoad.course_code == Course.course_code)
+                                .filter(*criteria,
+                                        TeachingLoad.school_year == current_school_year,
+                                        Course.semester == semester,
+                                        TeachingLoad.day == add_form.day.data,
+                                        TeachingLoad.time_start < time_end,
+                                        TeachingLoad.time_end > time_start,
+                                        **extra)
+                                .first())
+
+                    if time_start >= time_end:
+                        flash('Error: the end time must be after the start time.', 'error')
                     else:
-                        new_schedule = TeachingLoad(
-                            teacher=faculty_member, 
-                            section=full_section_name, 
-                            course_code=selected_course.course_code, 
-                            course_description=selected_course.course_description, 
-                            day=add_form.day.data, 
-                            time_start=time_start, 
-                            time_end=time_end, 
-                            room=add_form.room.data, 
-                            school_year=current_school_year,
-                            is_published=False 
-                        )
-                        db.session.add(new_schedule)
-                        db.session.commit()
-                        flash('Class added as DRAFT. Click "Save & Notify Faculty" to finalize.', 'info')
+                        faculty_conflict = _overlap(TeachingLoad.user_id == faculty_member.id)
+                        section_conflict = _overlap(TeachingLoad.section == full_section_name)
+                        room_conflict = _overlap(TeachingLoad.room == add_form.room.data)
+
+                        if faculty_conflict: flash(f'Conflict: {faculty_member.full_name} is busy at that time.', 'error')
+                        elif section_conflict: flash(f'Conflict: {full_section_name} already has a class at that time.', 'error')
+                        elif room_conflict: flash(f'Conflict: {add_form.room.data} is already occupied at that time.', 'error')
+                        else:
+                            new_schedule = TeachingLoad(
+                                teacher=faculty_member, 
+                                section=full_section_name, 
+                                course_code=selected_course.course_code, 
+                                course_description=selected_course.course_description, 
+                                day=add_form.day.data, 
+                                time_start=time_start, 
+                                time_end=time_end, 
+                                room=add_form.room.data, 
+                                school_year=current_school_year,
+                                is_published=False 
+                            )
+                            db.session.add(new_schedule)
+                            db.session.commit()
+                            flash('Class added as DRAFT. Click "Save & Notify Faculty" to finalize.', 'info')
                 except Exception as e:
-                    flash(f'Error: {str(e)}', 'error')
+                    if str(e) != 'unparseable time':
+                        flash(f'Error: {str(e)}', 'error')
             return redirect(url_for('faculty_main.section_schedule_grid', program_id=program_id, section_name=section_name, semester=semester))
         else:
             for f, e in add_form.errors.items(): flash(f"Add Error ({f}): {', '.join(e)}", 'error')
@@ -1029,38 +1059,59 @@ def section_schedule_grid(program_id, section_name, semester):
         if edit_form.validate():
             schedule_to_edit = TeachingLoad.query.get_or_404(edit_form.schedule_id.data)
             try:
-                t_start_str = request.form.get('time_start').strip()
-                t_end_str = request.form.get('time_end').strip()
-                if len(t_start_str.split(':')[0]) == 1: t_start_str = "0" + t_start_str
-                if len(t_end_str.split(':')[0]) == 1: t_end_str = "0" + t_end_str
-                time_start = datetime.strptime(t_start_str, '%I:%M %p').time()
-                time_end = datetime.strptime(t_end_str, '%I:%M %p').time()
-                
+                time_start = parse_time_input(request.form.get('time_start'))
+                time_end = parse_time_input(request.form.get('time_end'))
+                if not time_start or not time_end:
+                    flash('Invalid time. Use the time pickers.', 'error')
+                    raise ValueError('unparseable time')
+
                 selected_course = Course.query.get(int(edit_form.course.data))
                 faculty_member = User.query.get(int(edit_form.faculty.data))
                 new_room = edit_form.room.data
+                new_day = edit_form.day.data or schedule_to_edit.day
+                if new_day not in DAYS_OF_WEEK:
+                    new_day = schedule_to_edit.day
 
-                # Checks (Exclude self)
-                faculty_conflict = TeachingLoad.query.filter(TeachingLoad.id != schedule_to_edit.id, TeachingLoad.user_id == faculty_member.id, TeachingLoad.day == schedule_to_edit.day, TeachingLoad.time_start < time_end, TeachingLoad.time_end > time_start, TeachingLoad.school_year == schedule_to_edit.school_year).first()
-                section_conflict = TeachingLoad.query.filter(TeachingLoad.id != schedule_to_edit.id, TeachingLoad.section == full_section_name, TeachingLoad.day == schedule_to_edit.day, TeachingLoad.time_start < time_end, TeachingLoad.time_end > time_start, TeachingLoad.school_year == schedule_to_edit.school_year).first()
-                room_conflict = TeachingLoad.query.filter(TeachingLoad.id != schedule_to_edit.id, TeachingLoad.room == new_room, TeachingLoad.day == schedule_to_edit.day, TeachingLoad.time_start < time_end, TeachingLoad.time_end > time_start, TeachingLoad.school_year == schedule_to_edit.school_year).first()
+                # Overlap checks (excluding this row) are scoped to the semester
+                # and the school year so the two semesters do not block each other.
+                def _overlap(*criteria, **extra):
+                    return (TeachingLoad.query
+                            .join(Course, TeachingLoad.course_code == Course.course_code)
+                            .filter(*criteria,
+                                    TeachingLoad.id != schedule_to_edit.id,
+                                    TeachingLoad.school_year == schedule_to_edit.school_year,
+                                    Course.semester == semester,
+                                    TeachingLoad.day == new_day,
+                                    TeachingLoad.time_start < time_end,
+                                    TeachingLoad.time_end > time_start,
+                                    **extra)
+                            .first())
 
-                if faculty_conflict: flash(f'Conflict: {faculty_member.full_name} is busy.', 'error')
-                elif section_conflict: flash(f"Conflict: Section is busy.", 'error')
-                elif room_conflict: flash(f'Conflict: Room {new_room} is occupied.', 'error')
+                if time_start >= time_end:
+                    flash('Error: the end time must be after the start time.', 'error')
                 else:
-                    schedule_to_edit.user_id = faculty_member.id
-                    schedule_to_edit.course_code = selected_course.course_code
-                    schedule_to_edit.course_description = selected_course.course_description
-                    schedule_to_edit.time_start = time_start
-                    schedule_to_edit.time_end = time_end
-                    schedule_to_edit.room = new_room
-                    db.session.commit()
-                    flash('Schedule updated.', 'success')
-                    if schedule_to_edit.is_published:
-                        send_schedule_update_email(faculty_member, {'course': f"{schedule_to_edit.course_code}", 'section': schedule_to_edit.section, 'day': schedule_to_edit.day, 'time': f"{schedule_to_edit.time_start} - {schedule_to_edit.time_end}", 'room': schedule_to_edit.room}, 'updated')
+                    faculty_conflict = _overlap(TeachingLoad.user_id == faculty_member.id)
+                    section_conflict = _overlap(TeachingLoad.section == full_section_name)
+                    room_conflict = _overlap(TeachingLoad.room == new_room)
+
+                    if faculty_conflict: flash(f'Conflict: {faculty_member.full_name} is busy at that time.', 'error')
+                    elif section_conflict: flash(f'Conflict: {full_section_name} already has a class at that time.', 'error')
+                    elif room_conflict: flash(f'Conflict: {new_room} is already occupied at that time.', 'error')
+                    else:
+                        schedule_to_edit.user_id = faculty_member.id
+                        schedule_to_edit.course_code = selected_course.course_code
+                        schedule_to_edit.course_description = selected_course.course_description
+                        schedule_to_edit.day = new_day
+                        schedule_to_edit.time_start = time_start
+                        schedule_to_edit.time_end = time_end
+                        schedule_to_edit.room = new_room
+                        db.session.commit()
+                        flash('Schedule updated.', 'success')
+                        if schedule_to_edit.is_published:
+                            send_schedule_update_email(faculty_member, {'course': f"{schedule_to_edit.course_code}", 'section': schedule_to_edit.section, 'day': schedule_to_edit.day, 'time': f"{schedule_to_edit.time_start} - {schedule_to_edit.time_end}", 'room': schedule_to_edit.room}, 'updated')
             except Exception as e:
-                flash(f'Invalid data: {str(e)}', 'error')
+                if str(e) != 'unparseable time':
+                    flash(f'Invalid data: {str(e)}', 'error')
             return redirect(url_for('faculty_main.section_schedule_grid', program_id=program_id, section_name=section_name, semester=semester))
         else:
             for f, e in edit_form.errors.items(): flash(f"Edit Error ({f}): {', '.join(e)}", 'error')
@@ -1074,58 +1125,62 @@ def section_schedule_grid(program_id, section_name, semester):
             .options(joinedload(TeachingLoad.teacher)).all()
 
     schedules_by_day = defaultdict(list)
-    for s in schedules: schedules_by_day[s.day].append({'schedule': s})
+    for s in schedules:
+        schedules_by_day[s.day].append(s)
+
+    today_date = datetime.now().date()
+
+    # A fixed 30-minute grid, widened only when a class starts earlier or runs
+    # later than the working day. Rows are built from time boundaries rather
+    # than from the classes themselves: a single 7:00-22:00 class used to
+    # collapse the whole day into one un-editable row.
+    grid_start = datetime.combine(today_date, time(7, 0))
+    grid_end = datetime.combine(today_date, time(21, 0))
+    for s in schedules:
+        grid_start = min(grid_start, datetime.combine(today_date, s.time_start))
+        grid_end = max(grid_end, datetime.combine(today_date, s.time_end))
+
+    boundaries = set()
+    cursor_dt = grid_start
+    while cursor_dt <= grid_end:
+        boundaries.add(cursor_dt)
+        cursor_dt += timedelta(minutes=30)
+    for s in schedules:
+        boundaries.add(datetime.combine(today_date, s.time_start))
+        boundaries.add(datetime.combine(today_date, s.time_end))
+    boundaries = sorted(boundaries)
+    boundary_index = {dt: i for i, dt in enumerate(boundaries)}
+
+    def _row_label(start_dt, end_dt):
+        return f"{start_dt.strftime('%I:%M').lstrip('0')} - {end_dt.strftime('%I:%M %p').lstrip('0')}"
 
     schedule_grid_data = []
-    today_date = datetime.now().date()
-    current_time = datetime.combine(today_date, datetime.strptime("07:00", "%H:%M").time())
-    limit_time = datetime.combine(today_date, datetime.strptime("17:30", "%H:%M").time())
-    if schedules:
-        max_sched_end = max(s.time_end for s in schedules)
-        max_sched_end_dt = datetime.combine(today_date, max_sched_end)
-        if max_sched_end_dt > limit_time: limit_time = max_sched_end_dt
-
-    while current_time < limit_time:
-        row_start = current_time
-        next_hard_stop = None
-        has_class_starting_now = False
-        for day in DAYS_OF_WEEK:
-            for item in schedules_by_day[day]:
-                s_start = datetime.combine(today_date, item['schedule'].time_start)
-                if s_start == row_start: has_class_starting_now = True
-                elif s_start > row_start: 
-                    if next_hard_stop is None or s_start < next_hard_stop: next_hard_stop = s_start
-        row_end = row_start + timedelta(minutes=30)
-        if not has_class_starting_now and next_hard_stop:
-            gap_minutes = (next_hard_stop - row_start).total_seconds() / 60
-            if gap_minutes <= 120: row_end = next_hard_stop
-        
+    for i in range(len(boundaries) - 1):
+        row_start, row_end = boundaries[i], boundaries[i + 1]
         row_days = []
-        max_end_found = row_end 
         for day in DAYS_OF_WEEK:
-            found = None
-            for item in schedules_by_day[day]:
-                sched_start = datetime.combine(today_date, item['schedule'].time_start)
-                sched_end = datetime.combine(today_date, item['schedule'].time_end)
-                if sched_start == row_start:
-                    found = item
-                    if sched_end > max_end_found: max_end_found = sched_end
+            cell = {'schedule': None, 'rowspan': 1, 'skip': False}
+            for s in schedules_by_day[day]:
+                s_start = datetime.combine(today_date, s.time_start)
+                s_end = datetime.combine(today_date, s.time_end)
+                if s_start == row_start:
+                    # The card spans every row the class covers.
+                    cell = {'schedule': s,
+                            'rowspan': max(1, boundary_index.get(s_end, i + 1) - i),
+                            'skip': False}
                     break
-            row_days.append(found)
-        row_end = max_end_found
-        
-        class VirtualSlot:
-            def __init__(self, s, e):
-                self.id = 0; self.is_default = True; self.start_time = s.time(); self.end_time = e.time()
+                if s_start < row_start < s_end:
+                    # Covered by a card rendered in an earlier row.
+                    cell = {'schedule': None, 'rowspan': 1, 'skip': True}
+                    break
+            row_days.append(cell)
 
         schedule_grid_data.append({
-            'slot': VirtualSlot(row_start, row_end),
-            'display_time': f"{row_start.strftime('%I:%M').lstrip('0')} - {row_end.strftime('%I:%M %p').lstrip('0')}", 
-            'form_start': row_start.strftime('%I:%M %p'),
-            'form_end': row_end.strftime('%I:%M %p'),
-            'days': row_days
+            'display_time': _row_label(row_start, row_end),
+            'form_start': row_start.strftime('%H:%M'),
+            'form_end': row_end.strftime('%H:%M'),
+            'days': row_days,
         })
-        current_time = row_end
 
     # --- 7. COMPACT PRINT GRID ---
     print_grid_data = []
@@ -1182,7 +1237,6 @@ def section_schedule_grid(program_id, section_name, semester):
                            add_form=add_form, edit_form=edit_form, delete_form=delete_form,
                            section_info=section_info,
                            active_school_year=current_school_year,
-                           time_slot_form=time_slot_form,
                            has_drafts=has_drafts)
 
 @main.route('/api/get-courses/<program_id>/sem/<int:semester>')
@@ -3017,25 +3071,26 @@ def check_availability():
         return jsonify({'busy_rooms': [], 'busy_sections': [], 'busy_faculty': []})
 
     try:
-        # 3. Parse Time
-        if len(start_str.split(':')[0]) == 1: start_str = "0" + start_str
-        if len(end_str.split(':')[0]) == 1: end_str = "0" + end_str
-
-        time_start = datetime.strptime(start_str, '%I:%M %p').time()
-        time_end = datetime.strptime(end_str, '%I:%M %p').time()
+        # 3. Parse Time (accepts both the native picker's 24h "19:00" and
+        #    older 12h "07:00 PM" values)
+        time_start = parse_time_input(start_str)
+        time_end = parse_time_input(end_str)
+        if not time_start or not time_end:
+            return jsonify({'busy_rooms': [], 'busy_sections': [], 'busy_faculty': []})
 
         # 4. Query Overlapping Schedules
         query = db.session.query(
-            TeachingLoad.room, 
-            TeachingLoad.section, 
+            TeachingLoad.room,
+            TeachingLoad.section,
             TeachingLoad.user_id
         ).join(Course, TeachingLoad.course_code == Course.course_code).filter(
             TeachingLoad.school_year == active_sy,
-            Course.semester == semester,
             TeachingLoad.day == day,
             TeachingLoad.time_start < time_end,
             TeachingLoad.time_end > time_start
         )
+        if semester:
+            query = query.filter(Course.semester == int(semester))
 
         # 5. EXCLUDE CURRENT SCHEDULE IF EDITING (The Fix)
         if exclude_id:

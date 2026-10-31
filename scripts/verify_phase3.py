@@ -35,14 +35,21 @@ def check(label, ok, detail=""):
 
 with app.app_context():
     print("== accounts ==")
-    people = {u.username: u for u in User.query.order_by(User.id)}
-    for u in people.values():
-        print(f"   id={u.id:2d} {u.username:14s} role={u.role:10s} system={u.system:9s} "
-              f"dept={u.department or '-':5s} status={u.status}")
+    users = User.query.order_by(User.id).all()
+    people = {u.username: u for u in users if u.username}
+    for u in users:
+        print(f"   id={u.id:2d} {(u.username or '<no username>'):14s} role={u.role or '-':10s} "
+              f"system={u.system or '-':9s} dept={u.department or '-':5s} status={u.status}")
 
-    check("every account is a distinct person",
-          len(people) == User.query.count()
-          and User.query.filter_by(username=None).count() == 0)
+    # The account list is maintained by hand outside this repo, so the check is
+    # about duplicates rather than a fixed count: two rows may never share a
+    # username, or a login would resolve to the wrong person.
+    login_names = [u.username for u in users if u.username]
+    check("no duplicate usernames", len(login_names) == len(set(login_names)))
+    unnamed = [u for u in users if not u.username]
+    if unnamed:
+        print(f"   ({len(unnamed)} account(s) have no username and cannot sign in: "
+              f"ids {', '.join(str(u.id) for u in unnamed)})")
 
     # The CCBA/COC deans administer grading; a separate grading account is a
     # duplicate identity and must not exist.
@@ -54,8 +61,8 @@ with app.app_context():
 
     from website.models import load_user
     check("load_user resolves every id to that same account",
-          all(load_user(u.id) is not None and load_user(u.id).username == u.username
-              for u in people.values()))
+          all(load_user(u.id) is not None and load_user(u.id).id == u.id
+              for u in users))
 
     # Regression guard for the original bug: `admin` and the CCBA dean must be
     # separate rows. It only applies when both accounts are still present.

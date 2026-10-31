@@ -119,9 +119,9 @@ class SectionGridScheduleForm(FlaskForm):
     faculty = SelectField('Faculty', validators=[DataRequired()])
     course = SelectField('Course', validators=[DataRequired()])
     room = SelectField('Room', choices=[], validators=[DataRequired()])
-    time_start = StringField('Start Time', validators=[DataRequired()], render_kw={"placeholder": "e.g., 07:30 AM"})
-    time_end = StringField('End Time', validators=[DataRequired()], render_kw={"placeholder": "e.g., 09:00 AM"})
-    day = HiddenField('Day', validators=[DataRequired()])
+    day = SelectField('Day', choices=[], validators=[DataRequired()])
+    time_start = StringField('Start Time', validators=[DataRequired()], render_kw={"placeholder": "e.g., 07:30"})
+    time_end = StringField('End Time', validators=[DataRequired()], render_kw={"placeholder": "e.g., 09:00"})
     submit = SubmitField('Add Schedule')
 
 
@@ -133,6 +133,7 @@ class EditScheduleForm(FlaskForm):
     course = SelectField('Course', validators=[DataRequired()])
 
     room = SelectField('Room', choices=[], validators=[DataRequired()])
+    day = SelectField('Day', choices=[], validators=[DataRequired()])
     time_start = StringField('Start Time', validators=[DataRequired()])
     time_end = StringField('End Time', validators=[DataRequired()])
     submit = SubmitField('Update Schedule')

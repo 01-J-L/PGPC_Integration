@@ -217,6 +217,100 @@ def phase2_checks():
     print()
 
 
+def scheduling_checks():
+    """The section grid must stay a usable 30-minute grid and reject clashes.
+
+    Runs against a throwaway section ("<year>Z") and removes every row it
+    creates, so the live schedule is untouched.
+    """
+    print("== section scheduling ==")
+    from datetime import time as dtime
+
+    with app.app_context():
+        from website.faculty.models import Program, Course, TeachingLoad, Room, SystemSetting
+        program = Program.query.first()
+        teacher = User.query.filter_by(username="sm_teacher").first()
+        if not program or not teacher:
+            print("   (no program/teacher fixture, skipping)")
+            return
+        program_id = program.program_id
+        course = Course.query.filter_by(program_id=program_id, semester=1).first()
+        room = Room.query.order_by(Room.room_name).first()
+        sy = SystemSetting.query.filter_by(key="school_year").first()
+        school_year = sy.value.strip() if sy and sy.value else None
+        year = course.year if course else 1
+        section_name = f"{year}Z"
+        full_section = f"{program.program_code} {section_name}"
+
+    url = f"/faculty/section-grid/prog{program_id}/sec{section_name}/sem1"
+
+    def purge():
+        with app.app_context():
+            from website.faculty.models import TeachingLoad
+            TeachingLoad.query.filter_by(section=full_section).delete()
+            db.session.commit()
+
+    purge()
+    try:
+        with app.test_client() as client:
+            client.post("/admin-load/login", data={"email": "sm_dean", "password": PASSWORD},
+                        follow_redirects=True)
+            resp = client.get(url)
+            body = resp.data
+            check("section grid renders", resp.status_code == 200, f"got {resp.status_code}")
+            rows = body.count(b"whitespace-nowrap text-xs font-medium")
+            # A single long class must not collapse the day into one row.
+            check("grid is built from 30-minute rows", rows >= 24, f"{rows} rows")
+            check("'Add Time Row' control is gone", b"Add Time Row" not in body)
+            check("empty cells open the add modal", b"openAddModal(" in body)
+            check("availability URL resolves", b"/faculty/api/check-availability" in body)
+            check("day is editable from both modals",
+                  b'id="add_day"' in body and b'id="edit_day"' in body)
+
+            if not (course and room and school_year):
+                print("   (no course/room/school year fixture, skipping the conflict checks)")
+                return
+
+            with app.app_context():
+                from website.faculty.models import TeachingLoad
+                db.session.add(TeachingLoad(
+                    course_code=course.course_code, course_description=course.course_description,
+                    section=full_section, day="Saturday",
+                    time_start=dtime(8, 0), time_end=dtime(9, 0),
+                    room=room.room_name, school_year=school_year,
+                    is_published=False, user_id=teacher.id))
+                db.session.commit()
+
+            def add(day, start, end):
+                return client.post(url, data={
+                    "add_schedule_submit": "1", "day": day,
+                    "course": str(course.id), "faculty": str(teacher.id),
+                    "time_start": start, "time_end": end, "room": room.room_name,
+                }, follow_redirects=True).data
+
+            body = add("Saturday", "08:30", "09:30")
+            check("busy teacher blocks the add", b"is busy at that time" in body)
+            with app.app_context():
+                from website.faculty.models import TeachingLoad
+                rows_after_clash = TeachingLoad.query.filter_by(section=full_section).count()
+            check("the clash created no row", rows_after_clash == 1, f"{rows_after_clash} rows")
+
+            body = add("Saturday", "10:00", "09:00")
+            check("end before start is rejected", b"end time must be after the start time" in body)
+
+            body = add("Saturday", "10:00", "11:00")
+            check("free slot is accepted", b"Class added as DRAFT" in body)
+
+            with app.app_context():
+                from website.faculty.models import TeachingLoad
+                created = TeachingLoad.query.filter_by(
+                    section=full_section, day="Saturday").count()
+            check("fixture + accepted class are both stored", created == 2, f"{created} rows")
+    finally:
+        purge()
+        print()
+
+
 def main():
     seed()
     try:
@@ -244,6 +338,7 @@ def main():
             print()
 
         phase2_checks()
+        scheduling_checks()
     finally:
         cleanup()
 
