@@ -268,8 +268,10 @@ def scheduling_checks():
             check("'Add Time Row' control is gone", b"Add Time Row" not in body)
             check("empty cells open the add modal", b"openAddModal(" in body)
             check("availability URL resolves", b"/faculty/api/check-availability" in body)
-            check("day is editable from both modals",
-                  b'id="add_day"' in body and b'id="edit_day"' in body)
+            check("edit modal still lets you change the day", b'id="edit_day"' in body)
+            check("add modal takes the day from the clicked cell",
+                  b'name="day" id="add_day"' in body
+                  and b'id="add_day" class="w-full' not in body)
             # hidden_tag() would render schedule_id a second time, and browsers
             # submit the first (empty) value, so the edit was rejected.
             id_inputs = body.count(b'name="schedule_id"')

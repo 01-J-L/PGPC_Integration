@@ -178,15 +178,13 @@
                         {{ add_form.hidden_tag() }}
                         <input type="hidden" name="add_schedule_submit" value="1">
 
-                        <!-- Section (fixed for this page) -->
+                        <!-- Section + day (both fixed by the cell that was clicked) -->
                         <div class="rounded-md bg-slate-50 dark:bg-slate-700/50 px-3 py-2 text-sm text-slate-600 dark:text-slate-300">
                             Section: <span class="font-semibold">{{ program.program_code }} {{ section_name }}</span>
+                            <span class="mx-1 text-slate-400">&middot;</span>
+                            <span id="add_day_display" class="font-semibold">&mdash;</span>
                         </div>
-
-                        <div>
-                            {{ add_form.day.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
-                            {{ add_form.day(id="add_day", class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white", **{'@change': 'checkAvailability(false)'}) }}
-                        </div>
+                        <input type="hidden" name="day" id="add_day" value="">
 
                         <div>
                             {{ add_form.course.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
@@ -420,6 +418,7 @@
                 addForm.reset();
 
                 document.getElementById('add_day').value = day;
+                document.getElementById('add_day_display').textContent = day;
                 document.getElementById('add_start').value = timeStart;
                 document.getElementById('add_end').value = timeEnd;
 
