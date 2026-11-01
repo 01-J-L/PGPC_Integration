@@ -1156,6 +1156,12 @@ def section_schedule_grid(program_id, section_name, semester):
     grid_start = min([day_start] + [b[0] for b in busy])
     grid_end = max([day_end] + [b[1] for b in busy])
 
+    # A class that ends at the very bottom would leave no empty cell under it,
+    # so the whole grid looked like a single row after such an edit. Keep one
+    # free hour below the last class.
+    if busy and busy[-1][1] >= grid_end:
+        grid_end = busy[-1][1] + timedelta(hours=1)
+
     boundaries = {grid_start, grid_end}
     for start, end in busy:
         boundaries.add(start)

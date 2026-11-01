@@ -299,6 +299,26 @@ def scheduling_checks():
                   f"{single_row_cards} single-row cards")
             purge()
 
+            # A class that runs to the bottom of the day must not leave the grid
+            # as a single row; there is always one free row underneath it.
+            with app.app_context():
+                from website.faculty.models import TeachingLoad
+                db.session.add(TeachingLoad(
+                    course_code=course.course_code, course_description=course.course_description,
+                    section=full_section, day="Thursday",
+                    time_start=dtime(7, 0), time_end=dtime(22, 0),
+                    room=room.room_name, school_year=school_year,
+                    is_published=False, user_id=teacher.id))
+                db.session.commit()
+            body = client.get(url).data
+            check("a full-day class is one row",
+                  b"7:00 AM - 10:00 PM" in body)
+            check("a free row is kept below it", b"10:00 - 11:00 PM" in body)
+            row_cells = body.count(b"whitespace-nowrap text-xs font-medium")
+            check("the grid is not collapsed to one row", row_cells >= 2,
+                  f"{row_cells} rows")
+            purge()
+
             with app.app_context():
                 from website.faculty.models import TeachingLoad
                 db.session.add(TeachingLoad(
