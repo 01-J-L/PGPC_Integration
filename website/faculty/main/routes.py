@@ -1130,29 +1130,60 @@ def section_schedule_grid(program_id, section_name, semester):
 
     today_date = datetime.now().date()
 
-    # A fixed one-hour grid, widened only when a class starts earlier or runs
-    # later than the working day. Rows are built from time boundaries rather
-    # than from the classes themselves: a single 7:00-22:00 class used to
-    # collapse the whole day into one un-editable row.
-    grid_start = datetime.combine(today_date, time(7, 0))
-    grid_end = datetime.combine(today_date, time(21, 0))
-    for s in schedules:
-        grid_start = min(grid_start, datetime.combine(today_date, s.time_start))
-        grid_end = max(grid_end, datetime.combine(today_date, s.time_end))
+    # Rows follow the assigned time frames: a 7:00-10:00 class is one
+    # "7:00 - 10:00 AM" row, not three hourly ones. Only genuinely free time is
+    # split into hourly rows, so there is still an empty cell to click.
+    day_start = datetime.combine(today_date, time(7, 0))
+    day_end = datetime.combine(today_date, time(21, 0))
 
-    boundaries = set()
-    cursor_dt = grid_start
-    while cursor_dt <= grid_end:
-        boundaries.add(cursor_dt)
-        cursor_dt += timedelta(minutes=60)
+    intervals = []
     for s in schedules:
-        boundaries.add(datetime.combine(today_date, s.time_start))
-        boundaries.add(datetime.combine(today_date, s.time_end))
+        s_start = datetime.combine(today_date, s.time_start)
+        s_end = datetime.combine(today_date, s.time_end)
+        if s_end > s_start:
+            intervals.append((s_start, s_end))
+
+    # Classes on different days may overlap; merge them into busy blocks so the
+    # hourly filler never cuts through a class.
+    busy = []
+    for start, end in sorted(intervals):
+        if busy and start <= busy[-1][1]:
+            busy[-1] = (busy[-1][0], max(busy[-1][1], end))
+        else:
+            busy.append((start, end))
+
+    # Widen the working day when a class starts earlier or runs later.
+    grid_start = min([day_start] + [b[0] for b in busy])
+    grid_end = max([day_end] + [b[1] for b in busy])
+
+    boundaries = {grid_start, grid_end}
+    for start, end in busy:
+        boundaries.add(start)
+        boundaries.add(end)
+
+    # Hourly boundaries, but only inside free stretches.
+    cursor_dt = grid_start
+    for start, end in busy:
+        while cursor_dt + timedelta(minutes=60) <= start:
+            cursor_dt += timedelta(minutes=60)
+            if cursor_dt < start:
+                boundaries.add(cursor_dt)
+        boundaries.add(start)
+        boundaries.add(end)
+        cursor_dt = max(cursor_dt, end)
+    while cursor_dt + timedelta(minutes=60) <= grid_end:
+        cursor_dt += timedelta(minutes=60)
+        if cursor_dt < grid_end:
+            boundaries.add(cursor_dt)
+
     boundaries = sorted(boundaries)
     boundary_index = {dt: i for i, dt in enumerate(boundaries)}
 
     def _row_label(start_dt, end_dt):
-        return f"{start_dt.strftime('%I:%M').lstrip('0')} - {end_dt.strftime('%I:%M %p').lstrip('0')}"
+        start_txt = start_dt.strftime('%I:%M').lstrip('0')
+        if start_dt.strftime('%p') != end_dt.strftime('%p'):
+            start_txt += ' ' + start_dt.strftime('%p')
+        return f"{start_txt} - {end_dt.strftime('%I:%M %p').lstrip('0')}"
 
     schedule_grid_data = []
     for i in range(len(boundaries) - 1):

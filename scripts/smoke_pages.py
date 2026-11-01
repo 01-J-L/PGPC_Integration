@@ -264,7 +264,7 @@ def scheduling_checks():
             check("section grid renders", resp.status_code == 200, f"got {resp.status_code}")
             rows = body.count(b"whitespace-nowrap text-xs font-medium")
             # A single long class must not collapse the day into one row.
-            check("grid keeps hourly rows", rows >= 10, f"{rows} rows")
+            check("empty grid keeps hourly rows", rows >= 10, f"{rows} rows")
             check("'Add Time Row' control is gone", b"Add Time Row" not in body)
             check("empty cells open the add modal", b"openAddModal(" in body)
             check("availability URL resolves", b"/faculty/api/check-availability" in body)
@@ -279,6 +279,25 @@ def scheduling_checks():
             if not (course and room and school_year):
                 print("   (no course/room/school year fixture, skipping the conflict checks)")
                 return
+
+            # A class keeps its own frame: 07:00-10:00 is one row and one card,
+            # not three hourly rows.
+            with app.app_context():
+                from website.faculty.models import TeachingLoad
+                db.session.add(TeachingLoad(
+                    course_code=course.course_code, course_description=course.course_description,
+                    section=full_section, day="Wednesday",
+                    time_start=dtime(7, 0), time_end=dtime(10, 0),
+                    room=room.room_name, school_year=school_year,
+                    is_published=False, user_id=teacher.id))
+                db.session.commit()
+            body = client.get(url).data
+            check("a 7:00-10:00 class is a single fixed-frame row",
+                  b"7:00 - 10:00 AM" in body)
+            single_row_cards = body.count(b'rowspan="1"')
+            check("its card spans exactly one row", single_row_cards == 1,
+                  f"{single_row_cards} single-row cards")
+            purge()
 
             with app.app_context():
                 from website.faculty.models import TeachingLoad
