@@ -1143,11 +1143,12 @@ def section_schedule_grid(program_id, section_name, semester):
         if s_end > s_start:
             intervals.append((s_start, s_end))
 
-    # Classes on different days may overlap; merge them into busy blocks so the
-    # hourly filler never cuts through a class.
+    # Merge only classes that actually overlap (they can be on different days).
+    # Back-to-back classes like 07:00-10:00 and 10:00-13:00 stay separate, so
+    # each one keeps its own row and card.
     busy = []
     for start, end in sorted(intervals):
-        if busy and start <= busy[-1][1]:
+        if busy and start < busy[-1][1]:
             busy[-1] = (busy[-1][0], max(busy[-1][1], end))
         else:
             busy.append((start, end))
@@ -1163,7 +1164,10 @@ def section_schedule_grid(program_id, section_name, semester):
         grid_end = busy[-1][1] + timedelta(hours=1)
 
     boundaries = {grid_start, grid_end}
-    for start, end in busy:
+    # Every class start/end is a boundary. When classes overlap on different
+    # days the shared time axis needs those cuts, otherwise a card that starts
+    # inside a merged block is never drawn.
+    for start, end in intervals:
         boundaries.add(start)
         boundaries.add(end)
 

@@ -292,22 +292,45 @@ def scheduling_checks():
                 return
 
             # A class keeps its own frame: 07:00-10:00 is one row and one card,
-            # not three hourly rows.
+            # not three hourly rows. A class straight after it keeps its own row
+            # too (back-to-back classes must not be merged).
             with app.app_context():
                 from website.faculty.models import TeachingLoad
-                db.session.add(TeachingLoad(
-                    course_code=course.course_code, course_description=course.course_description,
-                    section=full_section, day="Wednesday",
-                    time_start=dtime(7, 0), time_end=dtime(10, 0),
-                    room=room.room_name, school_year=school_year,
-                    is_published=False, user_id=teacher.id))
+                for start_h, end_h in ((7, 10), (10, 13)):
+                    db.session.add(TeachingLoad(
+                        course_code=course.course_code, course_description=course.course_description,
+                        section=full_section, day="Wednesday",
+                        time_start=dtime(start_h, 0), time_end=dtime(end_h, 0),
+                        room=room.room_name, school_year=school_year,
+                        is_published=False, user_id=teacher.id))
                 db.session.commit()
             body = client.get(url).data
             check("a 7:00-10:00 class is a single fixed-frame row",
                   b"7:00 - 10:00 AM" in body)
-            single_row_cards = body.count(b'rowspan="1"')
-            check("its card spans exactly one row", single_row_cards == 1,
-                  f"{single_row_cards} single-row cards")
+            check("a back-to-back class keeps its own row",
+                  b"10:00 AM - 1:00 PM" in body)
+            check("both back-to-back cards are drawn",
+                  body.count(b"data-schedule-id=") == 2,
+                  f"{body.count(b'data-schedule-id=')} cards")
+            purge()
+
+            # Overlapping classes on different days still need both cards.
+            with app.app_context():
+                from website.faculty.models import TeachingLoad
+                for day, start_h, end_h in (("Monday", 8, 10), ("Tuesday", 9, 11)):
+                    db.session.add(TeachingLoad(
+                        course_code=course.course_code, course_description=course.course_description,
+                        section=full_section, day=day,
+                        time_start=dtime(start_h, 0), time_end=dtime(end_h, 0),
+                        room=room.room_name, school_year=school_year,
+                        is_published=False, user_id=teacher.id))
+                db.session.commit()
+            body = client.get(url).data
+            check("overlapping classes on different days both render",
+                  body.count(b"data-schedule-id=") == 2,
+                  f"{body.count(b'data-schedule-id=')} cards")
+            check("the overlap adds the needed row cuts",
+                  b"8:00 - 9:00 AM" in body and b"9:00 - 10:00 AM" in body)
             purge()
 
             # A class that runs to the bottom of the day must not leave the grid
