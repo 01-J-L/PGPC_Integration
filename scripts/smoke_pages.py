@@ -445,6 +445,38 @@ def scheduling_checks():
         print()
 
 
+def dark_mode_checks():
+    """The grading screens must carry dark: variants, not just light colours."""
+    print("== dark mode ==")
+    pages = {
+        "sm_teacher": [
+            "/faculty/grades/dashboard",
+            "/faculty/grades/manage_classes",
+            "/faculty/grades/grade_management",
+        ],
+        "sm_dean": [
+            "/faculty/grading-admin/dashboard",
+            "/faculty/grading-admin/student_records",
+        ],
+    }
+    for username, urls in pages.items():
+        with app.test_client() as client:
+            client.post("/admin-load/login", data={"email": username, "password": PASSWORD},
+                        follow_redirects=True)
+            for url in urls:
+                body = client.get(url).data
+                name = url.rsplit("/", 1)[-1]
+                check(f"{name} has dark: variants", b"dark:bg-" in body and b"dark:text-" in body)
+                check(f"{name} themes its card borders", b"dark:border-" in body)
+    with app.test_client() as client:
+        client.post("/admin-load/login", data={"email": "sm_teacher", "password": PASSWORD},
+                    follow_redirects=True)
+        body = client.get("/faculty/grades/grade_management").data
+        check("the class record table has dark overrides",
+              b".dark .sticky-col" in body and b".dark .grade-table" in body)
+    print()
+
+
 def main():
     seed()
     try:
@@ -473,6 +505,7 @@ def main():
 
         phase2_checks()
         scheduling_checks()
+        dark_mode_checks()
     finally:
         cleanup()
 

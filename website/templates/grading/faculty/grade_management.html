@@ -32,34 +32,58 @@
     .import-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; display: none; align-items: center; justify-content: center; padding: 16px; }
     .import-modal-backdrop.open { display: flex; }
     .import-modal { background: white; border-radius: 0.75rem; width: 100%; max-width: 32rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2); }
+
+    /* Dark mode overrides for the hand-written class-record styles above. */
+    .dark .table-wrapper { border-color: #334155; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.5); }
+    .dark .grade-table th, .dark .grade-table td { border-color: #475569; color: #e2e8f0; }
+    .dark .grade-table th.bg-prelim-head { background-color: #7f1d1d; color: #fecaca; }
+    .dark .grade-table th.bg-mid-head { background-color: #1e3a8a; color: #bfdbfe; }
+    .dark .grade-table th.bg-fin-head { background-color: #7c2d12; color: #fed7aa; }
+    .dark .grade-table th.bg-orange-sub { background-color: #78350f; color: #fed7aa; }
+    .dark .grade-table th.col-blue, .dark .grade-table td.col-blue { background-color: #1e3a8a; color: #dbeafe; }
+    .dark .grade-table th.col-green, .dark .grade-table td.col-green { background-color: #14532d; color: #dcfce7; }
+    /* Keep the pass/fail and muted colours readable even though the generic
+       td colour above has higher specificity. */
+    .dark .grade-table td.grade-pass { color: #34d399; }
+    .dark .grade-table td.grade-fail { color: #f87171; }
+    .dark .grade-table tr.text-red-600 td { color: #f87171; }
+    .dark .grade-table td.text-gray-600 { color: #94a3b8; }
+    .dark input[type="number"] { color: #e2e8f0; }
+    .dark input[type="number"]:hover { background-color: #334155; }
+    .dark input[type="number"]:focus { background-color: #0f172a; outline-color: #60a5fa; color: #ffffff; }
+    .dark .sticky-col { background: #1e293b; border-right-color: #475569; color: #f1f5f9; box-shadow: 4px 0 6px -2px rgba(0,0,0,0.5); }
+    .dark .dropdown-content { background-color: #1e293b; border-color: #334155; }
+    .dark .dropdown-content a { color: #e2e8f0; }
+    .dark .dropdown-content a:hover { background-color: #334155; }
+    .dark .import-modal { background: #1e293b; }
 </style>
 
 <div class="grade-management-container space-y-6">
     
     <!-- TOOLBAR (Updated with responsive wrapping) -->
-    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 no-print">
+    <div class="bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 no-print">
         <div>
-            <h1 class="text-xl sm:text-2xl font-bold text-gray-900">Grade Management</h1>
-            <p class="text-xs sm:text-sm text-gray-500">Select a class to view and edit the Class Record.</p>
+            <h1 class="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Grade Management</h1>
+            <p class="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Select a class to view and edit the Class Record.</p>
         </div>
         
         <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
             {% if selected_assignment %}
                 <div class="flex flex-wrap items-center gap-2">
                     <div class="inline-flex rounded-md shadow-sm" role="group">
-                        <button type="button" onclick="addNextColumn('col-q')" class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-2 text-xs font-bold hover:bg-indigo-100 rounded-l-md transition">+ Quiz</button>
-                        <button type="button" onclick="removeLastColumn('col-q')" class="bg-red-50 text-red-700 border-t border-b border-r border-red-200 px-3 py-2 text-xs font-bold hover:bg-red-100 rounded-r-md transition">-</button>
+                        <button type="button" onclick="addNextColumn('col-q')" class="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-3 py-2 text-xs font-bold hover:bg-indigo-100 rounded-l-md transition">+ Quiz</button>
+                        <button type="button" onclick="removeLastColumn('col-q')" class="bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-t border-b border-r border-red-200 dark:border-red-800 px-3 py-2 text-xs font-bold hover:bg-red-100 rounded-r-md transition">-</button>
                     </div>
 
                     <div class="inline-flex rounded-md shadow-sm" role="group">
-                        <button type="button" onclick="addNextColumn('col-a')" class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-2 text-xs font-bold hover:bg-indigo-100 rounded-l-md transition">+ Act</button>
-                        <button type="button" onclick="removeLastColumn('col-a')" class="bg-red-50 text-red-700 border-t border-b border-r border-red-200 px-3 py-2 text-xs font-bold hover:bg-red-100 rounded-r-md transition">-</button>
+                        <button type="button" onclick="addNextColumn('col-a')" class="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-3 py-2 text-xs font-bold hover:bg-indigo-100 rounded-l-md transition">+ Act</button>
+                        <button type="button" onclick="removeLastColumn('col-a')" class="bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-t border-b border-r border-red-200 dark:border-red-800 px-3 py-2 text-xs font-bold hover:bg-red-100 rounded-r-md transition">-</button>
                     </div>
                 </div>
             {% endif %}
 
             <div class="relative w-full sm:w-64">
-                <select name="assignment_id" onchange="window.location.href='?assignment_id='+this.value" class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm bg-gray-50">
+                <select name="assignment_id" onchange="window.location.href='?assignment_id='+this.value" class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-slate-600 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm bg-gray-50 dark:bg-slate-700">
                     <option value="">-- Select Class --</option>
                     {% for a in assignments %}
                     <option value="{{ a.id }}" {% if selected_assignment and a.id == selected_assignment.id %}selected{% endif %}>
@@ -71,7 +95,7 @@
 
             {% if selected_assignment %}
             <div class="dropdown w-full sm:w-auto">
-                <button class="w-full sm:w-auto bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center justify-center gap-2">
+                <button class="w-full sm:w-auto bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center justify-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2z" /></svg>
                     Print ▾
                 </button>
@@ -85,7 +109,7 @@
             </div>
 
             <div class="dropdown w-full sm:w-auto">
-                <button class="w-full sm:w-auto bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center justify-center gap-2">
+                <button class="w-full sm:w-auto bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 px-4 py-2 rounded-md text-sm font-medium shadow-sm transition flex items-center justify-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-6l-4-4m0 0L8 10m4-4v12" /></svg>
                     Excel ▾
                 </button>
@@ -105,7 +129,7 @@
     <form method="POST">
         <input type="hidden" name="assignment_id" value="{{ selected_assignment.id }}">
         
-        <div class="bg-white table-wrapper">
+        <div class="bg-white dark:bg-slate-800 table-wrapper">
             <table class="grade-table">
                 <thead>
                     <!-- ROW 1: MAIN HEADERS -->
@@ -193,7 +217,7 @@
                     </tr>
 
                     <!-- PERFECT SCORES -->
-                    <tr class="bg-red-50 font-bold text-red-600 border-b-2 border-red-200">
+                    <tr class="bg-red-50 dark:bg-red-900/30 font-bold text-red-600 dark:text-red-400 border-b-2 border-red-200 dark:border-red-800">
                         <td class="sticky-col text-right">PERFECT:</td>
                         
                         <!-- PRELIM INPUTS -->
@@ -203,8 +227,8 @@
                         <td class="col-q4 hidden-col"><input type="number" name="p_max_q4" value="{{ selected_assignment.p_max_q4 or 0 }}"></td>
                         <td class="col-q5 hidden-col"><input type="number" name="p_max_q5" value="{{ selected_assignment.p_max_q5 or 0 }}"></td>
                         
-                        <td class="bg-gray-100">{{ selected_assignment.p_total_max_q }}</td>
-                        <td class="bg-gray-100">100</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">{{ selected_assignment.p_total_max_q }}</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">100</td>
                         <td><input type="number" name="p_max_r" value="{{ selected_assignment.p_max_r or 0 }}"></td>
                         
                         <td><input type="number" name="p_max_act1" value="{{ selected_assignment.p_max_act1 or 0 }}"></td>
@@ -213,11 +237,11 @@
                         <td class="col-a4 hidden-col"><input type="number" name="p_max_act4" value="{{ selected_assignment.p_max_act4 or 0 }}"></td>
                         <td class="col-a5 hidden-col"><input type="number" name="p_max_act5" value="{{ selected_assignment.p_max_act5 or 0 }}"></td>
 
-                        <td class="bg-gray-100">{{ selected_assignment.p_total_max_a }}</td>
-                        <td class="bg-gray-100">100</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">{{ selected_assignment.p_total_max_a }}</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">100</td>
                         <td><input type="number" name="p_max_e" value="{{ selected_assignment.p_max_exam or 0 }}"></td>
-                        <td class="bg-gray-100">100</td> 
-                        <td class="bg-gray-200">100</td> <td class="bg-gray-200">5.0</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">100</td>
+                        <td class="bg-gray-200 dark:bg-slate-600">100</td> <td class="bg-gray-200 dark:bg-slate-600">5.0</td>
 
                         <!-- MIDTERM MAX -->
                         <td><input type="number" name="m_max_q1" value="{{ selected_assignment.m_max_q1 or 0 }}"></td>
@@ -226,8 +250,8 @@
                         <td class="col-q4 hidden-col"><input type="number" name="m_max_q4" value="{{ selected_assignment.m_max_q4 or 0 }}"></td>
                         <td class="col-q5 hidden-col"><input type="number" name="m_max_q5" value="{{ selected_assignment.m_max_q5 or 0 }}"></td>
                         
-                        <td class="bg-gray-100">{{ selected_assignment.m_total_max_q }}</td>
-                        <td class="bg-gray-100">100</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">{{ selected_assignment.m_total_max_q }}</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">100</td>
                         <td><input type="number" name="m_max_r" value="{{ selected_assignment.m_max_r or 0 }}"></td>
                         
                         <td><input type="number" name="m_max_act1" value="{{ selected_assignment.m_max_act1 or 0 }}"></td>
@@ -236,11 +260,11 @@
                         <td class="col-a4 hidden-col"><input type="number" name="m_max_act4" value="{{ selected_assignment.m_max_act4 or 0 }}"></td>
                         <td class="col-a5 hidden-col"><input type="number" name="m_max_act5" value="{{ selected_assignment.m_max_act5 or 0 }}"></td>
 
-                        <td class="bg-gray-100">{{ selected_assignment.m_total_max_a }}</td>
-                        <td class="bg-gray-100">100</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">{{ selected_assignment.m_total_max_a }}</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">100</td>
                         <td><input type="number" name="m_max_e" value="{{ selected_assignment.m_max_exam or 0 }}"></td>
-                        <td class="bg-gray-100">100</td>
-                        <td class="bg-gray-200">100</td> <td class="bg-gray-200">5.0</td> <td class="bg-gray-200">100</td> <td class="bg-gray-200">5.0</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">100</td>
+                        <td class="bg-gray-200 dark:bg-slate-600">100</td> <td class="bg-gray-200 dark:bg-slate-600">5.0</td> <td class="bg-gray-200 dark:bg-slate-600">100</td> <td class="bg-gray-200 dark:bg-slate-600">5.0</td>
 
                         <!-- FINAL MAX -->
                         <td><input type="number" name="f_max_q1" value="{{ selected_assignment.f_max_q1 or 0 }}"></td>
@@ -249,8 +273,8 @@
                         <td class="col-q4 hidden-col"><input type="number" name="f_max_q4" value="{{ selected_assignment.f_max_q4 or 0 }}"></td>
                         <td class="col-q5 hidden-col"><input type="number" name="f_max_q5" value="{{ selected_assignment.f_max_q5 or 0 }}"></td>
                         
-                        <td class="bg-gray-100">{{ selected_assignment.f_total_max_q }}</td>
-                        <td class="bg-gray-100">100</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">{{ selected_assignment.f_total_max_q }}</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">100</td>
                         <td><input type="number" name="f_max_r" value="{{ selected_assignment.f_max_r or 0 }}"></td>
                         
                         <td><input type="number" name="f_max_act1" value="{{ selected_assignment.f_max_act1 or 0 }}"></td>
@@ -259,11 +283,11 @@
                         <td class="col-a4 hidden-col"><input type="number" name="f_max_act4" value="{{ selected_assignment.f_max_act4 or 0 }}"></td>
                         <td class="col-a5 hidden-col"><input type="number" name="f_max_act5" value="{{ selected_assignment.f_max_act5 or 0 }}"></td>
 
-                        <td class="bg-gray-100">{{ selected_assignment.f_total_max_a }}</td>
-                        <td class="bg-gray-100">100</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">{{ selected_assignment.f_total_max_a }}</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">100</td>
                         <td><input type="number" name="f_max_e" value="{{ selected_assignment.f_max_exam or 0 }}"></td>
-                        <td class="bg-gray-100">100</td>
-                        <td class="bg-gray-200">100</td> <td class="bg-gray-200">5.0</td> <td class="bg-gray-200">100</td> <td class="bg-gray-200">5.0</td> <td class="bg-gray-200">1</td>
+                        <td class="bg-gray-100 dark:bg-slate-700">100</td>
+                        <td class="bg-gray-200 dark:bg-slate-600">100</td> <td class="bg-gray-200 dark:bg-slate-600">5.0</td> <td class="bg-gray-200 dark:bg-slate-600">100</td> <td class="bg-gray-200 dark:bg-slate-600">5.0</td> <td class="bg-gray-200 dark:bg-slate-600">1</td>
                     </tr>
                 </thead>
                 
@@ -292,7 +316,7 @@
                         {% if score >= 96 %}1.00{% elif score >= 92 %}1.25{% elif score >= 88 %}1.50{% elif score >= 84 %}1.75{% elif score >= 80 %}2.00{% elif score >= 75 %}2.25{% elif score >= 70 %}2.50{% elif score >= 65 %}2.75{% elif score >= 60 %}3.00{% else %}5.00{% endif %}
                     {%- endmacro %}
 
-                    <tr class="hover:bg-blue-50 transition-colors">
+                    <tr class="hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors">
                         <input type="hidden" name="student_id" value="{{ student.id }}">
                         <td class="sticky-col">{{ student.name }}</td>
                         
@@ -302,18 +326,18 @@
                         <td><input type="number" name="p_q3_{{student.id}}" value="{{ g.p_q3 if g else '' }}"></td>
                         <td class="col-q4 hidden-col"><input type="number" name="p_q4_{{student.id}}" value="{{ g.p_q4 if g else '' }}"></td>
                         <td class="col-q5 hidden-col"><input type="number" name="p_q5_{{student.id}}" value="{{ g.p_q5 if g else '' }}"></td>
-                        <td class="bg-gray-50 font-medium">{{ g.p_quiz_total|int if g else 0 }}</td>
-                        <td class="bg-gray-50 text-gray-600">{{ p_ave_q }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 font-medium">{{ g.p_quiz_total|int if g else 0 }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 text-gray-600 dark:text-slate-400">{{ p_ave_q }}</td>
                         <td><input type="number" name="p_recit_{{student.id}}" value="{{ g.p_recit if g else '' }}"></td>
                         <td><input type="number" name="p_act1_{{student.id}}" value="{{ g.p_act1 if g else '' }}"></td>
                         <td><input type="number" name="p_act2_{{student.id}}" value="{{ g.p_act2 if g else '' }}"></td>
                         <td><input type="number" name="p_act3_{{student.id}}" value="{{ g.p_act3 if g else '' }}"></td>
                         <td class="col-a4 hidden-col"><input type="number" name="p_act4_{{student.id}}" value="{{ g.p_act4 if g else '' }}"></td>
                         <td class="col-a5 hidden-col"><input type="number" name="p_act5_{{student.id}}" value="{{ g.p_act5 if g else '' }}"></td>
-                        <td class="bg-gray-50 font-medium">{{ g.p_act_total|int if g else 0 }}</td>
-                        <td class="bg-gray-50 text-gray-600">{{ p_ave_a }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 font-medium">{{ g.p_act_total|int if g else 0 }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 text-gray-600 dark:text-slate-400">{{ p_ave_a }}</td>
                         <td><input type="number" name="p_exam_{{student.id}}" value="{{ g.p_exam if g else '' }}"></td>
-                        <td class="bg-gray-50 text-gray-600">{{ p_eq_e }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 text-gray-600 dark:text-slate-400">{{ p_eq_e }}</td>
                         <td class="col-blue">{{ g.prelim_grade|int if g and g.prelim_grade else 0 }}</td>
                         <td class="col-blue">{{ get_gp(g.prelim_grade|int if g else 0) }}</td>
 
@@ -323,18 +347,18 @@
                         <td><input type="number" name="m_q3_{{student.id}}" value="{{ g.m_q3 if g else '' }}"></td>
                         <td class="col-q4 hidden-col"><input type="number" name="m_q4_{{student.id}}" value="{{ g.m_q4 if g else '' }}"></td>
                         <td class="col-q5 hidden-col"><input type="number" name="m_q5_{{student.id}}" value="{{ g.m_q5 if g else '' }}"></td>
-                        <td class="bg-gray-50 font-medium">{{ g.m_quiz_total|int if g else 0 }}</td>
-                        <td class="bg-gray-50 text-gray-600">{{ m_ave_q }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 font-medium">{{ g.m_quiz_total|int if g else 0 }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 text-gray-600 dark:text-slate-400">{{ m_ave_q }}</td>
                         <td><input type="number" name="m_recit_{{student.id}}" value="{{ g.m_recit if g else '' }}"></td>
                         <td><input type="number" name="m_act1_{{student.id}}" value="{{ g.m_act1 if g else '' }}"></td>
                         <td><input type="number" name="m_act2_{{student.id}}" value="{{ g.m_act2 if g else '' }}"></td>
                         <td><input type="number" name="m_act3_{{student.id}}" value="{{ g.m_act3 if g else '' }}"></td>
                         <td class="col-a4 hidden-col"><input type="number" name="m_act4_{{student.id}}" value="{{ g.m_act4 if g else '' }}"></td>
                         <td class="col-a5 hidden-col"><input type="number" name="m_act5_{{student.id}}" value="{{ g.m_act5 if g else '' }}"></td>
-                        <td class="bg-gray-50 font-medium">{{ g.m_act_total|int if g else 0 }}</td>
-                        <td class="bg-gray-50 text-gray-600">{{ m_ave_a }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 font-medium">{{ g.m_act_total|int if g else 0 }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 text-gray-600 dark:text-slate-400">{{ m_ave_a }}</td>
                         <td><input type="number" name="m_exam_{{student.id}}" value="{{ g.m_exam if g else '' }}"></td>
-                        <td class="bg-gray-50 text-gray-600">{{ m_eq_e }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 text-gray-600 dark:text-slate-400">{{ m_eq_e }}</td>
                         <td class="col-green">{{ g.midterm_grade|int if g and g.midterm_grade else 0 }}</td>
                         <td class="col-green">{{ get_gp(g.midterm_grade|int if g else 0) }}</td>
                         <td class="col-blue">{{ g.midterm_standing|int if g and g.midterm_standing else 0 }}</td>
@@ -346,18 +370,18 @@
                         <td><input type="number" name="f_q3_{{student.id}}" value="{{ g.f_q3 if g else '' }}"></td>
                         <td class="col-q4 hidden-col"><input type="number" name="f_q4_{{student.id}}" value="{{ g.f_q4 if g else '' }}"></td>
                         <td class="col-q5 hidden-col"><input type="number" name="f_q5_{{student.id}}" value="{{ g.f_q5 if g else '' }}"></td>
-                        <td class="bg-gray-50 font-medium">{{ g.f_quiz_total|int if g else 0 }}</td>
-                        <td class="bg-gray-50 text-gray-600">{{ f_ave_q }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 font-medium">{{ g.f_quiz_total|int if g else 0 }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 text-gray-600 dark:text-slate-400">{{ f_ave_q }}</td>
                         <td><input type="number" name="f_recit_{{student.id}}" value="{{ g.f_recit if g else '' }}"></td>
                         <td><input type="number" name="f_act1_{{student.id}}" value="{{ g.f_act1 if g else '' }}"></td>
                         <td><input type="number" name="f_act2_{{student.id}}" value="{{ g.f_act2 if g else '' }}"></td>
                         <td><input type="number" name="f_act3_{{student.id}}" value="{{ g.f_act3 if g else '' }}"></td>
                         <td class="col-a4 hidden-col"><input type="number" name="f_act4_{{student.id}}" value="{{ g.f_act4 if g else '' }}"></td>
                         <td class="col-a5 hidden-col"><input type="number" name="f_act5_{{student.id}}" value="{{ g.f_act5 if g else '' }}"></td>
-                        <td class="bg-gray-50 font-medium">{{ g.f_act_total|int if g else 0 }}</td>
-                        <td class="bg-gray-50 text-gray-600">{{ f_ave_a }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 font-medium">{{ g.f_act_total|int if g else 0 }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 text-gray-600 dark:text-slate-400">{{ f_ave_a }}</td>
                         <td><input type="number" name="f_exam_{{student.id}}" value="{{ g.f_exam if g else '' }}"></td>
-                        <td class="bg-gray-50 text-gray-600">{{ f_eq_e }}</td>
+                        <td class="bg-gray-50 dark:bg-slate-700 text-gray-600 dark:text-slate-400">{{ f_eq_e }}</td>
                         <td class="col-blue">{{ g.final_term_grade|int if g and g.final_term_grade else 0 }}</td>
                         <td class="col-blue">{{ get_gp(g.final_term_grade|int if g else 0) }}</td>
                         <td class="col-blue">{{ g.final_grade|int if g and g.final_grade else 0 }}</td>
@@ -381,7 +405,7 @@
     </form>
     {% endif %}
 
-    <div class="sm:hidden bg-gray-100 border border-gray-200 px-4 py-2 text-[10px] text-gray-400 text-center italic rounded-md">
+    <div class="sm:hidden bg-gray-100 dark:bg-slate-700 border border-gray-200 dark:border-slate-700 px-4 py-2 text-[10px] text-gray-400 dark:text-gray-500 text-center italic rounded-md">
         &larr; Swipe table to view all grading columns &rarr;
     </div>
 </div>
@@ -390,29 +414,29 @@
 <!-- IMPORT GRADES MODAL -->
 <div id="importGradesModal" class="import-modal-backdrop no-print">
     <div class="import-modal">
-        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 class="text-lg font-bold text-gray-900">Import Grades from Excel</h2>
-            <button type="button" onclick="closeImportModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+            <h2 class="text-lg font-bold text-gray-900 dark:text-white">Import Grades from Excel</h2>
+            <button type="button" onclick="closeImportModal()" class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-slate-300 text-2xl leading-none">&times;</button>
         </div>
         <form method="POST" action="{{ url_for('faculty_main.grading_import_grades', assignment_id=selected_assignment.id) }}" enctype="multipart/form-data" id="importGradesForm">
             <div class="px-6 py-4 space-y-4">
-                <p class="text-sm text-gray-600">
+                <p class="text-sm text-gray-600 dark:text-slate-400">
                     Upload an <strong>.xlsx</strong> file using the template layout.
                     Students are matched by <strong>Student ID</strong>, or by <strong>Student Name</strong> when the ID is blank.
                     Only the score columns are imported; grades are recalculated automatically.
                 </p>
-                <a href="{{ url_for('faculty_main.grading_grades_template', assignment_id=selected_assignment.id) }}" class="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">
+                <a href="{{ url_for('faculty_main.grading_grades_template', assignment_id=selected_assignment.id) }}" class="inline-flex items-center gap-1 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
                     📄 Download the blank template for this class
                 </a>
                 <div>
-                    <label for="importGradesFile" class="block text-sm font-medium text-gray-700 mb-1">Excel file (.xlsx)</label>
+                    <label for="importGradesFile" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Excel file (.xlsx)</label>
                     <input type="file" id="importGradesFile" name="file" accept=".xlsx,.xlsm" required
-                           class="block w-full text-sm text-gray-700 border border-gray-300 rounded-md cursor-pointer bg-gray-50 focus:outline-none focus:ring-blue-500 focus:border-blue-500 p-2">
-                    <p id="importFileName" class="mt-1 text-xs text-gray-500">No file selected.</p>
+                           class="block w-full text-sm text-gray-700 dark:text-slate-300 border border-gray-300 dark:border-slate-600 rounded-md cursor-pointer bg-gray-50 dark:bg-slate-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 p-2">
+                    <p id="importFileName" class="mt-1 text-xs text-gray-500 dark:text-slate-400">No file selected.</p>
                 </div>
             </div>
-            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-                <button type="button" onclick="closeImportModal()" class="px-4 py-2 rounded-md text-sm font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
+            <div class="px-6 py-4 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
+                <button type="button" onclick="closeImportModal()" class="px-4 py-2 rounded-md text-sm font-medium bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
                 <button type="submit" class="px-4 py-2 rounded-md text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm">Import Grades</button>
             </div>
         </form>

@@ -4,12 +4,12 @@
     <!-- Header & Actions -->
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 no-print">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900">Student Records</h1>
-            <p class="text-sm text-gray-500">Search, filter, and manage student data.</p>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Student Records</h1>
+            <p class="text-sm text-gray-500 dark:text-slate-400">Search, filter, and manage student data.</p>
         </div>
         <div class="flex space-x-3">
-            <a href="{{ url_for('faculty_main.grading_print_student_records', search=search_query, program=program_filter, section=section_filter) }}" id="print-button" target="_blank" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none transition-colors">
-                <svg class="w-4 h-4 mr-2 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <a href="{{ url_for('faculty_main.grading_print_student_records', search=search_query, program=program_filter, section=section_filter) }}" id="print-button" target="_blank" class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none transition-colors">
+                <svg class="w-4 h-4 mr-2 text-gray-500 dark:text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                 </svg>
                 Print List
@@ -18,15 +18,15 @@
     </div>
 
     <!-- Filter Card -->
-    <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 no-print">
+    <div class="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 no-print">
         <form method="GET" action="{{ url_for('faculty_main.grading_student_records') }}" id="filter-form" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
             <div class="md:col-span-1">
-                <label for="search" class="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Search</label>
-                <input type="text" name="search" id="search" value="{{ search_query }}" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Name or ID...">
+                <label for="search" class="block text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-1">Search</label>
+                <input type="text" name="search" id="search" value="{{ search_query }}" class="block w-full rounded-md border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Name or ID...">
             </div>
             <div>
-                <label for="program" class="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Program</label>
-                <select name="program" id="program" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                <label for="program" class="block text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-1">Program</label>
+                <select name="program" id="program" class="block w-full rounded-md border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                     <option value="">All Programs</option>
                     {% for p in programs %}
                         <option value="{{ p.id }}" {% if p.id == program_filter %}selected{% endif %}>{{ p.code }}</option>
@@ -34,14 +34,14 @@
                 </select>
             </div>
             <div>
-                <label for="section" class="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Section</label>
-                <input type="text" name="section" id="section" value="{{ section_filter }}" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="e.g., 1A">
+                <label for="section" class="block text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-1">Section</label>
+                <input type="text" name="section" id="section" value="{{ section_filter }}" class="block w-full rounded-md border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="e.g., 1A">
             </div>
             <div class="flex gap-2">
-                <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-800 hover:bg-gray-900 focus:outline-none transition-colors">
+                <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-800 hover:bg-gray-900 dark:bg-indigo-600 dark:hover:bg-indigo-500 focus:outline-none transition-colors">
                     Apply Filters
                 </button>
-                <a href="{{ url_for('faculty_main.grading_student_records') }}" class="px-3 py-2 border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50" title="Reset">
+                <a href="{{ url_for('faculty_main.grading_student_records') }}" class="px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700" title="Reset">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                 </a>
             </div>
@@ -49,35 +49,35 @@
     </div>
 
     <!-- Results Table -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" id="printable-area">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden" id="printable-area">
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+                <thead class="bg-gray-50 dark:bg-slate-700">
                     <tr>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Full Name</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Section</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider no-print">Actions</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Student ID</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Full Name</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Program</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Section</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider no-print">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
+                <tbody class="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
                     {% for student in students %}
-                    <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">{{ student.student_number }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ student.name }}</td>
+                    <tr class="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600 dark:text-slate-400">{{ student.student_number }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{{ student.name }}</td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-indigo-100 text-indigo-800">{{ student.section.program.code }}</span>
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200">{{ student.section.program.code }}</span>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ student.section.name }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-slate-400">{{ student.section.name }}</td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200">
                                 Active
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium no-print">
-                            <a href="{{ url_for('faculty_main.grading_view_student_grades', student_id=student.id) }}" class="text-indigo-600 hover:text-indigo-900 flex items-center justify-end gap-1">
+                            <a href="{{ url_for('faculty_main.grading_view_student_grades', student_id=student.id) }}" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 flex items-center justify-end gap-1">
                                 <span>Grades</span>
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                             </a>
@@ -86,11 +86,11 @@
                     {% else %}
                     <tr>
                         <td colspan="6" class="px-6 py-12 text-center">
-                            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                            <h3 class="mt-2 text-sm font-medium text-gray-900">No records found</h3>
-                            <p class="mt-1 text-sm text-gray-500">Try adjusting your search or filters.</p>
+                            <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No records found</h3>
+                            <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Try adjusting your search or filters.</p>
                         </td>
                     </tr>
                     {% endfor %}
