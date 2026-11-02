@@ -79,6 +79,40 @@ def parse_time_input(value, default=None):
     return default
 
 
+def academic_term_status():
+    """Return (ended, message) for the active academic term.
+
+    The term is closed once today is past the stored school-year end date or the
+    semester end date. A missing or unreadable date is treated as still open so
+    a half-configured term does not lock scheduling out.
+    """
+    today = datetime.now().date()
+    checks = (
+        ('school_year_end', 'The current School Year has ended.'),
+        ('semester_end_date', 'The current Semester has ended.'),
+    )
+    for key, message in checks:
+        row = SystemSetting.query.filter_by(key=key).first()
+        if not row or not row.value or not row.value.strip():
+            continue
+        try:
+            end_date = datetime.strptime(row.value.strip(), '%Y-%m-%d').date()
+        except ValueError:
+            continue
+        if today > end_date:
+            return True, message
+    return False, None
+
+
+def term_closed_response(endpoint='faculty_main.manage_section_schedule_hub', **values):
+    """Redirect with an explanation when the active term has already ended."""
+    ended, message = academic_term_status()
+    if not ended:
+        return None
+    flash(f'{message} Update the academic term in System Settings before assigning loads.', 'error')
+    return redirect(url_for(endpoint, **values))
+
+
 def get_faculty_program_scope():
     """Programs the current admin/dean may manage.
 
@@ -182,30 +216,8 @@ def dashboard():
     school_year_setting = SystemSetting.query.filter_by(key='school_year').first()
     active_school_year = school_year_setting.value if school_year_setting else None
 
-    # --- NEW: IMPROVED EXPIRATION CHECK (Checks Both) ---
-    expiration_alert = None # This will store the message if something is expired
-    today = datetime.now().date()
-
-    # 1. Check School Year
-    sy_end_setting = SystemSetting.query.filter_by(key='school_year_end').first()
-    if sy_end_setting and sy_end_setting.value:
-        try:
-            sy_end_date = datetime.strptime(sy_end_setting.value, '%Y-%m-%d').date()
-            if today > sy_end_date:
-                expiration_alert = "The current School Year has ended."
-        except:
-            pass 
-
-    # 2. Check Semester (Only if SY hasn't expired yet)
-    if not expiration_alert:
-        sem_end_setting = SystemSetting.query.filter_by(key='semester_end_date').first()
-        if sem_end_setting and sem_end_setting.value:
-            try:
-                sem_end_date = datetime.strptime(sem_end_setting.value, '%Y-%m-%d').date()
-                if today > sem_end_date:
-                    expiration_alert = "The current Semester has ended."
-            except:
-                pass
+    # --- IMPROVED EXPIRATION CHECK (Checks Both) ---
+    term_ended, expiration_alert = academic_term_status()
     # -----------------------------
 
     if can_manage_faculty_system():
@@ -609,7 +621,8 @@ def scheduling():
     
     filter_form.department.data = selected_department
     
-    return render_template('faculty/scheduling_hub.html', title='Select Faculty to Schedule', faculty_list=faculty_list, filter_form=filter_form, selected_department=selected_department)
+    term_ended, term_ended_message = academic_term_status()
+    return render_template('faculty/scheduling_hub.html', title='Select Faculty to Schedule', faculty_list=faculty_list, filter_form=filter_form, selected_department=selected_department, term_ended=term_ended, term_ended_message=term_ended_message)
     
     filter_form = UserFilterForm(request.args)
     
@@ -663,7 +676,8 @@ def scheduling():
     
     filter_form.department.data = selected_department
 
-    return render_template('faculty/scheduling_hub.html', title='Select Faculty to Schedule', faculty_list=faculty_list, filter_form=filter_form, selected_department=selected_department)
+    term_ended, term_ended_message = academic_term_status()
+    return render_template('faculty/scheduling_hub.html', title='Select Faculty to Schedule', faculty_list=faculty_list, filter_form=filter_form, selected_department=selected_department, term_ended=term_ended, term_ended_message=term_ended_message)
 
 @main.route('/schedule-grid/<int:faculty_id>/sem/<int:semester>', methods=['GET', 'POST'])
 @login_required
@@ -731,6 +745,10 @@ def schedule_grid(faculty_id, semester):
         return redirect(url_for('faculty_main.schedule_grid', faculty_id=faculty_id, semester=semester))
 
     if 'add_schedule_submit' in request.form:
+        blocked = term_closed_response(
+            'faculty_main.schedule_grid', faculty_id=faculty_id, semester=semester)
+        if blocked:
+            return blocked
         if hasattr(form, 'faculty'): del form.faculty
         # We skip validating choices for dynamic fields strictly because JS modifies them
         form.course.choices = [(form.course.data, 'selected')] 
@@ -922,13 +940,17 @@ def schedule_grid(faculty_id, semester):
     form.room.choices = [(r.room_name, r.room_name) for r in all_rooms_refresh]
     if not form.room.choices: form.room.choices = [('', 'No Rooms Created')]
 
+    term_ended, term_ended_message = academic_term_status()
+
     return render_template('faculty/schedule_grid.html', title=f"Scheduling for {faculty_member.full_name}", 
                            faculty=faculty_member, semester=semester, time_slots=[], 
                            days=DAYS_OF_WEEK, schedule_grid=schedule_grid_data, form=form, 
                            time_slot_form=time_slot_form, delete_form=delete_form, 
                            editing_schedule_id=schedule_id_to_edit,
                            edit_data=edit_data,
-                           faculty_program_id=faculty_member.program_id if faculty_member.program_id else '')
+                           faculty_program_id=faculty_member.program_id if faculty_member.program_id else '',
+                           term_ended=term_ended,
+                           term_ended_message=term_ended_message)
 
 
 @main.route('/section-grid/prog<program_id>/sec<section_name>/sem<int:semester>', methods=['GET', 'POST'])
@@ -984,6 +1006,11 @@ def section_schedule_grid(program_id, section_name, semester):
 
     # --- 3. HANDLE ADD SCHEDULE ---
     if 'add_schedule_submit' in request.form:
+        blocked = term_closed_response(
+            'faculty_main.section_schedule_grid',
+            program_id=program_id, section_name=section_name, semester=semester)
+        if blocked:
+            return blocked
         add_form.course.choices = [(add_form.course.data, 'selected')]
         add_form.faculty.choices = [(add_form.faculty.data, 'selected')]
         add_form.room.choices = [(add_form.room.data, 'selected')]
@@ -1052,6 +1079,11 @@ def section_schedule_grid(program_id, section_name, semester):
 
     # --- 5. HANDLE EDIT SCHEDULE ---
     if 'update_schedule_submit' in request.form:
+        blocked = term_closed_response(
+            'faculty_main.section_schedule_grid',
+            program_id=program_id, section_name=section_name, semester=semester)
+        if blocked:
+            return blocked
         edit_form.course.choices = [(edit_form.course.data, 'selected')]
         edit_form.faculty.choices = [(edit_form.faculty.data, 'selected')]
         edit_form.room.choices = [(edit_form.room.data, 'selected')]
@@ -1277,6 +1309,8 @@ def section_schedule_grid(program_id, section_name, semester):
         time_options.append((option_dt.strftime('%H:%M'), option_dt.strftime('%I:%M %p').lstrip('0')))
         option_dt += timedelta(minutes=30)
 
+    term_ended, term_ended_message = academic_term_status()
+
     return render_template('faculty/section_schedule_grid_final.html', 
                            title=f"Scheduling for {full_section_name}", program=program,
                            section_name=section_name, semester=semester,
@@ -1287,7 +1321,9 @@ def section_schedule_grid(program_id, section_name, semester):
                            add_form=add_form, edit_form=edit_form, delete_form=delete_form,
                            section_info=section_info,
                            active_school_year=current_school_year,
-                           has_drafts=has_drafts)
+                           has_drafts=has_drafts,
+                           term_ended=term_ended,
+                           term_ended_message=term_ended_message)
 
 @main.route('/api/get-courses/<program_id>/sem/<int:semester>')
 @login_required
@@ -1513,6 +1549,9 @@ def manage_section_schedule_hub():
     
     # --- 1. HANDLE FORM SUBMISSION ---
     if form.validate_on_submit():
+        blocked = term_closed_response()
+        if blocked:
+            return blocked
         if not active_school_year:
             flash('Cannot create a section because the active school year is not set.', 'error')
             return redirect(url_for('faculty_main.manage_section_schedule_hub'))
@@ -1630,12 +1669,16 @@ def manage_section_schedule_hub():
                     'sem2_sections_by_year': sem2_by_year
                 })
 
+    term_ended, term_ended_message = academic_term_status()
+
     return render_template('faculty/manage_section_schedule_hub.html', 
                            title='Manage Sections', 
                            form=form,
                            delete_form=delete_form, 
                            programs_with_sections=programs_with_sections,
-                           active_school_year=active_school_year)
+                           active_school_year=active_school_year,
+                           term_ended=term_ended,
+                           term_ended_message=term_ended_message)
 
 @main.route('/approvals')
 @login_required
@@ -1667,7 +1710,11 @@ def approve_faculty(user_id):
 def delete_schedule(schedule_id, semester):
     if current_user.role not in ('dean', 'admin', 'superadmin'):
         return redirect(url_for('faculty_main.dashboard'))
-        
+
+    blocked = term_closed_response()
+    if blocked:
+        return blocked
+
     form = DeleteScheduleForm()
     if form.validate_on_submit():
         schedule_to_delete = TeachingLoad.query.get_or_404(schedule_id)
@@ -2892,6 +2939,10 @@ def delete_section_schedule(schedule_id):
         flash('You do not have permission to perform this action.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
 
+    blocked = term_closed_response()
+    if blocked:
+        return blocked
+
     delete_form = DeleteScheduleForm()
     if delete_form.validate_on_submit():
         schedule_to_delete = TeachingLoad.query.get_or_404(schedule_id)
@@ -3289,6 +3340,12 @@ def room_schedule(room_id):
 def publish_section_schedule(program_id, section_name, semester):
     if current_user.role not in ('dean', 'admin', 'superadmin'):
         return redirect(url_for('faculty_main.dashboard'))
+
+    blocked = term_closed_response(
+        'faculty_main.section_schedule_grid',
+        program_id=program_id, section_name=section_name, semester=semester)
+    if blocked:
+        return blocked
 
     program = Program.query.get_or_404(program_id)
     full_section_name = f"{program.program_code} {section_name}"

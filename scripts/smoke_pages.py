@@ -88,6 +88,38 @@ def check(label, ok, detail=""):
         failures.append(label)
 
 
+TERM_END_KEYS = ('school_year_end', 'semester_end_date')
+
+
+def set_term_end(value):
+    """Temporarily force the active term's end dates; returns the old values."""
+    with app.app_context():
+        saved = {}
+        for key in TERM_END_KEYS:
+            row = SystemSetting.query.filter_by(key=key).first()
+            saved[key] = row.value if row else None
+            if row:
+                row.value = value
+            else:
+                db.session.add(SystemSetting(key=key, value=value))
+        db.session.commit()
+    return saved
+
+
+def restore_term_end(saved):
+    with app.app_context():
+        for key, value in saved.items():
+            row = SystemSetting.query.filter_by(key=key).first()
+            if value is None:
+                if row:
+                    db.session.delete(row)
+            elif row:
+                row.value = value
+            else:
+                db.session.add(SystemSetting(key=key, value=value))
+        db.session.commit()
+
+
 def seed():
     with app.app_context():
         for username, *_ in ACCOUNTS:
@@ -221,6 +253,82 @@ def phase2_checks():
     print()
 
 
+def term_lock_checks():
+    """Once the active term has ended, scheduling must be read-only."""
+    print("== term lock ==")
+    from datetime import time as dtime
+    with app.app_context():
+        from website.faculty.models import Room
+        program = Program.query.first()
+        teacher = User.query.filter_by(username="sm_teacher").first()
+        course = (Course.query.filter_by(program_id=program.program_id, semester=1).first()
+                  if program else None)
+        room = Room.query.order_by(Room.room_name).first()
+        sy = SystemSetting.query.filter_by(key="school_year").first()
+        school_year = sy.value.strip() if sy and sy.value else None
+        if not (program and teacher and course and room and school_year):
+            print("   (no program/teacher/course/room/school year fixture, skipping)")
+            return
+        program_id = program.program_id
+        course_id = course.id
+        lesson_code = course.course_code
+        lesson_desc = course.course_description
+        teacher_id = teacher.id
+        rname = room.room_name
+        section_name = f"{course.year}Z"
+        full_section = f"{program.program_code} {section_name}"
+
+    url = f"/faculty/section-grid/prog{program_id}/sec{section_name}/sem1"
+
+    def purge():
+        with app.app_context():
+            TeachingLoad.query.filter_by(section=full_section).delete()
+            db.session.commit()
+
+    purge()
+    saved = set_term_end('2000-01-01')
+    try:
+        with app.test_client() as client:
+            client.post("/admin-load/login", data={"email": "sm_dean", "password": PASSWORD},
+                        follow_redirects=True)
+
+            body = client.get(url).data
+            check("an ended term locks the schedule grid", b"Scheduling is locked" in body)
+            check("the lock points at System Settings", b"System Settings" in body)
+
+            body = client.post(url, data={
+                "add_schedule_submit": "1", "day": "Monday",
+                "course": str(course_id), "faculty": str(teacher_id),
+                "time_start": "08:00", "time_end": "09:00", "room": rname,
+            }, follow_redirects=True).data
+            check("adding a class after the term ended is refused", b"has ended" in body)
+            with app.app_context():
+                rows = TeachingLoad.query.filter_by(section=full_section).count()
+            check("no class was created", rows == 0, f"{rows} rows")
+
+            # Publishing drafts is also a schedule write.
+            with app.app_context():
+                db.session.add(TeachingLoad(
+                    course_code=lesson_code, course_description=lesson_desc,
+                    section=full_section, day="Monday",
+                    time_start=dtime(8, 0), time_end=dtime(9, 0),
+                    room=rname, school_year=school_year, is_published=False,
+                    user_id=teacher_id))
+                db.session.commit()
+            body = client.post(
+                f"/faculty/section-grid/publish/{program_id}/sec{section_name}/sem1",
+                follow_redirects=True).data
+            check("publishing drafts after the term ended is refused", b"has ended" in body)
+            with app.app_context():
+                draft = TeachingLoad.query.filter_by(section=full_section).first()
+                still_draft = draft is not None and not draft.is_published
+            check("the draft stays unpublished", still_draft)
+    finally:
+        purge()
+        restore_term_end(saved)
+    print()
+
+
 def scheduling_checks():
     """The section grid must stay a usable hourly grid and reject clashes.
 
@@ -251,6 +359,10 @@ def scheduling_checks():
         full_section = f"{program.program_code} {section_name}"
 
     url = f"/faculty/section-grid/prog{program_id}/sec{section_name}/sem1"
+
+    # Scheduling writes are refused once the term ends; the grid checks below
+    # need an open term so they can exercise the real add/edit paths.
+    saved_term_end = set_term_end('2099-12-31')
 
     def purge():
         with app.app_context():
@@ -446,6 +558,7 @@ def scheduling_checks():
                   b"already has a class at that time" in body or b"is busy at that time" in body)
     finally:
         purge()
+        restore_term_end(saved_term_end)
         print()
 
 
@@ -598,6 +711,7 @@ def main():
             print()
 
         phase2_checks()
+        term_lock_checks()
         scheduling_checks()
         dark_mode_checks()
         grading_schedule_checks()
