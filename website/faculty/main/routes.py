@@ -3603,6 +3603,93 @@ def grading_faculty_id():
     return user.id
 
 
+def grading_active_term():
+    """(school year, semester) currently open, or (None, None) if unset."""
+    year_row = SystemSetting.query.filter_by(key='school_year').first()
+    sem_row = SystemSetting.query.filter_by(key='current_semester').first()
+    school_year = year_row.value.strip() if year_row and year_row.value else None
+    semester = int(sem_row.value) if sem_row and str(sem_row.value).strip().isdigit() else None
+    return school_year, semester
+
+
+def grading_section_from_label(section_label):
+    """Resolve a schedule label such as 'BSCS 3A' to its Section row."""
+    if not section_label:
+        return None
+    parts = section_label.strip().split(None, 1)
+    if len(parts) != 2:
+        return None
+    program_code, section_name = parts[0].upper(), parts[1].upper()
+    return (
+        Section.query.join(Program)
+        .filter(func.upper(Program.program_code) == program_code,
+                func.upper(Section.name) == section_name)
+        .first()
+    )
+
+
+def grading_assignments_for(faculty_id):
+    """The faculty member's grading classes, taken from the section schedule.
+
+    There is no separate "assign loads" step: a class is gradable exactly when
+    it is scheduled for that teacher and published. The FacultyAssignment row
+    is only a per-class grading settings record, so it is created on demand the
+    first time the class is opened for grading.
+    """
+    if not faculty_id:
+        return []
+
+    school_year, semester = grading_active_term()
+    query = TeachingLoad.query.filter_by(user_id=faculty_id, is_published=True)
+    if school_year:
+        query = query.filter(TeachingLoad.school_year == school_year)
+    loads = query.order_by(TeachingLoad.course_code, TeachingLoad.section).all()
+
+    course_semesters = {}
+    if semester is not None:
+        for course in Course.query.filter_by(semester=semester).all():
+            course_semesters[course.course_code] = course
+
+    assignments = []
+    seen = set()
+    created = False
+    for load in loads:
+        if semester is not None and load.course_code not in course_semesters:
+            continue
+        subject = Subject.query.filter_by(subject_code=load.course_code).first()
+        section = grading_section_from_label(load.section)
+        if not subject or not section:
+            continue
+        key = (subject.id, section.id)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        assignment = FacultyAssignment.query.filter_by(
+            faculty_id=faculty_id, subject_id=subject.id, section_id=section.id
+        ).first()
+        if not assignment:
+            assignment = FacultyAssignment(
+                faculty_id=faculty_id, subject_id=subject.id, section_id=section.id
+            )
+            db.session.add(assignment)
+            db.session.flush()
+            created = True
+        assignments.append(assignment)
+
+    if created:
+        db.session.commit()
+    return assignments
+
+
+def grading_assignment_is_scheduled(assignment):
+    """True when the class still exists in the faculty member's schedule."""
+    if not assignment:
+        return False
+    return any(a.id == assignment.id
+               for a in grading_assignments_for(assignment.faculty_id))
+
+
 @main.route('/logout')
 def grading_logout():
     logout_user()
@@ -3954,76 +4041,20 @@ def grading_add_faculty():
 @login_required
 @grading_admin_required
 def grading_admin_assign_loads(user_id):
+    # Grading classes now come from the section schedule, so the old manual
+    # "assign loads" screen has no input of its own. Keep the URL working and
+    # point the dean at the screen that actually assigns the teacher.
     faculty = User.query.get_or_404(user_id)
-
-    programs = Program.query.order_by(Program.program_code).all()
-    program_choices = [('', 'Select Program')] + [(str(p.id), p.program_code) for p in programs]
-    year_choices = [('', 'Select Year'), ('1', '1st'), ('2', '2nd'), ('3', '3rd'), ('4', '4th')]
-    semester_choices = [('', 'Select Semester'), ('1', '1st'), ('2', '2nd')]
-    section_choices = [('', 'Select Section')]
-    subject_choices = [('', 'Select Subject')]
-
-    if request.method == 'POST':
-        program_id = request.form.get('program', '')
-        year = request.form.get('year', '')
-        semester = request.form.get('semester', '')
-        section_id = request.form.get('section', '')
-        subject_id = request.form.get('subject', '')
-
-        if program_id and year:
-            year_label = {'1': '1st Year', '2': '2nd Year', '3': '3rd Year', '4': '4th Year'}.get(year)
-            if year_label:
-                sections = Section.query.filter_by(
-                    program_id=program_id, year_level=year_label
-                ).order_by(Section.name).all()
-                section_choices = [('', 'Select Section')] + [(str(s.id), s.name) for s in sections]
-
-        if program_id and year and semester:
-            subjects = Subject.query.filter_by(
-                program_id=program_id, year=int(year), semester=int(semester)
-            ).order_by(Subject.subject_title).all()
-            subject_choices = [('', 'Select Subject')] + [(str(s.id), s.subject_title) for s in subjects]
-
-        if subject_id and section_id:
-            exists = FacultyAssignment.query.filter_by(
-                faculty_id=faculty.id, subject_id=int(subject_id), section_id=int(section_id)
-            ).first()
-            if exists:
-                flash('This subject is already assigned to this faculty.', 'warning')
-            else:
-                new_assign = FacultyAssignment(
-                    faculty_id=faculty.id,
-                    subject_id=int(subject_id),
-                    section_id=int(section_id)
-                )
-                db.session.add(new_assign)
-                db.session.commit()
-                flash('Subject assigned successfully.', 'success')
-            return redirect(url_for('faculty_main.grading_admin_assign_loads', user_id=faculty.id))
-
-    current_assignments = FacultyAssignment.query.filter_by(faculty_id=faculty.id).all()
-
-    return render_template(
-        'grading/admin/assign_loads.html',
-        title=f"Assign Loads - {faculty.full_name}",
-        faculty=faculty, current_assignments=current_assignments,
-        active_nav='faculty_records',
-        program_choices=program_choices, year_choices=year_choices,
-        semester_choices=semester_choices, section_choices=section_choices,
-        subject_choices=subject_choices
-    )
+    flash(f"{faculty.full_name}'s classes now come from the section schedule.", 'info')
+    return redirect(url_for('faculty_main.manage_section_schedule_hub'))
 
 
 @main.route("/grading-admin/remove_load/<int:assignment_id>", methods=['POST'])
 @login_required
 @grading_admin_required
 def grading_remove_faculty_load(assignment_id):
-    assignment = FacultyAssignment.query.get_or_404(assignment_id)
-    faculty_id = assignment.faculty_id
-    db.session.delete(assignment)
-    db.session.commit()
-    flash('Assignment removed.', 'success')
-    return redirect(url_for('faculty_main.grading_admin_assign_loads', user_id=faculty_id))
+    flash('Classes follow the section schedule now. Remove the class from the schedule instead.', 'info')
+    return redirect(url_for('faculty_main.manage_section_schedule_hub'))
 
 
 @main.route("/grading-admin/faculty/delete/<int:user_id>", methods=['POST'])
@@ -4252,7 +4283,7 @@ def grading_admin_add_irregular_student(assignment_id):
 @main.route("/grades/dashboard")
 @login_required
 def grading_faculty_dashboard():
-    assignments = FacultyAssignment.query.filter_by(faculty_id=grading_faculty_id()).all()
+    assignments = grading_assignments_for(grading_faculty_id())
     total_classes = len(assignments)
     total_students = 0
     program_counts = {}
@@ -4307,7 +4338,7 @@ def grading_faculty_dashboard():
 @main.route("/grades/manage_classes")
 @login_required
 def grading_manage_classes():
-    current_assignments = FacultyAssignment.query.filter_by(faculty_id=grading_faculty_id()).all()
+    current_assignments = grading_assignments_for(grading_faculty_id())
     return render_template(
         'grading/faculty/manage_classes.html',
         title="My Class Load", active_nav='manage_classes',
@@ -4318,20 +4349,15 @@ def grading_manage_classes():
 @main.route("/grades/remove_assignment/<int:assignment_id>", methods=['GET'])
 @login_required
 def grading_remove_assignment(assignment_id):
-    assignment_to_remove = FacultyAssignment.query.get_or_404(assignment_id)
-    if assignment_to_remove.faculty_id != grading_faculty_id():
-        flash('You do not have permission to remove this class.', 'danger')
-        return redirect(url_for('faculty_main.grading_manage_classes'))
-    db.session.delete(assignment_to_remove)
-    db.session.commit()
-    flash('Class removed from your list.', 'success')
+    # The schedule owns class membership now; there is nothing to unassign.
+    flash('Classes follow the section schedule. Ask your dean to change the schedule instead.', 'info')
     return redirect(url_for('faculty_main.grading_manage_classes'))
 
 
 @main.route("/grades/grade_management", methods=['GET', 'POST'])
 @login_required
 def grading_grade_management():
-    assignments = FacultyAssignment.query.filter_by(faculty_id=grading_faculty_id()).all()
+    assignments = grading_assignments_for(grading_faculty_id())
     assignment_id = request.args.get('assignment_id') or request.form.get('assignment_id')
 
     selected_assignment = None
@@ -4339,8 +4365,9 @@ def grading_grade_management():
     grades_dict = {}
 
     if assignment_id:
-        selected_assignment = FacultyAssignment.query.get(int(assignment_id))
-        if selected_assignment and selected_assignment.faculty_id == grading_faculty_id():
+        selected_assignment = next(
+            (a for a in assignments if str(a.id) == str(assignment_id)), None)
+        if selected_assignment:
             regular_students = Applicant.query.filter_by(section_id=selected_assignment.section_id).all()
             irregular_grades = Grade.query.filter_by(
                 subject_id=selected_assignment.subject_id, faculty_id=grading_faculty_id()
@@ -4525,10 +4552,14 @@ for _term in ('p', 'm', 'f'):
 
 
 def grading_owned_assignment(assignment_id):
-    """Fetch an assignment only if it belongs to the logged-in faculty member."""
+    """Fetch an assignment only if it belongs to the logged-in faculty member
+    and the class still exists in their section schedule."""
     assignment = FacultyAssignment.query.get(int(assignment_id))
     if not assignment or assignment.faculty_id != grading_faculty_id():
         flash('You do not have permission to manage this class.', 'danger')
+        return None
+    if not grading_assignment_is_scheduled(assignment):
+        flash('This class is no longer in your schedule.', 'danger')
         return None
     return assignment
 
@@ -4879,10 +4910,9 @@ def grading_import_grades(assignment_id):
 @main.route("/grades/print_report/<int:assignment_id>/<report_type>")
 @login_required
 def grading_print_faculty_report(assignment_id, report_type):
-    assignment = FacultyAssignment.query.get_or_404(assignment_id)
-    if assignment.faculty_id != grading_faculty_id():
-        flash('Unauthorized access.', 'danger')
-        return redirect(url_for('faculty_main.grading_faculty_dashboard'))
+    assignment = grading_owned_assignment(assignment_id)
+    if not assignment:
+        return redirect(url_for('faculty_main.grading_grade_management'))
 
     students = Applicant.query.filter_by(section_id=assignment.section_id).order_by(Applicant.last_name).all()
     grades = Grade.query.filter_by(subject_id=assignment.subject_id, faculty_id=grading_faculty_id()).all()

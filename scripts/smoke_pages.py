@@ -8,6 +8,7 @@ Uses throwaway accounts in the current database, then removes them.
 import os
 import sys
 import traceback
+from datetime import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -19,7 +20,9 @@ load_dotenv(os.path.join(ROOT, ".env"))
 
 from main import app
 from website import db
-from website.models import User, Subject, Section, FacultyAssignment
+from website.models import (
+    User, Subject, Section, FacultyAssignment, Course, TeachingLoad, Program, SystemSetting,
+)
 
 app.config["WTF_CSRF_ENABLED"] = False
 app.config["TESTING"] = True
@@ -120,17 +123,18 @@ def phase2_checks():
         teacher_id = User.query.filter_by(username="sm_teacher").first().id
         program_id = "bscs"
 
-    # The faculty list is the single place that can reach the load-assignment
-    # screen (previously only the deleted grading faculty list linked there).
+    # Assign Loads is gone: grading classes come from the section schedule.
     with app.test_client() as client:
         client.post("/admin-load/login", data={"email": "sm_dean", "password": PASSWORD},
                     follow_redirects=True)
         resp = client.get("/faculty/users")
-        check("/faculty/users links to Assign Loads",
-              resp.status_code == 200 and b"Assign Loads" in resp.data, f"got {resp.status_code}")
+        check("/faculty/users no longer links to Assign Loads",
+              resp.status_code == 200 and b"Assign Loads" not in resp.data, f"got {resp.status_code}")
 
-        resp = client.get(f"/faculty/grading-admin/faculty/{teacher_id}/assign")
-        check("assign-loads screen renders", resp.status_code == 200, f"got {resp.status_code}")
+        resp = client.get(f"/faculty/grading-admin/faculty/{teacher_id}/assign", follow_redirects=False)
+        check("old assign-loads URL redirects to the schedule hub",
+              resp.status_code == 302 and "/faculty/section-schedule-hub" in resp.headers.get("Location", ""),
+              f"got {resp.status_code} -> {resp.headers.get('Location', '')}")
 
         resp = client.get(f"/faculty/grading-admin/programs/{program_id}")
         check("program subjects screen renders", resp.status_code == 200, f"got {resp.status_code}")
@@ -477,6 +481,96 @@ def dark_mode_checks():
     print()
 
 
+def grading_schedule_checks():
+    """Grading classes must come from the section schedule, not a manual list."""
+    print("== grading follows the schedule ==")
+    with app.app_context():
+        teacher_id = User.query.filter_by(username="sm_teacher").first().id
+        year_row = SystemSetting.query.filter_by(key='school_year').first()
+        sem_row = SystemSetting.query.filter_by(key='current_semester').first()
+        school_year = year_row.value.strip() if year_row and year_row.value else "2026-2027"
+        semester = int(sem_row.value) if sem_row and str(sem_row.value).strip().isdigit() else 1
+
+        course = (
+            Course.query.join(Subject, Subject.subject_code == Course.course_code)
+            .filter(Course.semester == semester).first()
+        )
+        subject = Subject.query.filter_by(subject_code=course.course_code).first() if course else None
+        section = Section.query.filter_by(program_id=course.program_id).first() if course else None
+        program = Program.query.get(course.program_id) if course else None
+        if not subject or not section or not program:
+            check("a scheduled course can be resolved to a grading subject", False)
+            return
+
+        subject_id = subject.id
+        subject_code = subject.subject_code
+        section_id = section.id
+        label = f"{program.program_code} {section.name}"
+        course_description = course.course_description
+
+        # Start clean: no manual assignment exists before the first page view.
+        TeachingLoad.query.filter_by(
+            user_id=teacher_id, course_code=subject_code, section=label
+        ).delete()
+        FacultyAssignment.query.filter_by(
+            faculty_id=teacher_id, subject_id=subject_id, section_id=section_id
+        ).delete()
+        db.session.commit()
+
+        db.session.add(TeachingLoad(
+            user_id=teacher_id, course_code=subject_code,
+            course_description=course_description, section=label,
+            day="Monday", time_start=time(6, 0), time_end=time(7, 0),
+            room="Room 1", school_year=school_year, is_published=True,
+        ))
+        db.session.commit()
+
+    try:
+        with app.test_client() as client:
+            client.post("/admin-load/login", data={"email": "sm_teacher", "password": PASSWORD},
+                        follow_redirects=True)
+            code = subject_code.encode()
+            body = client.get("/faculty/grades/manage_classes").data
+            check("my classes lists the scheduled class", code in body)
+
+            with app.app_context():
+                assignment = FacultyAssignment.query.filter_by(
+                    faculty_id=teacher_id, subject_id=subject_id, section_id=section_id
+                ).first()
+                assignment_id = assignment.id if assignment else None
+            check("the grading record is created from the schedule", assignment_id is not None)
+
+            body = client.get("/faculty/grades/grade_management").data
+            check("grade management offers the scheduled class", code in body)
+
+            if assignment_id:
+                body = client.get(f"/faculty/grades/grade_management?assignment_id={assignment_id}").data
+                check("the scheduled class opens its record", b"STUDENT NAME" in body)
+
+                with app.app_context():
+                    load = TeachingLoad.query.filter_by(
+                        user_id=teacher_id, course_code=subject_code, section=label
+                    ).first()
+                    load.is_published = False
+                    db.session.commit()
+
+                body = client.get("/faculty/grades/manage_classes").data
+                check("an unpublished class leaves the grading list", code not in body)
+
+                body = client.get(f"/faculty/grades/grade_management?assignment_id={assignment_id}").data
+                check("a stale class URL is not served", b"STUDENT NAME" not in body)
+    finally:
+        with app.app_context():
+            TeachingLoad.query.filter_by(
+                user_id=teacher_id, course_code=subject_code, section=label
+            ).delete()
+            FacultyAssignment.query.filter_by(
+                faculty_id=teacher_id, subject_id=subject_id, section_id=section_id
+            ).delete()
+            db.session.commit()
+    print()
+
+
 def main():
     seed()
     try:
@@ -506,6 +600,7 @@ def main():
         phase2_checks()
         scheduling_checks()
         dark_mode_checks()
+        grading_schedule_checks()
     finally:
         cleanup()
 
