@@ -1965,6 +1965,29 @@ def accept_substitution(notification_id):
     return redirect(url_for('faculty_main.view_notifications'))
 
 
+def _setting_value(key):
+    row = SystemSetting.query.filter_by(key=key).first()
+    return row.value.strip() if row and row.value and row.value.strip() else None
+
+
+def _setting_date(key):
+    value = _setting_value(key)
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+def _set_setting(key, value):
+    row = SystemSetting.query.filter_by(key=key).first()
+    if row:
+        row.value = str(value)
+    else:
+        db.session.add(SystemSetting(key=key, value=str(value)))
+
+
 def _sync_academic_term(school_year, semester):
     """Sync the faculty System Settings with the admission system's academic_terms table
     and the grading system's active settings."""
@@ -2011,183 +2034,133 @@ def system_settings():
 
     form = SystemSettingsForm()
 
-    # --- 1. FETCH HISTORY ---
-    history_setting = SystemSetting.query.filter_by(key='school_year_history').first()
-    history_list = json.loads(history_setting.value) if history_setting and history_setting.value else []
-
-    db_years = db.session.query(TeachingLoad.school_year).distinct().all()
-    for y in db_years:
-        if y[0] and y[0] not in history_list:
-            history_list.append(y[0])
-    
-    history_list.sort(reverse=True)
-    form.select_year.choices = [(y, y) for y in history_list]
-
-    # --- 2. HANDLE FORM SUBMISSION ---
-    if form.validate_on_submit():
-        
-        # Save Semester
-        sem_setting = SystemSetting.query.filter_by(key='current_semester').first()
-        if not sem_setting:
-            sem_setting = SystemSetting(key='current_semester', value=form.current_semester.data)
-            db.session.add(sem_setting)
-        else:
-            sem_setting.value = form.current_semester.data
-
-        # A. CREATE NEW YEAR
-        if form.submit_create.data and form.new_year.data:
-            new_sy = form.new_year.data.strip()
-            
-            sy_setting = SystemSetting.query.filter_by(key='school_year').first()
-            if not sy_setting:
-                sy_setting = SystemSetting(key='school_year', value=new_sy)
-                db.session.add(sy_setting)
-            else:
-                sy_setting.value = new_sy
-            
-            # Save SY Dates
-            if form.start_date.data:
-                start_setting = SystemSetting.query.filter_by(key='school_year_start').first()
-                if not start_setting:
-                    start_setting = SystemSetting(key='school_year_start', value=str(form.start_date.data))
-                    db.session.add(start_setting)
-                else:
-                    start_setting.value = str(form.start_date.data)
-
-            if form.end_date.data:
-                end_setting = SystemSetting.query.filter_by(key='school_year_end').first()
-                if not end_setting:
-                    end_setting = SystemSetting(key='school_year_end', value=str(form.end_date.data))
-                    db.session.add(end_setting)
-                else:
-                    end_setting.value = str(form.end_date.data)
-
-            if new_sy not in history_list:
-                history_list.insert(0, new_sy)
-                if not history_setting:
-                    history_setting = SystemSetting(key='school_year_history', value=json.dumps(history_list))
-                    db.session.add(history_setting)
-                else:
-                    history_setting.value = json.dumps(history_list)
-            
-            _sync_academic_term(new_sy, form.current_semester.data)
-            flash(f'New School Year "{new_sy}" created.', 'success')
-
-        # B. UPDATE ACTIVE SETTINGS
-        elif form.submit_switch.data:
-            selected_sy = form.select_year.data
-            
-            # Update Active Year
-            sy_setting = SystemSetting.query.filter_by(key='school_year').first()
-            if not sy_setting:
-                sy_setting = SystemSetting(key='school_year', value=selected_sy)
-                db.session.add(sy_setting)
-            else:
-                sy_setting.value = selected_sy
-            
-            # --- UPDATE SY DATES ---
-            if form.active_start_date.data:
-                start_setting = SystemSetting.query.filter_by(key='school_year_start').first()
-                if not start_setting:
-                    start_setting = SystemSetting(key='school_year_start', value=str(form.active_start_date.data))
-                    db.session.add(start_setting)
-                else:
-                    start_setting.value = str(form.active_start_date.data)
-
-            if form.active_end_date.data:
-                end_setting = SystemSetting.query.filter_by(key='school_year_end').first()
-                if not end_setting:
-                    end_setting = SystemSetting(key='school_year_end', value=str(form.active_end_date.data))
-                    db.session.add(end_setting)
-                else:
-                    end_setting.value = str(form.active_end_date.data)
-
-            # --- NEW: UPDATE SEMESTER DATES ---
-            if form.sem_start_date.data:
-                sem_start = SystemSetting.query.filter_by(key='semester_start_date').first()
-                if not sem_start:
-                    sem_start = SystemSetting(key='semester_start_date', value=str(form.sem_start_date.data))
-                    db.session.add(sem_start)
-                else:
-                    sem_start.value = str(form.sem_start_date.data)
-
-            if form.sem_end_date.data:
-                sem_end = SystemSetting.query.filter_by(key='semester_end_date').first()
-                if not sem_end:
-                    sem_end = SystemSetting(key='semester_end_date', value=str(form.sem_end_date.data))
-                    db.session.add(sem_end)
-                else:
-                    sem_end.value = str(form.sem_end_date.data)
-            # ----------------------------------
-
-            _sync_academic_term(selected_sy, form.current_semester.data)
-            flash(f'Active settings updated.', 'success')
-        
-        db.session.commit()
-        return redirect(url_for('faculty_main.system_settings'))
-
-    # --- 3. PRE-FILL FORM ON LOAD ---
-    current_sem = SystemSetting.query.filter_by(key='current_semester').first()
-    if current_sem:
-        form.current_semester.data = current_sem.value
-    else:
-        grading_sem = db.session.execute(
-            text("SELECT active_semester FROM grading_settings LIMIT 1")
-        ).fetchone()
-        if grading_sem and grading_sem[0]:
-            form.current_semester.data = '1' if '1st' in grading_sem[0] else '2'
-
-    current_sy = SystemSetting.query.filter_by(key='school_year').first()
-    if current_sy and current_sy.value in history_list:
-        form.select_year.data = current_sy.value
-
-    # Fall back to the active academic term / grading settings when the school_year
-    # setting has not been saved yet, so the page always shows the real active year.
-    if not current_sy or not current_sy.value:
+    # --- 1. THE TERM CURRENTLY IN USE ---
+    current_year = _setting_value('school_year')
+    if not current_year:
         active_term = db.session.execute(
             text("SELECT year_name FROM academic_terms WHERE is_active = TRUE LIMIT 1")
         ).fetchone()
         grading_row = db.session.execute(
-            text("SELECT active_school_year, active_semester FROM grading_settings LIMIT 1")
+            text("SELECT active_school_year FROM grading_settings LIMIT 1")
         ).fetchone()
         if active_term and active_term[0]:
-            current_sy = type('_sy', (), {'value': active_term[0]})
+            current_year = active_term[0]
         elif grading_row and grading_row[0]:
-            current_sy = type('_sy', (), {'value': grading_row[0]})
+            current_year = grading_row[0]
+
+    current_semester = _setting_value('current_semester')
+    if current_semester not in ('1', '2'):
+        grading_sem = db.session.execute(
+            text("SELECT active_semester FROM grading_settings LIMIT 1")
+        ).fetchone()
+        current_semester = '1'
+        if grading_sem and grading_sem[0]:
+            current_semester = '1' if '1st' in grading_sem[0] else '2'
+
+    # --- 2. SCHOOL YEARS AVAILABLE IN THE DROPDOWN ---
+    history_list = []
+    history_value = _setting_value('school_year_history')
+    if history_value:
+        try:
+            history_list = [str(year) for year in json.loads(history_value) if year]
+        except (TypeError, ValueError):
+            history_list = []
+
+    for (year,) in db.session.query(TeachingLoad.school_year).distinct().all():
+        if year and year not in history_list:
+            history_list.append(year)
+    if current_year and current_year not in history_list:
+        history_list.append(current_year)
+
+    history_list = sorted(set(history_list), reverse=True)
+    form.select_year.choices = [(year, year) for year in history_list] or [('', 'No school years yet')]
+
+    # --- 3. SAVE THE ACTIVE TERM ---
+    if request.method == 'POST' and not form.validate_on_submit():
+        for field_name, messages in form.errors.items():
+            label = getattr(form, field_name).label.text
+            for message in messages:
+                flash(f'{label}: {message}', 'error')
+    elif request.method == 'POST':
+        selected_year = (form.select_year.data or '').strip()
+        new_year = (form.new_year.data or '').strip()
+        school_year = new_year or selected_year
+        semester = form.current_semester.data
+        sy_start = form.active_start_date.data
+        sy_end = form.active_end_date.data
+        sem_start = form.sem_start_date.data
+        sem_end = form.sem_end_date.data
+
+        errors = []
+        if not school_year:
+            errors.append('Choose a school year or enter a new one.')
+        elif new_year and not re.fullmatch(r'\d{4}\s*-\s*\d{4}', new_year):
+            errors.append('A new school year must look like 2026-2027.')
+        if not all((sy_start, sy_end, sem_start, sem_end)):
+            errors.append('Fill in the school year and semester start and end dates.')
         else:
-            current_sy = None
+            if sy_start >= sy_end:
+                errors.append('The school year end date must be after its start date.')
+            if sem_start >= sem_end:
+                errors.append('The semester end date must be after its start date.')
+            if sem_start < sy_start or sem_end > sy_end:
+                errors.append('The semester dates must fall inside the school year.')
 
-    # Load SY Dates
-    current_start = SystemSetting.query.filter_by(key='school_year_start').first()
-    current_end = SystemSetting.query.filter_by(key='school_year_end').first()
-    
-    if current_start:
-        try: 
-            date_val = datetime.strptime(current_start.value, '%Y-%m-%d').date()
-            form.active_start_date.data = date_val
-        except: pass
-    if current_end:
-        try: 
-            date_val = datetime.strptime(current_end.value, '%Y-%m-%d').date()
-            form.active_end_date.data = date_val
-        except: pass
+        if errors:
+            for message in errors:
+                flash(message, 'error')
+        else:
+            school_year = re.sub(r'\s*-\s*', '-', new_year) if new_year else selected_year
 
-    # --- NEW: Load Semester Dates ---
-    sem_start = SystemSetting.query.filter_by(key='semester_start_date').first()
-    sem_end = SystemSetting.query.filter_by(key='semester_end_date').first()
+            _set_setting('school_year', school_year)
+            _set_setting('current_semester', semester)
+            _set_setting('school_year_start', sy_start)
+            _set_setting('school_year_end', sy_end)
+            _set_setting('semester_start_date', sem_start)
+            _set_setting('semester_end_date', sem_end)
 
-    if sem_start:
-        try: form.sem_start_date.data = datetime.strptime(sem_start.value, '%Y-%m-%d').date()
-        except: pass
-    if sem_end:
-        try: form.sem_end_date.data = datetime.strptime(sem_end.value, '%Y-%m-%d').date()
-        except: pass
+            if school_year not in history_list:
+                history_list.append(school_year)
+                history_list.sort(reverse=True)
+            _set_setting('school_year_history', json.dumps(history_list))
 
-    return render_template('faculty/system_settings.html', 
-                           title='System Settings', 
-                           form=form, 
-                           current_sy=current_sy.value if current_sy else "Not Set",
-                           current_range=f"{current_start.value if current_start else 'N/A'} to {current_end.value if current_end else 'N/A'}")
+            _sync_academic_term(school_year, semester)
+            db.session.commit()
+
+            semester_label = '1st Semester' if str(semester) == '1' else '2nd Semester'
+            flash(f'Academic term set to {school_year} — {semester_label}.', 'success')
+            return redirect(url_for('faculty_main.system_settings'))
+
+    # --- 4. PRE-FILL THE FORM (only when opening the page) ---
+    if request.method == 'GET':
+        if current_year:
+            form.select_year.data = (current_year if current_year in history_list
+                                     else (history_list[0] if history_list else ''))
+        form.current_semester.data = current_semester or '1'
+        form.active_start_date.data = _setting_date('school_year_start')
+        form.active_end_date.data = _setting_date('school_year_end')
+        form.sem_start_date.data = _setting_date('semester_start_date')
+        form.sem_end_date.data = _setting_date('semester_end_date')
+
+    sy_start = _setting_date('school_year_start')
+    sy_end = _setting_date('school_year_end')
+    sem_start = _setting_date('semester_start_date')
+    sem_end = _setting_date('semester_end_date')
+    today = datetime.now().date()
+    term_ended, term_ended_message = academic_term_status()
+    semester_label = '1st Semester' if current_semester == '1' else '2nd Semester'
+
+    return render_template('faculty/system_settings.html',
+                           title='System Settings',
+                           form=form,
+                           current_sy=current_year or 'Not Set',
+                           current_semester_label=semester_label,
+                           sy_start=sy_start, sy_end=sy_end,
+                           sem_start=sem_start, sem_end=sem_end,
+                           term_status='ended' if term_ended else 'active',
+                           term_ended=term_ended,
+                           term_ended_message=term_ended_message,
+                           today=today)
 
 @main.route('/analytics')
 @login_required

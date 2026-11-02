@@ -253,6 +253,58 @@ def phase2_checks():
     print()
 
 
+def academic_term_checks():
+    """The term settings screen must be one clear, validated form."""
+    print("== academic term settings ==")
+    keys = ('school_year', 'current_semester', 'school_year_start',
+            'school_year_end', 'semester_start_date', 'semester_end_date')
+    with app.app_context():
+        before = {
+            key: (SystemSetting.query.filter_by(key=key).first().value
+                  if SystemSetting.query.filter_by(key=key).first() else None)
+            for key in keys
+        }
+
+    with app.test_client() as client:
+        client.post("/admin-load/login", data={"email": "sm_dean", "password": PASSWORD},
+                    follow_redirects=True)
+
+        body = client.get("/faculty/system-settings").data
+        check("the page shows the current term", b"Current academic term" in body)
+        check("there is one save button for the term",
+              body.count(b'name="submit_switch"') == 1,
+              f"{body.count(b'name=\"submit_switch\"')} buttons")
+        check("a new year is optional in the same form",
+              b"Create a new school year (optional)" in body)
+        check("semester dates are edited on the page", b'name="sem_start_date"' in body)
+        check("the scheduling lock is explained",
+              b"Scheduling is locked" in body or b"Scheduling is open" in body)
+
+        # A semester that ends before it starts must be rejected without saving.
+        same_day = before['school_year_start'] or '2026-08-07'
+        body = client.post("/faculty/system-settings", data={
+            "select_year": before['school_year'] or '',
+            "new_year": "",
+            "current_semester": before['current_semester'] or '1',
+            "active_start_date": before['school_year_start'] or same_day,
+            "active_end_date": before['school_year_end'] or same_day,
+            "sem_start_date": same_day,
+            "sem_end_date": same_day,
+        }).data
+        check("an invalid date range is rejected",
+              b"must fall inside" in body or b"after its start date" in body)
+
+    with app.app_context():
+        after = {
+            key: (SystemSetting.query.filter_by(key=key).first().value
+                  if SystemSetting.query.filter_by(key=key).first() else None)
+            for key in keys
+        }
+    check("a rejected save leaves the term alone", before == after,
+          f"{before} -> {after}")
+    print()
+
+
 def term_lock_checks():
     """Once the active term has ended, scheduling must be read-only."""
     print("== term lock ==")
@@ -711,6 +763,7 @@ def main():
             print()
 
         phase2_checks()
+        academic_term_checks()
         term_lock_checks()
         scheduling_checks()
         dark_mode_checks()

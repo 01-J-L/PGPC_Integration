@@ -45,29 +45,25 @@ class SubstitutionRequestForm(FlaskForm):
     submit = SubmitField('Notify Qualified Faculty')
 
 class SystemSettingsForm(FlaskForm):
-    # 1. Global Setting (Semester)
-    current_semester = SelectField('Current Active Semester', choices=[('1', '1st Semester'), ('2', '2nd Semester')], validators=[DataRequired()])
-    
-    # --- NEW: Semester Specific Dates ---
-    sem_start_date = DateField('Sem Start', format='%Y-%m-%d', validators=[Optional()])
-    sem_end_date = DateField('Sem End', format='%Y-%m-%d', validators=[Optional()])
-    # ------------------------------------
+    # 1. Active term
+    current_semester = SelectField('Active Semester', choices=[('1', '1st Semester'), ('2', '2nd Semester')], validators=[DataRequired()])
 
-    # Existing School Year Dates
-    active_start_date = DateField('SY Start', format='%Y-%m-%d', validators=[Optional()])
-    active_end_date = DateField('SY End', format='%Y-%m-%d', validators=[Optional()])
+    # Semester Specific Dates
+    sem_start_date = DateField('Semester Start', format='%Y-%m-%d', validators=[Optional()])
+    sem_end_date = DateField('Semester End', format='%Y-%m-%d', validators=[Optional()])
 
-    # 2. Switch Active Year
-    select_year = SelectField('Switch Active Year', choices=[], validators=[Optional()])
-    submit_switch = SubmitField('Update Active Settings')
+    # School Year Dates
+    active_start_date = DateField('School Year Start', format='%Y-%m-%d', validators=[Optional()])
+    active_end_date = DateField('School Year End', format='%Y-%m-%d', validators=[Optional()])
 
-    # 3. Create New Year
-    new_year = StringField('New School Year', validators=[Optional()], render_kw={"placeholder": "e.g. 2026-2027"})
-    
-    start_date = DateField('Start Date', format='%Y-%m-%d', validators=[Optional()])
-    end_date = DateField('End Date', format='%Y-%m-%d', validators=[Optional()])
-
-    submit_create = SubmitField('Create & Set Active')
+    # 2. Existing school year, or a new one typed below
+    select_year = SelectField('Active School Year', choices=[], validators=[Optional()])
+    new_year = StringField(
+        'Create a new school year (optional)',
+        validators=[Optional()],
+        render_kw={"placeholder": "e.g. 2027-2028"},
+    )
+    submit_switch = SubmitField('Save Academic Term')
 
 class EditProfileForm(FlaskForm):
     full_name = StringField('Full Name', validators=[DataRequired()])
