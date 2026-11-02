@@ -1265,12 +1265,21 @@ def section_schedule_grid(program_id, section_name, semester):
         Course.semester == semester
     ).count() > 0
 
+    # Options for the start/end dropdowns, every half hour across the school
+    # day. Picking from a list is much faster than spinning the native clock.
+    time_options = []
+    option_dt = datetime.combine(today_date, time(6, 0))
+    while option_dt <= datetime.combine(today_date, time(23, 0)):
+        time_options.append((option_dt.strftime('%H:%M'), option_dt.strftime('%I:%M %p').lstrip('0')))
+        option_dt += timedelta(minutes=30)
+
     return render_template('faculty/section_schedule_grid_final.html', 
                            title=f"Scheduling for {full_section_name}", program=program,
                            section_name=section_name, semester=semester,
                            days=DAYS_OF_WEEK, 
                            schedule_grid=schedule_grid_data,
                            print_grid_data=print_grid_data,
+                           time_options=time_options,
                            add_form=add_form, edit_form=edit_form, delete_form=delete_form,
                            section_info=section_info,
                            active_school_year=current_school_year,

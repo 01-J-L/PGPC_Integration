@@ -272,6 +272,15 @@ def scheduling_checks():
             check("add modal takes the day from the clicked cell",
                   b'name="day" id="add_day"' in body
                   and b'id="add_day" class="w-full' not in body)
+            check("start/end times are dropdowns",
+                  b'id="add_start" name="time_start"' in body
+                  and b'id="edit_start" name="time_start"' in body)
+            check("no native time spinners remain", b'type="time"' not in body)
+            check("quick length buttons are present",
+                  b"setDuration(false, 90)" in body and b"setDuration(true, 90)" in body)
+            check("time dropdowns cover the school day",
+                  body.count(b'<option value="07:00">') >= 4,
+                  f"{body.count(b'<option value="07:00">')} options")
             # hidden_tag() would render schedule_id a second time, and browsers
             # submit the first (empty) value, so the edit was rejected.
             id_inputs = body.count(b'name="schedule_id"')

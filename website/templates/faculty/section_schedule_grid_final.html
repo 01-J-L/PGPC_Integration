@@ -192,13 +192,24 @@
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
-                                {{ add_form.time_start.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
-                                {{ add_form.time_start(type="time", step="300", class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white", id="add_start", **{'@change': 'checkAvailability(false)'}) }}
+                                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Start Time</label>
+                                <select id="add_start" name="time_start" @change="onStartChange(false)" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white">
+                                    {% for value, label in time_options %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                                </select>
                             </div>
                             <div>
-                                {{ add_form.time_end.label(class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1") }}
-                                {{ add_form.time_end(type="time", step="300", class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white", id="add_end", **{'@change': 'checkAvailability(false)'}) }}
+                                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">End Time</label>
+                                <select id="add_end" name="time_end" @change="checkAvailability(false)" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white">
+                                    {% for value, label in time_options %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                                </select>
                             </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-xs text-gray-500 dark:text-gray-400">Quick length:</span>
+                            {% for minutes, text in [(60, '1 hr'), (90, '1½ hr'), (120, '2 hr'), (180, '3 hr')] %}
+                            <button type="button" @click="setDuration(false, {{ minutes }})"
+                                    class="px-2.5 py-1 text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30">{{ text }}</button>
+                            {% endfor %}
                         </div>
 
                         <div>
@@ -257,12 +268,23 @@
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Start Time</label>
-                                    <input type="time" step="300" id="edit_start" name="time_start" x-model="editData.time_start" @change="checkAvailability(true)" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white">
+                                    <select id="edit_start" name="time_start" @change="onStartChange(true)" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white">
+                                        {% for value, label in time_options %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                                    </select>
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">End Time</label>
-                                    <input type="time" step="300" id="edit_end" name="time_end" x-model="editData.time_end" @change="checkAvailability(true)" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white">
+                                    <select id="edit_end" name="time_end" @change="checkAvailability(true)" class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white">
+                                        {% for value, label in time_options %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                                    </select>
                                 </div>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="text-xs text-gray-500 dark:text-gray-400">Quick length:</span>
+                                {% for minutes, text in [(60, '1 hr'), (90, '1½ hr'), (120, '2 hr'), (180, '3 hr')] %}
+                                <button type="button" @click="setDuration(true, {{ minutes }})"
+                                        class="px-2.5 py-1 text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30">{{ text }}</button>
+                                {% endfor %}
                             </div>
                             
                             <!-- Faculty -->
@@ -419,8 +441,8 @@
 
                 document.getElementById('add_day').value = day;
                 document.getElementById('add_day_display').textContent = day;
-                document.getElementById('add_start').value = timeStart;
-                document.getElementById('add_end').value = timeEnd;
+                this.setTimeValue('add_start', timeStart);
+                this.setTimeValue('add_end', timeEnd);
 
                 this.populateDropdowns('add_room', 'add_faculty', '', '');
                 this.checkAvailability(false);
@@ -445,6 +467,8 @@
                 const idField = document.getElementById('edit_schedule_id');
                 if (idField) idField.value = d.scheduleId;
                 document.getElementById('edit_day').value = d.day;
+                this.setTimeValue('edit_start', this.editData.time_start);
+                this.setTimeValue('edit_end', this.editData.time_end);
 
                 this.busyRooms = [];
                 this.busyFaculty = [];
@@ -454,6 +478,54 @@
                 this.checkAvailability(true);
 
                 this.showEditModal = true;
+            },
+
+            // The time selects list every half hour, but a stored class may use
+            // an off-grid minute (legacy data). Add it so .value always sticks.
+            setTimeValue(id, value) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (!value) { el.selectedIndex = 0; return; }
+                if (!Array.from(el.options).some(o => o.value === value)) {
+                    const opt = document.createElement('option');
+                    opt.value = value;
+                    opt.textContent = this.formatTimeLabel(value);
+                    el.appendChild(opt);
+                }
+                el.value = value;
+            },
+
+            formatTimeLabel(value) {
+                const [h, m] = value.split(':').map(Number);
+                const suffix = h >= 12 ? 'PM' : 'AM';
+                const hour12 = h % 12 === 0 ? 12 : h % 12;
+                return `${hour12}:${String(m).padStart(2, '0')} ${suffix}`;
+            },
+
+            // Keep the end after the start: picking a later start moves the end.
+            onStartChange(isEdit) {
+                const prefix = isEdit ? 'edit' : 'add';
+                const startEl = document.getElementById(`${prefix}_start`);
+                const endEl = document.getElementById(`${prefix}_end`);
+                if (!startEl || !endEl) return;
+                if (endEl.value && endEl.value <= startEl.value) {
+                    this.setDuration(isEdit, 60);
+                    return;
+                }
+                this.checkAvailability(isEdit);
+            },
+
+            // One click instead of two: pick a start, then a length.
+            setDuration(isEdit, minutes) {
+                const prefix = isEdit ? 'edit' : 'add';
+                const startEl = document.getElementById(`${prefix}_start`);
+                if (!startEl || !startEl.value) return;
+                const [h, m] = startEl.value.split(':').map(Number);
+                let total = h * 60 + m + minutes;
+                if (total > 23 * 60 + 30) total = 23 * 60 + 30;
+                const end = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+                this.setTimeValue(`${prefix}_end`, end);
+                this.checkAvailability(isEdit);
             },
 
             checkAvailability(isEdit) {
