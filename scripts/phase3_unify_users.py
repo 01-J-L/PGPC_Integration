@@ -52,9 +52,9 @@ USER_COLUMNS = {
     "password_hash_alt": "ADD COLUMN `password_hash_alt` VARCHAR(256) NULL",
 }
 
-FK_TABLES = (
-    ("faculty_assignments", "faculty_assignments_ibfk_1"),
-    ("grades", "grades_ibfk_3"),
+FK_COLUMNS = (
+    ("faculty_assignments", "faculty_id"),
+    ("grades", "faculty_id"),
 )
 
 
@@ -78,15 +78,6 @@ def column_exists(cur, table, column):
     return cur.fetchone()["n"] > 0
 
 
-def constraint_exists(cur, table, constraint):
-    cur.execute(
-        "SELECT COUNT(*) AS n FROM information_schema.TABLE_CONSTRAINTS "
-        "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = %s AND CONSTRAINT_NAME = %s",
-        (table, constraint),
-    )
-    return cur.fetchone()["n"] > 0
-
-
 def already_applied(cur):
     """True only when the rows were moved *and* the foreign keys were repointed,
     so a run that failed halfway is resumable."""
@@ -95,24 +86,29 @@ def already_applied(cur):
     cur.execute("SELECT COUNT(*) AS n FROM users WHERE `system` IN ('admission', 'grading')")
     if cur.fetchone()["n"] == 0:
         return False
-    for table, constraint in FK_TABLES:
-        if not references_users(cur, table, constraint):
+    for table, column in FK_COLUMNS:
+        if not references_users(cur, table, column):
             return False
     return True
 
 
-def references_users(cur, table, constraint):
+def foreign_keys(cur, table, column):
     cur.execute(
-        "SELECT REFERENCED_TABLE_NAME AS ref FROM information_schema.KEY_COLUMN_USAGE "
-        "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = %s AND CONSTRAINT_NAME = %s",
-        (table, constraint),
+        "SELECT CONSTRAINT_NAME AS name, REFERENCED_TABLE_NAME AS ref "
+        "FROM information_schema.KEY_COLUMN_USAGE "
+        "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = %s "
+        "AND COLUMN_NAME = %s AND REFERENCED_TABLE_NAME IS NOT NULL",
+        (table, column),
     )
-    row = cur.fetchone()
-    return bool(row and row["ref"] == "users")
+    return cur.fetchall()
+
+
+def references_users(cur, table, column):
+    return any(fk["ref"] == "users" for fk in foreign_keys(cur, table, column))
 
 
 def fetch_plan(cur):
-    """Return (merged, inserted) row plans."""
+    """Return (merged, inserted, skipped) row plans."""
     cur.execute("SELECT * FROM users")
     users = {r["id"]: r for r in cur.fetchall()}
 
@@ -120,15 +116,30 @@ def fetch_plan(cur):
     sysusers = cur.fetchall()
 
     by_email = {}
+    deans_by_dept = {}
     for uid, row in users.items():
         email = (row.get("email") or "").strip().lower()
         if email:
             by_email[email] = uid
+        if row.get("role") == "dean" and row.get("department"):
+            deans_by_dept[row["department"].strip().upper()] = uid
 
-    merged, inserted = [], []
+    merged, inserted, skipped = [], [], []
     taken_ids = set(users)
 
     for su in sysusers:
+        # The separate grading administrators were removed in favour of the
+        # CCBA/COC deans (commit 603a2c6), so fold them into the matching dean
+        # instead of recreating duplicate `system='grading'` accounts.
+        if (su.get("system") or "").lower() == "grading":
+            dept = (su.get("department") or "").strip().upper()
+            target = deans_by_dept.get(dept)
+            if target:
+                merged.append((su, target, users[target]))
+            else:
+                skipped.append(su)
+            continue
+
         email = (su.get("email") or "").strip().lower()
         target = by_email.get(email)
         if target:
@@ -140,15 +151,15 @@ def fetch_plan(cur):
             taken_ids.add(preferred)
         inserted.append((su, preferred))
 
-    return users, merged, inserted
+    return users, merged, inserted, skipped
 
 
-def describe(users, merged, inserted):
+def describe(users, merged, inserted, skipped):
     print("  users rows:", len(users))
-    print("  system_users rows:", len(merged) + len(inserted))
+    print("  system_users rows:", len(merged) + len(inserted) + len(skipped))
     print()
     if merged:
-        print("  MERGE (same person, matched on email)")
+        print("  MERGE (same person, by email or grading account -> dean)")
         for su, target, existing in merged:
             print(f"    system_users.id={su['id']} ({su['username']}) "
                   f"-> users.id={target} ({existing.get('username') or 'NULL'})")
@@ -159,6 +170,11 @@ def describe(users, merged, inserted):
                 print(f"      adopt username '{su['username']}'")
             if not existing.get("department") and su.get("department"):
                 print(f"      adopt department '{su['department']}'")
+    if skipped:
+        print()
+        print("  SKIP (no matching dean to fold the grading account into)")
+        for su in skipped:
+            print(f"    system_users.id={su['id']} ({su['username']}, department={su.get('department')})")
     print()
     print("  INSERT (new users row)")
     for su, newid in inserted:
@@ -173,8 +189,8 @@ def apply_migration(conn, dry_run):
         print("Already applied: `users.system` exists. Nothing to do.")
         return 0
 
-    users, merged, inserted = fetch_plan(cur)
-    describe(users, merged, inserted)
+    users, merged, inserted, skipped = fetch_plan(cur)
+    describe(users, merged, inserted, skipped)
 
     if dry_run:
         print("\nDry run only. Re-run with --apply to perform the migration.")
@@ -233,17 +249,22 @@ def apply_migration(conn, dry_run):
         id_map[su["id"]] = target
     print(f"[4/6] inserted {len(inserted)} account(s); id map: {id_map}")
 
-    for table, constraint in FK_TABLES:
-        if references_users(cur, table, constraint):
+    for table, column in FK_COLUMNS:
+        fks = foreign_keys(cur, table, column)
+        if any(fk["ref"] == "users" for fk in fks):
             continue
-        if constraint_exists(cur, table, constraint):
-            cur.execute(f"ALTER TABLE `{table}` DROP FOREIGN KEY `{constraint}`")
+        for fk in fks:
+            cur.execute(f"ALTER TABLE `{table}` DROP FOREIGN KEY `{fk['name']}`")
         for old_id, new_id in id_map.items():
             if old_id != new_id:
-                cur.execute(f"UPDATE `{table}` SET faculty_id = %s WHERE faculty_id = %s", (new_id, old_id))
+                cur.execute(
+                    f"UPDATE `{table}` SET `{column}` = %s WHERE `{column}` = %s",
+                    (new_id, old_id),
+                )
+        constraint = fks[0]["name"] if len(fks) == 1 else f"fk_{table}_{column}_users"
         cur.execute(
             f"ALTER TABLE `{table}` ADD CONSTRAINT `{constraint}` "
-            f"FOREIGN KEY (faculty_id) REFERENCES `users` (id)"
+            f"FOREIGN KEY (`{column}`) REFERENCES `users` (id)"
         )
     print("[5/6] faculty_assignments.faculty_id and grades.faculty_id now reference users.id")
 

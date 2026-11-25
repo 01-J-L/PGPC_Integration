@@ -308,7 +308,7 @@ def dashboard():
             recent_sub_requests = SubstitutionRequest.query.join(TeachingLoad, SubstitutionRequest.teaching_load_id == TeachingLoad.id)\
                                                     .filter(TeachingLoad.school_year == active_school_year).order_by(SubstitutionRequest.timestamp.desc()).limit(5).all()
         
-        course_codes_in_sem = db.session.query(Course.course_code).filter(Course.semester == current_semester).distinct().subquery()
+        course_codes_in_sem = db.session.query(Course.course_code).filter(Course.semester == current_semester).distinct().scalar_subquery()
         
         base_schedule_query = TeachingLoad.query.filter(
             TeachingLoad.course_code.in_(course_codes_in_sem), 
@@ -384,7 +384,7 @@ def dashboard():
                                selected_department=selected_department)
     
     else: # Faculty view
-        course_codes_in_sem = db.session.query(Course.course_code).filter(Course.semester == current_semester).distinct().subquery()
+        course_codes_in_sem = db.session.query(Course.course_code).filter(Course.semester == current_semester).distinct().scalar_subquery()
         total_classes = db.session.query(func.count(TeachingLoad.id)).filter(
             TeachingLoad.user_id == current_user.id, 
             TeachingLoad.course_code.in_(course_codes_in_sem),
@@ -396,7 +396,7 @@ def dashboard():
                                     .select_from(TeachingLoad)\
                                     .join(course_units_subquery, TeachingLoad.course_code == course_units_subquery.c.course_code)\
                                     .filter(TeachingLoad.user_id == current_user.id, TeachingLoad.school_year == active_school_year, TeachingLoad.is_published == True).scalar()
-        total_units = total_units_query if total_units_query is not None else 0
+        total_units = float(total_units_query) if total_units_query is not None else 0.0
 
         # Subjects the grading admin assigned to this faculty for the current
         # semester that are not already part of a scheduled teaching load, so
