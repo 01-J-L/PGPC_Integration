@@ -170,6 +170,9 @@ MIGRATIONS = [
             _add_column('applicants', 'enrollment_shs_diploma_filename', 'VARCHAR(255) NULL'),
             _add_column('applicants', 'enrollment_shs_diploma_mimetype', 'VARCHAR(100) NULL'),
         ],
+        # Phase 9: dropping the columns would delete uploaded copies; refuse while any exist.
+        'rollback_guard': "SELECT COUNT(*) FROM applicants WHERE enrollment_shs_card_file IS NOT NULL "
+                          "OR enrollment_shs_diploma_file IS NOT NULL",
         'rollback': [
             "ALTER TABLE `applicants` DROP COLUMN `enrollment_shs_card_file`, "
             "DROP COLUMN `enrollment_shs_card_filename`, DROP COLUMN `enrollment_shs_card_mimetype`, "
@@ -183,8 +186,11 @@ MIGRATIONS = [
                         "so normal scans failed with 'Data too long'. Widen to MEDIUMBLOB (no data change). "
                         "Rebuilds the applicants table: run in a quiet period."),
         'build': _widen_document_blobs,
-        # Narrowing back fails (strict mode) if any file is now larger than 64 KB,
-        # which is the safe outcome; restore from the backup instead in that case.
+        # Narrowing back would TRUNCATE any file larger than 64 KB when the server is not in
+        # strict mode (strict mode makes it fail instead). Phase 9: refuse while one exists;
+        # restore from the backup instead in that case.
+        'rollback_guard': "SELECT COUNT(*) FROM applicants WHERE " + " OR ".join(
+            f"LENGTH(`{c}`) > 65535" for c in DOCUMENT_BLOB_COLUMNS),
         'rollback': ["ALTER TABLE `applicants` " + ", ".join(
             f"MODIFY `{c}` BLOB NULL" for c in DOCUMENT_BLOB_COLUMNS)],
     },

@@ -135,6 +135,33 @@ def seed():
         db.session.commit()
 
 
+SMOKE_PROGRAM = "smoke_prog"
+
+
+def ensure_smoke_program():
+    """Phase 9: the checks need one program with a subject, a matching scheduling course
+    and a section. Use what the database has; otherwise create throwaway rows (removed
+    by cleanup) so the script gives the same answer on any database."""
+    course = (Course.query.join(Subject, Subject.subject_code == Course.course_code).first())
+    if course and Section.query.filter_by(program_id=course.program_id).first():
+        return course.program_id
+    if not db.session.get(Program, SMOKE_PROGRAM):
+        db.session.add(Program(id=SMOKE_PROGRAM, title="Smoke Test Program", program_code="SMK"))
+        db.session.flush()
+    sem_row = SystemSetting.query.filter_by(key='current_semester').first()
+    semester = int(sem_row.value) if sem_row and str(sem_row.value).strip().isdigit() else 1
+    year_row = SystemSetting.query.filter_by(key='school_year').first()
+    db.session.add(Subject(subject_code="SMK101", subject_title="Smoke Subject", program_id=SMOKE_PROGRAM,
+                           units=3, semester=semester, year_level=1))
+    db.session.add(Course(course_code="SMK101", course_description="Smoke Subject", units=3, year=1,
+                          semester=semester, program_id=SMOKE_PROGRAM))
+    db.session.add(Section(program_id=SMOKE_PROGRAM, year_level="1st Year", name="1A", section_letter="A",
+                           max_students=40, is_active=True, semester=semester,
+                           school_year=year_row.value.strip() if year_row and year_row.value else None))
+    db.session.commit()
+    return SMOKE_PROGRAM
+
+
 def cleanup():
     with app.app_context():
         for username, *_ in ACCOUNTS:
@@ -146,6 +173,17 @@ def cleanup():
             FacultyAssignment.query.filter_by(faculty_id=u.id).delete()
             db.session.delete(u)
         db.session.commit()
+        # Phase 9: the throwaway program of ensure_smoke_program()
+        if db.session.get(Program, SMOKE_PROGRAM):
+            sec_ids = [x.id for x in Section.query.filter_by(program_id=SMOKE_PROGRAM).all()]
+            if sec_ids:
+                FacultyAssignment.query.filter(FacultyAssignment.section_id.in_(sec_ids)).delete(synchronize_session=False)
+            TeachingLoad.query.filter(TeachingLoad.course_code == "SMK101").delete(synchronize_session=False)
+            Section.query.filter_by(program_id=SMOKE_PROGRAM).delete(synchronize_session=False)
+            Course.query.filter_by(program_id=SMOKE_PROGRAM).delete(synchronize_session=False)
+            Subject.query.filter_by(program_id=SMOKE_PROGRAM).delete(synchronize_session=False)
+            db.session.delete(db.session.get(Program, SMOKE_PROGRAM))
+            db.session.commit()
 
 
 def phase2_checks():
@@ -153,7 +191,8 @@ def phase2_checks():
     print("== phase 2: one screen per function ==")
     with app.app_context():
         teacher_id = User.query.filter_by(username="sm_teacher").first().id
-        program_id = "bscs"
+        # Phase 9: use a program that exists in this database (was hard-coded "bscs").
+        program_id = ensure_smoke_program()
 
     # Assign Loads is gone: grading classes come from the section schedule.
     with app.test_client() as client:
@@ -168,8 +207,11 @@ def phase2_checks():
               resp.status_code == 302 and "/faculty/section-schedule-hub" in resp.headers.get("Location", ""),
               f"got {resp.status_code} -> {resp.headers.get('Location', '')}")
 
-        resp = client.get(f"/faculty/grading-admin/programs/{program_id}")
-        check("program subjects screen renders", resp.status_code == 200, f"got {resp.status_code}")
+        if program_id is None:
+            print("  [skip] program subjects screen: this database has no program")
+        else:
+            resp = client.get(f"/faculty/grading-admin/programs/{program_id}")
+            check("program subjects screen renders", resp.status_code == 200, f"got {resp.status_code}")
 
         resp = client.get("/faculty/manage-programs")
         check("manage-programs links to Subjects",
@@ -650,6 +692,7 @@ def grading_schedule_checks():
     """Grading classes must come from the section schedule, not a manual list."""
     print("== grading follows the schedule ==")
     with app.app_context():
+        ensure_smoke_program()
         teacher_id = User.query.filter_by(username="sm_teacher").first().id
         year_row = SystemSetting.query.filter_by(key='school_year').first()
         sem_row = SystemSetting.query.filter_by(key='current_semester').first()
