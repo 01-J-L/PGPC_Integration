@@ -166,6 +166,24 @@ MIGRATIONS = [
             "DROP TABLE IF EXISTS `registration_forms`",
         ],
     },
+    {
+        'id': '0005_enrollment_finance',
+        'description': ("Phase 4: enrollment assessments per registration form and their charge links, payment "
+                        "verification, payment reversals (no deletes), payment double-submit guard and the finance "
+                        "audit log. New tables only; assessments/payments are not altered."),
+        'build': _create_model_tables(['enrollment_assessments', 'enrollment_assessment_items', 'payment_verifications',
+                                       'payment_reversals', 'payment_submissions', 'finance_audit_log']),
+        'rollback_guard': "SELECT (SELECT COUNT(*) FROM enrollment_assessments) + (SELECT COUNT(*) FROM payment_reversals) "
+                          "+ (SELECT COUNT(*) FROM payment_verifications)",
+        'rollback': [
+            "DROP TABLE IF EXISTS `finance_audit_log`",
+            "DROP TABLE IF EXISTS `payment_submissions`",
+            "DROP TABLE IF EXISTS `payment_reversals`",
+            "DROP TABLE IF EXISTS `payment_verifications`",
+            "DROP TABLE IF EXISTS `enrollment_assessment_items`",
+            "DROP TABLE IF EXISTS `enrollment_assessments`",
+        ],
+    },
 ]
 
 _LEDGER_DDL = """

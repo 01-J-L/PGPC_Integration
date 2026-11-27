@@ -157,9 +157,13 @@ def form(form_id):
     block_options = Section.query.filter_by(program_id=f.program_id, is_active=True).order_by(Section.year_level, Section.name).all()
     log = RegistrationFormChange.query.filter_by(registration_form_id=f.id).order_by(RegistrationFormChange.id.desc()).limit(60).all()
     pending_ack = session.pop('regform_ack', None)
+    from website.finance import service as finance
+    term_summary = finance.summary(f.student_user_id, f.academic_term_id)
+    policy_ok, policy_why = finance.check_policy(f.student_user_id, f.academic_term_id, term_summary)
     return render_template('registration/form.html', f=f, ctx=ctx, ctx_error=ctx_error, available=available,
                            sections_by_line=sections_by_line, block_options=block_options, errors=errors,
                            warnings=warnings, log=log, pending_ack=pending_ack, term_label=term_label,
+                           term_summary=term_summary, policy_ok=policy_ok, policy_why=policy_why,
                            years=YEAR_LABELS, semesters=SEMESTER_LABELS, section_label=service.section_label,
                            active_page='registration_forms')
 

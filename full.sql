@@ -1174,6 +1174,111 @@ CREATE TABLE IF NOT EXISTS registration_form_changes (
 	INDEX ix_registration_form_changes_registration_form_id (registration_form_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- =====================================================================
+--  PHASE 4: ENROLLMENT FINANCE (generated from website/models.py)
+-- =====================================================================
+-- ---- enrollment_assessments --------------------------------------
+CREATE TABLE IF NOT EXISTS enrollment_assessments (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	registration_form_id INTEGER NOT NULL, 
+	student_user_id INTEGER NOT NULL, 
+	applicant_id INTEGER NOT NULL, 
+	academic_term_id INTEGER NOT NULL, 
+	residency VARCHAR(20) NOT NULL, 
+	total_units NUMERIC(5, 1) NOT NULL, 
+	total_assessment NUMERIC(12, 2) NOT NULL, 
+	generated_by VARCHAR(150), 
+	generated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	regenerated_at DATETIME, 
+	notes VARCHAR(500), 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_enrollment_assessment_term UNIQUE (student_user_id, academic_term_id), 
+	UNIQUE (registration_form_id), 
+	FOREIGN KEY(registration_form_id) REFERENCES registration_forms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(applicant_id) REFERENCES applicants (applicant_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(academic_term_id) REFERENCES academic_terms (id) ON DELETE RESTRICT,
+	INDEX ix_enrollment_assessments_student_user_id (student_user_id),
+	INDEX ix_enrollment_assessments_academic_term_id (academic_term_id),
+	INDEX ix_enrollment_assessments_applicant_id (applicant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- enrollment_assessment_items ---------------------------------
+CREATE TABLE IF NOT EXISTS enrollment_assessment_items (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	enrollment_assessment_id INTEGER NOT NULL, 
+	assessment_id INTEGER NOT NULL, 
+	batch_id INTEGER, 
+	description VARCHAR(255) NOT NULL, 
+	amount NUMERIC(12, 2) NOT NULL, 
+	adopted BOOL NOT NULL DEFAULT 0, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(enrollment_assessment_id) REFERENCES enrollment_assessments (id) ON DELETE RESTRICT, 
+	UNIQUE (assessment_id), 
+	FOREIGN KEY(assessment_id) REFERENCES assessments (id) ON DELETE RESTRICT,
+	INDEX ix_enrollment_assessment_items_batch_id (batch_id),
+	INDEX ix_enrollment_assessment_items_enrollment_assessment_id (enrollment_assessment_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- payment_verifications ---------------------------------------
+CREATE TABLE IF NOT EXISTS payment_verifications (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	payment_id INTEGER NOT NULL, 
+	status VARCHAR(20) NOT NULL DEFAULT 'verified', 
+	verified_by VARCHAR(150) NOT NULL, 
+	verified_role VARCHAR(30), 
+	verified_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	notes VARCHAR(255), 
+	PRIMARY KEY (id), 
+	UNIQUE (payment_id), 
+	FOREIGN KEY(payment_id) REFERENCES payments (id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- payment_reversals -------------------------------------------
+CREATE TABLE IF NOT EXISTS payment_reversals (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	payment_id INTEGER NOT NULL, 
+	reversal_payment_id INTEGER NOT NULL, 
+	reason VARCHAR(255) NOT NULL, 
+	reversed_by VARCHAR(150) NOT NULL, 
+	reversed_role VARCHAR(30), 
+	reversed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	UNIQUE (payment_id), 
+	FOREIGN KEY(payment_id) REFERENCES payments (id) ON DELETE RESTRICT, 
+	UNIQUE (reversal_payment_id), 
+	FOREIGN KEY(reversal_payment_id) REFERENCES payments (id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- payment_submissions -----------------------------------------
+CREATE TABLE IF NOT EXISTS payment_submissions (
+	token VARCHAR(64) NOT NULL, 
+	payment_id INTEGER, 
+	submitted_by VARCHAR(150), 
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (token), 
+	FOREIGN KEY(payment_id) REFERENCES payments (id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- finance_audit_log -------------------------------------------
+CREATE TABLE IF NOT EXISTS finance_audit_log (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	action VARCHAR(40) NOT NULL, 
+	applicant_id INTEGER, 
+	payment_id INTEGER, 
+	enrollment_assessment_id INTEGER, 
+	details TEXT, 
+	performed_by VARCHAR(150), 
+	performed_role VARCHAR(30), 
+	performed_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id),
+	INDEX ix_finance_audit_log_enrollment_assessment_id (enrollment_assessment_id),
+	INDEX ix_finance_audit_log_performed_at (performed_at),
+	INDEX ix_finance_audit_log_payment_id (payment_id),
+	INDEX ix_finance_audit_log_applicant_id (applicant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------
 --  Schema migration ledger (website/schema_migrations.py).
 --  A database built from THIS file already contains every change below, so
@@ -1188,7 +1293,8 @@ INSERT IGNORE INTO schema_migrations (id, description, applied_at) VALUES
   ('0001_enrollment_shs_document_columns', 'built into full.sql', NOW()),
   ('0002_document_columns_mediumblob', 'built into full.sql', NOW()),
   ('0003_curriculum_management', 'built into full.sql', NOW()),
-  ('0004_registration_forms', 'built into full.sql', NOW());
+  ('0004_registration_forms', 'built into full.sql', NOW()),
+  ('0005_enrollment_finance', 'built into full.sql', NOW());
 
 SET FOREIGN_KEY_CHECKS = 1;
 

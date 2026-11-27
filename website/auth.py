@@ -2986,112 +2986,59 @@ def update_payment(student_id_db):
     # 1. Security Check
     if session.get('user_role') not in ['cashier', 'accounting']:
         return redirect(url_for('auth.admin_login'))
-    
+
+    from website import db as _db
+    from website.finance import service as finance
+    from website.curriculum.service import Actor
+    actor = Actor(session.get('user_name'), session.get('user_role'))
     base_template = 'accounting_base.html'
-    
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    try:
-        # --- HANDLE POST (Record Payment) ---
-        if request.method == 'POST':
-            assessment_id = request.form.get('assessment_id')
-            remark = request.form.get('remark')
-            payment_method = request.form.get('payment_method')
-            date_str = request.form.get('payment_date')
 
-            # Parse and validate the amount
-            try:
-                amount = float(request.form.get('amount') or 0)
-            except (TypeError, ValueError):
-                amount = 0
+    # --- HANDLE POST (Record Payment) ---
+    # Phase 4: Decimal amounts, balance recomputed from the payment rows, a
+    # one-time form token (no double recording), optional unique O.R. number.
+    if request.method == 'POST':
+        try:
+            payment_id, duplicate = finance.record_payment(
+                actor, student_id_db, request.form.get('assessment_id', type=int), request.form.get('amount'),
+                request.form.get('payment_date'), request.form.get('payment_method'), request.form.get('remark'),
+                request.form.get('receipt_number'), request.form.get('submission_token'))
+            _db.session.commit()
+        except finance.FinanceError as e:
+            _db.session.rollback()
+            flash(' '.join(e.messages), "warning")
+            return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
+        except Exception as e:
+            _db.session.rollback()
+            print(f"Error recording payment: {e}")
+            traceback.print_exc()
+            flash("An error occurred while recording the payment. Nothing was saved.", "danger")
+            return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
+        if duplicate:
+            flash("This payment form was already submitted; the payment was recorded only once.", "info")
+            return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
 
-            if not assessment_id:
-                flash("Please select an assessment to pay.", "warning")
-                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-            if amount <= 0:
-                flash("Payment amount must be greater than zero.", "warning")
-                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-            # Verify the assessment belongs to this student and still has a balance.
-            # FOR UPDATE locks the row so two cashiers can't pay the same balance twice.
-            cursor.execute("""
-                SELECT id, description, total_amount, amount_paid, balance, status
-                FROM assessments
-                WHERE id = %s AND student_id = %s
-                FOR UPDATE
-            """, (assessment_id, student_id_db))
-            selected_assessment = cursor.fetchone()
-
-            if not selected_assessment:
-                flash("Invalid assessment selected for this student.", "danger")
-                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-            remaining_balance = float(selected_assessment['balance'] or 0)
-            description = selected_assessment['description']
-
-            if selected_assessment['status'] == 'paid' or remaining_balance <= 0:
-                flash(f"'{description}' is already fully paid. No balance remaining.", "warning")
-                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-            # LIMIT: a payment can never exceed the remaining balance (no negative balances)
-            if round(amount, 2) > round(remaining_balance, 2):
-                flash(
-                    f"Payment of ₱{amount:,.2f} exceeds the remaining balance of "
-                    f"₱{remaining_balance:,.2f} for '{description}'. "
-                    f"Please enter an amount up to the remaining balance.",
-                    "warning"
-                )
-                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-            # A. Insert Payment Record
-            cursor.execute("""
-                INSERT INTO payments (student_id, assessment_id, amount_paid, payment_date, payment_method, remark, cashier_username)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (student_id_db, assessment_id, amount, date_str, payment_method, remark, session.get('user_name')))
-            
-            # Capture the new payment ID for the receipt
-            new_payment_id = cursor.lastrowid
-
-            # B. Update Assessment Balance (if linked to one)
-            if assessment_id:
-                # Deduct amount from balance, add to amount_paid (balance floored at 0)
-                cursor.execute("UPDATE assessments SET amount_paid = amount_paid + %s, balance = GREATEST(0, balance - %s) WHERE id = %s", 
-                               (amount, amount, assessment_id))
-                
-                # Check if fully paid to update status
-                cursor.execute("SELECT total_amount, amount_paid FROM assessments WHERE id = %s", (assessment_id,))
-                ass_data = cursor.fetchone()
-                if ass_data:
-                    new_status = 'paid' if ass_data['amount_paid'] >= ass_data['total_amount'] else 'partial'
-                    cursor.execute("UPDATE assessments SET status = %s WHERE id = %s", (new_status, assessment_id))
-
-            conn.commit()
-            
-            # C. Check System Setting for Receipt Issuance
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
             cursor.execute("SELECT setting_value FROM system_settings WHERE setting_key = 'issuance_of_receipt'")
             setting_row = cursor.fetchone()
-            
-            # Default to True (Print) if setting doesn't exist, otherwise check value
-            should_print = True
-            if setting_row and setting_row['setting_value'] == 'false':
-                should_print = False
+        finally:
+            cursor.close()
+            conn.close()
+        should_print = not (setting_row and setting_row['setting_value'] == 'false')
+        if should_print:
+            flash("Payment recorded successfully! Preparing receipt...", "success")
+            return redirect(url_for('auth.print_receipt', payment_id=payment_id))
+        flash("Payment recorded successfully. (Receipt printing is disabled)", "success")
+        return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
 
-            # D. Redirect Logic
-            if should_print:
-                flash("Payment recorded successfully! Preparing receipt...", "success")
-                return redirect(url_for('auth.print_receipt', payment_id=new_payment_id))
-            else:
-                flash("Payment recorded successfully. (Receipt printing is disabled)", "success")
-                # Reload the same page to show updated balance and history
-                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-        # --- HANDLE GET (View Page) ---
-        
-        # 1. Fetch Student Details
+    # --- HANDLE GET (View Page) ---
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    student, assessments, payment_history = None, [], []
+    try:
         cursor.execute("""
-            SELECT a.applicant_id, a.old_student_id, a.control_number, 
+            SELECT a.applicant_id, a.student_user_id, a.old_student_id, a.control_number,
                    a.first_name, a.last_name, a.program_choice as course,
                    a.enrollment_year_level as year_level, s.section_name as section, a.email_address as email
             FROM applicants a
@@ -3099,107 +3046,68 @@ def update_payment(student_id_db):
             WHERE a.applicant_id = %s
         """, (student_id_db,))
         student = cursor.fetchone()
-        
         if student:
-            # Set display ID for UI
             student['display_id'] = student['old_student_id'] or student['control_number'] or 'N/A'
-
-        # 2. Fetch Assessments (Fees)
         cursor.execute("SELECT * FROM assessments WHERE student_id = %s ORDER BY created_at DESC", (student_id_db,))
         assessments = cursor.fetchall()
-
-        # 3. Fetch Payment History
-        cursor.execute("""
-            SELECT p.*, a.description as assessment_description
-            FROM payments p
-            LEFT JOIN assessments a ON p.assessment_id = a.id
-            WHERE p.student_id = %s
-            ORDER BY p.payment_date DESC, p.id DESC
-        """, (student_id_db,))
-        payment_history = cursor.fetchall()
-        
     except Exception as e:
         print(f"Error in update_payment: {e}")
         traceback.print_exc()
         flash("An error occurred loading the payment page.", "danger")
-        student = None
-        assessments = []
-        payment_history = []
     finally:
         if cursor: cursor.close()
         if conn: conn.close()
-    
-    return render_template('update_payment.html', 
-                           student=student, 
-                           assessments=assessments, 
+
+    term_summary = None
+    if student:
+        payment_history = list(reversed(finance.payment_rows([student_id_db])))
+        active = _get_active_term()
+        if active and student.get('student_user_id'):
+            term_summary = finance.summary(student['student_user_id'], active['id'])
+            term_summary['term_label'] = f"{active['year_name']} {active['semester']}"
+
+    return render_template('update_payment.html',
+                           student=student,
+                           assessments=assessments,
                            payment_history=payment_history,
-                           today_date=datetime.date.today().strftime('%Y-%m-%d'), 
+                           term_summary=term_summary,
+                           submission_token=finance.new_submission_token(),
+                           user_role=session.get('user_role'),
+                           user_name=session.get('user_name'),
+                           today_date=datetime.date.today().strftime('%Y-%m-%d'),
                            base_template=base_template)
 
 
 @auth.route('/cashier/payment/<int:student_id_db>/undo', methods=['POST'])
 def undo_last_payment(student_id_db):
-    # 1. Security Check
+    """Phase 4: "Undo" no longer deletes the payment. It REVERSES the latest
+    payment (a contra entry is added and both rows are kept), with a reason."""
     if session.get('user_role') not in ['cashier', 'accounting']:
         return redirect(url_for('auth.admin_login'))
-
-    conn = None
-    cursor = None
+    from website import db as _db
+    from website.finance import service as finance
+    from website.curriculum.service import Actor
+    actor = Actor(session.get('user_name'), session.get('user_role'))
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # Find the most recent payment for this student
-        cursor.execute(
-            "SELECT * FROM payments WHERE student_id = %s ORDER BY id DESC LIMIT 1",
-            (student_id_db,))
-        payment = cursor.fetchone()
-
-        if not payment:
-            flash("No payment to undo for this student.", "warning")
+        payment_id = request.form.get('payment_id', type=int) or finance.last_reversible_payment(student_id_db)
+        if not payment_id:
+            flash("No payment to reverse for this student.", "warning")
             return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-        # Refuse to undo discount-applied payments (they also touch student_discounts_applied)
-        if payment.get('payment_method') == 'Discount':
-            flash("Cannot undo a discount-applied payment here. Remove the discount from Discount Management instead.", "warning")
+        p = finance._payment(payment_id, lock=False)
+        if p['student_id'] != student_id_db:
+            flash("That payment does not belong to this student.", "danger")
             return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-        # Restore the assessment balance
-        if payment.get('assessment_id'):
-            cursor.execute("""
-                UPDATE assessments 
-                SET amount_paid = amount_paid - %s, 
-                    balance = balance + %s 
-                WHERE id = %s
-            """, (payment['amount_paid'], payment['amount_paid'], payment['assessment_id']))
-
-            # Recalculate status
-            cursor.execute("SELECT total_amount, amount_paid FROM assessments WHERE id = %s", (payment['assessment_id'],))
-            ass = cursor.fetchone()
-            if ass:
-                if ass['amount_paid'] <= 0:
-                    new_status = 'unpaid'
-                elif ass['amount_paid'] >= ass['total_amount']:
-                    new_status = 'paid'
-                else:
-                    new_status = 'partial'
-                cursor.execute("UPDATE assessments SET status = %s WHERE id = %s", (new_status, payment['assessment_id']))
-
-        # Delete the payment record
-        cursor.execute("DELETE FROM payments WHERE id = %s", (payment['id'],))
-        conn.commit()
-        flash(f"Undid payment of ₱{float(payment['amount_paid']):,.2f} ({payment['remark'] or 'Payment'}) for {student_id_db}.", "success")
+        finance.reverse_payment(actor, payment_id, request.form.get('reason'))
+        _db.session.commit()
+        flash(f"Payment #{payment_id} of {finance.peso(p['amount_paid'])} was reversed. Both entries are kept in the history.", "success")
+    except finance.FinanceError as e:
+        _db.session.rollback()
+        flash(' '.join(e.messages), "warning")
     except Exception as e:
-        print(f"Error undoing payment: {e}")
+        _db.session.rollback()
+        print(f"Error reversing payment: {e}")
         traceback.print_exc()
-        if conn:
-            conn.rollback()
-        flash("Error undoing payment.", "danger")
-    finally:
-        if cursor: cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
-
+        flash("Error reversing payment. Nothing was changed.", "danger")
     return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
 
 # --- IN auth.py ---
@@ -4353,6 +4261,16 @@ def admin_enrollment_review_page(applicant_id):
             """, (application['student_user_id'], selected_term_id))
             regform = cursor.fetchone()
 
+        # Phase 4: term balance and payment-policy status for the registrar
+        term_summary, policy_ok, policy_why = None, None, None
+        if selected_term_id and application.get('student_user_id'):
+            try:
+                from website.finance import service as finance
+                term_summary = finance.summary(application['student_user_id'], selected_term_id)
+                policy_ok, policy_why = finance.check_policy(application['student_user_id'], selected_term_id, term_summary)
+            except Exception as fin_err:
+                print(f"[WARN] finance summary unavailable: {fin_err}")
+
         student_user_id = application.get('student_user_id')
         program_id = application.get('program_id')
 
@@ -4464,6 +4382,7 @@ def admin_enrollment_review_page(applicant_id):
                                enrollment_record=enrollment_record,
                                accounting_hint=accounting_hint,
                                regform=regform,
+                               term_summary=term_summary, policy_ok=policy_ok, policy_why=policy_why,
                                active_page='enrolling')
 
     except Exception as e:

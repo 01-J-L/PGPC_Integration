@@ -1,0 +1,42 @@
+{#- Expects payment_history (finance.payment_rows), user_role, user_name, student -#}
+<div class="relative overflow-x-auto">
+<table class="min-w-full text-sm">
+    <thead class="bg-gray-50 text-xs uppercase text-gray-500"><tr>
+        <th scope="col" class="px-3 py-2 text-left">#</th><th scope="col" class="px-3 py-2 text-left">Date</th>
+        <th scope="col" class="px-3 py-2 text-left">O.R. no.</th><th scope="col" class="px-3 py-2 text-left">Method</th>
+        <th scope="col" class="px-3 py-2 text-right">Amount</th><th scope="col" class="px-3 py-2 text-left">Recorded by</th>
+        <th scope="col" class="px-3 py-2 text-left">Status</th><th scope="col" class="px-3 py-2"><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody class="divide-y divide-gray-100">
+    {% for p in payment_history %}
+        <tr class="align-top {{ 'text-gray-400' if p.is_reversed or p.is_reversal }}">
+            <td class="px-3 py-2">{{ p.id }}</td>
+            <td class="px-3 py-2 whitespace-nowrap">{{ p.payment_date }}</td>
+            <td class="px-3 py-2">{{ p.receipt_number or '—' }}</td>
+            <td class="px-3 py-2">{{ p.payment_method }}{% if p.remark %}<div class="text-xs text-gray-500">{{ p.remark }}</div>{% endif %}</td>
+            <td class="px-3 py-2 text-right whitespace-nowrap {{ 'line-through' if p.is_reversed }}">{{ p.amount_paid|peso }}</td>
+            <td class="px-3 py-2">{{ p.cashier_username or '—' }}</td>
+            <td class="px-3 py-2 text-xs">
+                {% if p.is_reversal %}<span class="text-gray-600">Reversal entry</span>
+                {% elif p.is_reversed %}<span class="text-red-700 font-medium">Reversed</span>{% if p.reversal_reason %}<div>{{ p.reversal_reason }} ({{ p.reversed_by }})</div>{% endif %}
+                {% elif p.category_method in ['Discount', 'Voucher'] %}<span class="text-indigo-700">Credit</span>
+                {% elif p.verification == 'verified' %}<span class="text-green-700 font-medium"><i class="ri-shield-check-line"></i> Verified</span><div>{{ p.verified_by }}{% if p.verified_at %}, {{ p.verified_at.strftime('%b %d %I:%M %p') }}{% endif %}</div>
+                {% else %}<span class="text-yellow-700 font-medium">For verification</span>{% endif %}
+            </td>
+            <td class="px-3 py-2 whitespace-nowrap text-right">
+                {% set reversible = p.amount_paid > 0 and not p.is_reversed and not p.is_reversal and p.category_method not in ['Discount', 'Voucher'] %}
+                {% if reversible and not p.verification and user_role == 'accounting' and p.cashier_username != user_name %}
+                <form method="POST" action="{{ url_for('finance.verify', payment_id=p.id) }}" class="inline">
+                    <button class="text-green-700 text-xs font-medium hover:underline">Verify</button></form>
+                {% endif %}
+                {% if reversible and (user_role == 'accounting' or (user_role == 'cashier' and not p.verification and p.cashier_username == user_name)) %}
+                <form method="POST" action="{{ url_for('auth.undo_last_payment', student_id_db=student.applicant_id) }}" class="inline ml-2"
+                      onsubmit="var r = prompt('Reason for reversing payment #{{ p.id }} ({{ p.amount_paid|peso }}):'); if (!r) return false; this.reason.value = r; return true;">
+                    <input type="hidden" name="payment_id" value="{{ p.id }}"><input type="hidden" name="reason" value="">
+                    <button class="text-red-600 text-xs font-medium hover:underline">Reverse</button></form>
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
