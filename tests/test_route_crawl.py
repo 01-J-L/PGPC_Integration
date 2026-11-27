@@ -48,9 +48,15 @@ def seeded(app):
     pay = dbx.x("INSERT INTO payments (student_id, assessment_id, amount_paid, payment_date, payment_method, cashier_username) VALUES (%s,%s,10,CURDATE(),'Cash','crawler')", (st['applicant_id'], aid))
     room = dbx.x("INSERT INTO room (room_name) VALUES (%s)", (_uniq('R'),))
     ver = dbx.x("INSERT INTO curriculum_versions (program_id, name, effective_academic_year, status) VALUES (%s,'Crawl curriculum','2026-2027','active')", (pid,))
+    dbx.x("UPDATE curriculum_versions SET is_default_for_new=1 WHERE id=%s", (ver,))
     cs1 = dbx.x("INSERT INTO curriculum_subjects (curriculum_version_id, year_level, semester, subject_code, code_key, description, units) VALUES (%s,1,1,'CRW 101','CRW101','Crawl subject',3)", (ver,))
     cs2 = dbx.x("INSERT INTO curriculum_subjects (curriculum_version_id, year_level, semester, subject_code, code_key, description, units) VALUES (%s,1,2,'CRW 102','CRW102','Crawl subject 2',3)", (ver,))
     dbx.x("INSERT INTO curriculum_prerequisites (curriculum_subject_id, kind, prerequisite_subject_id) VALUES (%s,'subject',%s)", (cs2, cs1))
+    form = dbx.x("INSERT INTO registration_forms (student_user_id, applicant_id, academic_term_id, curriculum_version_id, program_id, "
+                 "year_level, semester, classification, status, max_units, total_units) VALUES (%s,%s,%s,%s,%s,1,1,'Irregular','draft',26,3)",
+                 (st['student_user_id'], st['applicant_id'], term['id'], ver, pid))
+    dbx.x("INSERT INTO registration_form_subjects (registration_form_id, curriculum_subject_id, subject_code, code_key, description, units, year_level, semester) "
+          "VALUES (%s,%s,'CRW 101','CRW101','Crawl subject',3,1,1)", (form, cs1))
     import json
     batch = dbx.x("INSERT INTO curriculum_import_batches (program_id, source_filename, source_kind, source_sha256, payload) VALUES (%s,'crawl.xlsx','registration_form',%s,%s)",
                   (pid, 'x' * 64, json.dumps({'parsed': {'kind': 'registration_form', 'title': 'Crawl', 'level': 'First Year-1st sem',
@@ -61,7 +67,7 @@ def seeded(app):
         'student_user_id': st['student_user_id'], 'program_id': pid, 'subject_id': sid, 'section_id': sec,
         'term_id': term['id'], 'payment_id': pay, 'user_id': dean, 'room_id': room, 'semester': 1,
         'section_name': '1A', 'year': '1st Year', 'id': 1, 'export_type': 'all', 'doc_type': 'card',
-        'filename': 'none.pdf', 'token': 'bad-token', 'batch_id': batch, 'version_id': ver, 'assignment_id': 1, 'report_type': 'prelim',
+        'filename': 'none.pdf', 'token': 'bad-token', 'batch_id': batch, 'version_id': ver, 'form_id': form, 'assignment_id': 1, 'report_type': 'prelim',
     }
     yield {'values': values, 'student_user_id': st['student_user_id'], 'dean': dean, 'super': sup}
     dbx.close()

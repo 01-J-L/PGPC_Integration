@@ -404,6 +404,105 @@ CURRICULUM_TABLES = ['curriculum_versions', 'curriculum_subjects', 'curriculum_p
                      'student_curricula', 'curriculum_import_batches', 'curriculum_audit_log']
 
 
+# =========================================================
+# REGISTRATION FORMS / REGFORM (Phase 3)
+# ---------------------------------------------------------
+# One registration form per student per academic term. Lines are SNAPSHOTS
+# (code, description, units, schedule) of the curriculum subject at the time
+# they were added, so later curriculum edits never change a past REGFORM.
+# =========================================================
+
+REGFORM_STATUSES = ('draft', 'finalized', 'cancelled')
+REGFORM_CLASSIFICATIONS = ('Regular', 'Irregular')
+
+
+class RegistrationForm(db.Model):
+    __tablename__ = 'registration_forms'
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False, index=True)
+    applicant_id = db.Column(db.Integer, db.ForeignKey('applicants.applicant_id', ondelete='RESTRICT'), nullable=False, index=True)
+    academic_term_id = db.Column(db.Integer, db.ForeignKey('academic_terms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    curriculum_version_id = db.Column(db.Integer, db.ForeignKey('curriculum_versions.id', ondelete='RESTRICT'), nullable=False, index=True)
+    program_id = db.Column(db.String(50), db.ForeignKey('programs.program_id', ondelete='RESTRICT'), nullable=False)
+    year_level = db.Column(db.Integer, nullable=False)
+    semester = db.Column(db.Integer, nullable=False)
+    classification = db.Column(db.String(20), nullable=False, default='Regular', server_default='Regular')
+    classification_reason = db.Column(db.String(255))
+    status = db.Column(db.String(20), nullable=False, default='draft', server_default='draft')
+    section_id = db.Column(db.Integer, db.ForeignKey('sections.id', ondelete='RESTRICT'))   # block / home section
+    max_units = db.Column(db.Numeric(5, 1), nullable=False)
+    total_units = db.Column(db.Numeric(5, 1), nullable=False, default=0, server_default=_sa.text('0'))
+    control_number = db.Column(db.String(30))          # filled in Phase 6
+    notes = db.Column(db.String(500))
+    created_by = db.Column(db.String(150))
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+    finalized_by = db.Column(db.String(150))
+    finalized_at = db.Column(db.DateTime)
+
+    term = db.relationship('AcademicTerm')
+    curriculum = db.relationship('CurriculumVersion')
+    program = db.relationship('Program')
+    section = db.relationship('Section')
+    applicant = db.relationship('Applicant')
+    lines = db.relationship('RegistrationFormSubject', backref='form', lazy='select', passive_deletes='all',
+                            order_by='(RegistrationFormSubject.year_level, RegistrationFormSubject.semester, RegistrationFormSubject.id)')
+
+    __table_args__ = (
+        db.UniqueConstraint('student_user_id', 'academic_term_id', name='uq_regform_student_term'),
+        db.CheckConstraint('semester IN (1, 2, 3)', name='ck_regform_semester'),
+        _INNODB,
+    )
+
+
+class RegistrationFormSubject(db.Model):
+    __tablename__ = 'registration_form_subjects'
+
+    id = db.Column(db.Integer, primary_key=True)
+    registration_form_id = db.Column(db.Integer, db.ForeignKey('registration_forms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    curriculum_subject_id = db.Column(db.Integer, db.ForeignKey('curriculum_subjects.id', ondelete='RESTRICT'), nullable=False, index=True)
+    subject_code = db.Column(db.String(30), nullable=False)
+    code_key = db.Column(db.String(30), nullable=False)
+    description = db.Column(db.String(500), nullable=False)
+    units = db.Column(db.Numeric(4, 1), nullable=False)
+    year_level = db.Column(db.Integer, nullable=False)     # term of the subject in the curriculum
+    semester = db.Column(db.Integer, nullable=False)
+    section_id = db.Column(db.Integer, db.ForeignKey('sections.id', ondelete='RESTRICT'), index=True)
+    schedule_text = db.Column(db.String(500))            # snapshot of the class schedule
+    source = db.Column(db.String(20), nullable=False, default='curriculum', server_default='curriculum')  # curriculum | added | back_subject
+    remarks = db.Column(db.String(255))
+    added_by = db.Column(db.String(150))
+    added_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+
+    curriculum_subject = db.relationship('CurriculumSubject')
+    section = db.relationship('Section')
+
+    __table_args__ = (
+        db.UniqueConstraint('registration_form_id', 'code_key', name='uq_regform_line_code'),
+        _INNODB,
+    )
+
+
+class RegistrationFormChange(db.Model):
+    """Every registrar change to a REGFORM, with the previous and new values."""
+    __tablename__ = 'registration_form_changes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    registration_form_id = db.Column(db.Integer, nullable=False, index=True)   # no FK: log outlives anything
+    action = db.Column(db.String(30), nullable=False)
+    subject_code = db.Column(db.String(30))
+    details = db.Column(db.Text)
+    performed_by = db.Column(db.String(150))
+    performed_role = db.Column(db.String(30))
+    performed_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+
+    __table_args__ = (_INNODB,)
+
+
+REGISTRATION_TABLES = ['registration_forms', 'registration_form_subjects', 'registration_form_changes']
+
+
 class ProgramObjective(db.Model):
     __tablename__ = 'program_objectives'
 

@@ -4343,6 +4343,16 @@ def admin_enrollment_review_page(applicant_id):
                 'requirement_met': bool(min_payment is not None and total_paid > 0 and total_paid >= min_payment),
             }
 
+        # Phase 3: this term's registration form (REGFORM), if any
+        regform = None
+        if selected_term_id and application.get('student_user_id'):
+            cursor.execute("""
+                SELECT id, status, classification, total_units, max_units,
+                       (SELECT COUNT(*) FROM registration_form_subjects WHERE registration_form_id = registration_forms.id) AS subjects
+                FROM registration_forms WHERE student_user_id = %s AND academic_term_id = %s
+            """, (application['student_user_id'], selected_term_id))
+            regform = cursor.fetchone()
+
         student_user_id = application.get('student_user_id')
         program_id = application.get('program_id')
 
@@ -4453,6 +4463,7 @@ def admin_enrollment_review_page(applicant_id):
                                selected_term_id=selected_term_id,
                                enrollment_record=enrollment_record,
                                accounting_hint=accounting_hint,
+                               regform=regform,
                                active_page='enrolling')
 
     except Exception as e:

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Certificate of Registration - {{ a.last_name }}, {{ a.first_name }}</title>
+    {#- Layout follows the college's REG. FORM (Certificate of Registration). Fees are added in Phase 4. -#}
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; margin: 0; background: #ccc; color: #000; }
+        .page { width: 8.5in; min-height: 11in; background: #fff; margin: 20px auto; padding: 0.45in 0.5in; box-sizing: border-box; box-shadow: 0 0 10px rgba(0,0,0,.15); position: relative; }
+        .draft-mark { position: absolute; top: 40%; left: 0; right: 0; text-align: center; font-size: 72pt; color: rgba(200,0,0,.12); transform: rotate(-25deg); font-weight: bold; pointer-events: none; }
+        .header { display: flex; align-items: center; justify-content: space-between; }
+        .header img { width: 70px; height: 70px; object-fit: contain; }
+        .header .txt { text-align: center; flex: 1; line-height: 1.25; }
+        .header .school { font-weight: bold; font-size: 13pt; }
+        .title { text-align: center; font-weight: bold; font-size: 13pt; letter-spacing: 1px; margin: 10px 0 2px; }
+        .subtitle { text-align: center; font-size: 9pt; margin-bottom: 10px; }
+        table.info { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+        table.info td { padding: 3px 4px; vertical-align: bottom; }
+        table.info .lbl { font-weight: bold; white-space: nowrap; width: 1%; }
+        table.info .val { border-bottom: 1px solid #000; }
+        table.subjects { width: 100%; border-collapse: collapse; margin-top: 6px; }
+        table.subjects th, table.subjects td { border: 1px solid #000; padding: 4px 5px; font-size: 9pt; vertical-align: top; }
+        table.subjects th { background: #eee; text-align: left; }
+        table.subjects td.num, table.subjects th.num { text-align: center; width: 45px; }
+        table.subjects tfoot td { font-weight: bold; }
+        .note { font-size: 8.5pt; font-style: italic; margin-top: 6px; }
+        .fees { margin-top: 10px; border: 1px dashed #999; padding: 6px 8px; font-size: 9pt; color: #444; }
+        .signatures { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 36px; text-align: center; font-size: 9pt; }
+        .sig .line { border-top: 1px solid #000; padding-top: 3px; margin-top: 30px; font-weight: bold; }
+        .sig .who { font-size: 8.5pt; }
+        .meta { margin-top: 18px; font-size: 7.5pt; color: #555; display: flex; justify-content: space-between; }
+        .toolbar { text-align: center; margin: 15px; }
+        .toolbar button { padding: 8px 18px; font-size: 11pt; cursor: pointer; }
+        @media print { body { background: #fff; } .page { margin: 0; box-shadow: none; } .toolbar { display: none; } @page { size: letter; margin: 0; } }
+    </style>
+</head>
+<body>
+<div class="toolbar"><button type="button" onclick="window.print()">Print</button></div>
+<div class="page">
+    {% if f.status != 'finalized' %}<div class="draft-mark">DRAFT</div>{% endif %}
+    <div class="header">
+        <img src="{{ url_for('static', filename='logopgpc.png') }}" alt="PGPC logo">
+        <div class="txt">
+            <div>Republic of the Philippines</div>
+            <div class="school">PADRE GARCIA POLYTECHNIC COLLEGE (PGPC)</div>
+            <div>{{ (global_content or {}).get('contact_address') or 'Brgy. Castillo, Padre Garcia, Batangas 4224' }}</div>
+            <div>{{ (global_content or {}).get('contact_email') or 'padregarciapolytechniccollege@gmail.com' }}</div>
+        </div>
+        <img src="{{ url_for('static', filename='garcia.png') }}" alt="Padre Garcia seal">
+    </div>
+    <div class="title">CERTIFICATE OF REGISTRATION</div>
+    <div class="subtitle">{{ f.classification|upper }} STUDENT{% if f.control_number %} &middot; Control No. <strong>{{ f.control_number }}</strong>{% endif %}</div>
+
+    <table class="info">
+        <tr><td class="lbl">Student No.:</td><td class="val">{{ a.old_student_id or a.control_number or '' }}</td>
+            <td class="lbl">Date:</td><td class="val">{{ (f.finalized_at or f.created_at).strftime('%B %d, %Y') if (f.finalized_at or f.created_at) }}</td></tr>
+        <tr><td class="lbl">Name:</td><td class="val">{{ a.last_name|upper }}, {{ a.first_name|upper }} {{ (a.middle_name or '')|upper }}</td>
+            <td class="lbl">A.Y.:</td><td class="val">{{ f.term.year_name }}</td></tr>
+        <tr><td class="lbl">Course:</td><td class="val">{{ f.program.title|upper }}</td>
+            <td class="lbl">Year &amp; Section:</td><td class="val">{{ section_label(f.section) if f.section else '' }}</td></tr>
+        <tr><td class="lbl">Level:</td><td class="val">{{ years.get(f.year_level) }} &ndash; {{ semesters.get(f.semester) }}</td>
+            <td class="lbl">Curriculum:</td><td class="val">{{ f.curriculum.name }}</td></tr>
+    </table>
+
+    <table class="subjects">
+        <thead><tr><th style="width:80px">Code</th><th>Description</th><th class="num">Units</th><th style="width:70px">Section</th><th style="width:170px">Schedule</th></tr></thead>
+        <tbody>
+        {% for ln in f.lines %}
+            <tr><td>{{ ln.subject_code }}</td><td>{{ ln.description|upper }}</td><td class="num">{{ ln.units|fmt_units }}</td>
+                <td>{{ section_label(ln.section) if ln.section else '' }}</td><td>{{ ln.schedule_text or 'TBA' }}</td></tr>
+        {% endfor %}
+        </tbody>
+        <tfoot><tr><td colspan="2" style="text-align:right">TOTAL</td><td class="num">{{ f.total_units|fmt_units }}</td><td colspan="2"></td></tr></tfoot>
+    </table>
+    <div class="note">NOTE: Subject taken without passing the prescribed pre-requisite subjects will not be given credit.</div>
+    <div class="fees">Assessment of fees: see the Statement of Account issued by the Accounting Department.</div>
+
+    <div class="signatures">
+        <div class="sig"><div class="line">Student's Signature</div></div>
+        <div class="sig"><div class="line">Assessed by</div><div class="who">Accounting Dept.</div></div>
+        <div class="sig"><div class="line">Verified by</div><div class="who">College Dean</div></div>
+        <div class="sig"><div class="line">Enrolled by</div><div class="who">College Registrar</div></div>
+    </div>
+    <div class="meta"><span>Form #{{ f.id }} &middot; {{ f.status|title }}{% if f.finalized_by %} by {{ f.finalized_by }}{% endif %}</span><span>Printed {{ printed_at.strftime('%Y-%m-%d %H:%M') }}</span></div>
+</div>
+</body>
+</html>
