@@ -8,13 +8,19 @@
 <div class="grid grid-cols-1 2xl:grid-cols-4 gap-6">
     <section class="2xl:col-span-1 bg-white p-5 rounded-xl shadow-sm border border-gray-200 self-start">
         <h2 class="font-semibold text-gray-800 mb-1">Enrollment payment policy</h2>
-        <p class="text-xs text-gray-500 mb-3">What the registrar needs from Accounting before final check-in.</p>
+        <p class="text-xs text-gray-500 mb-3">What a student must pay before the Registrar can check them in (officially enroll them). The Registrar's checklist line "Accounting / enrollment payment policy" turns green when it is met.</p>
         {% if can_edit_policy %}
         <form method="POST" action="{{ url_for('finance.policy') }}" class="space-y-3 text-sm">
             <fieldset class="space-y-1">
                 <legend class="sr-only">Policy</legend>
+                {% set help = {
+                    'clearance': 'Accounting decides per student with "Give clearance" below.',
+                    'full': 'The whole term assessment must be paid.',
+                    'partial': 'Any amount paid is enough.',
+                    'minimum': 'The student must pay at least the amount below (e.g. 1,500.00). Shown to the student and the cashier.'} %}
                 {% for key, label in modes.items() %}
-                <label class="flex items-start gap-2"><input type="radio" name="mode" value="{{ key }}" {% if policy.mode == key %}checked{% endif %} class="mt-1"> {{ label }}</label>
+                <label class="flex items-start gap-2"><input type="radio" name="mode" value="{{ key }}" {% if policy.mode == key %}checked{% endif %} class="mt-1">
+                    <span>{{ label }}<span class="block text-xs text-gray-500">{{ help[key] }}</span></span></label>
                 {% endfor %}
             </fieldset>
             <div><label for="minpay" class="block text-xs text-gray-600 mb-1">Minimum down payment (&#8369;)</label>

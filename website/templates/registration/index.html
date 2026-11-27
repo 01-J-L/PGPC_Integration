@@ -17,7 +17,10 @@
     <div><label for="f-status" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Status</label>
         <select id="f-status" name="status" class="{{ input_class() }} w-40"><option value="">All</option>
             {% for s in ['draft', 'finalized', 'cancelled'] %}<option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s|title }}</option>{% endfor %}</select></div>
+    <div><label for="f-q" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Student ID or name</label>
+        <input id="f-q" name="q" value="{{ q }}" class="{{ input_class() }} w-60" placeholder="Student no., control no. or name"></div>
     <button class="{{ btn_secondary() }}">Filter</button>
+    {% if q %}<a href="{{ url_for('registration.index', term_id=term_id, program=program_id or None, status=status or None) }}" class="text-sm text-gray-600 hover:underline self-end pb-2">Clear search</a>{% endif %}
 </form>
 
 <section class="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
@@ -33,7 +36,7 @@
         {% for f in forms %}
             <tr class="hover:bg-gray-50">
                 <td class="px-5 py-2 font-medium text-gray-900">{{ f.applicant.last_name }}, {{ f.applicant.first_name }}</td>
-                <td class="px-3 py-2 text-gray-600">{{ f.applicant.old_student_id or f.applicant.control_number or '—' }}</td>
+                <td class="px-3 py-2 text-gray-600">{{ f.applicant.old_student_id or f.applicant.control_number or '—' }}{% if f.control_number %}<div class="text-xs font-mono text-gray-500">{{ f.control_number }}</div>{% endif %}</td>
                 <td class="px-3 py-2">{{ f.program.program_code or f.program_id|upper }} &middot; {{ years.get(f.year_level) }}</td>
                 <td class="px-3 py-2">{% if f.classification == 'Irregular' %}<span class="px-2 py-0.5 rounded-full text-xs bg-orange-100 text-orange-800">Irregular</span>{% else %}<span class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-800">Regular</span>{% endif %}</td>
                 <td class="px-3 py-2 text-right">{{ f.lines|length }}</td>

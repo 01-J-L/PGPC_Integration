@@ -3071,6 +3071,7 @@ def update_payment(student_id_db):
         if active and student.get('student_user_id'):
             term_summary = finance.summary(student['student_user_id'], active['id'])
             term_summary['term_label'] = f"{active['year_name']} {active['semester']}"
+            term_summary['requirement'] = finance.enrollment_requirement(student['student_user_id'], active['id'], term_summary)
 
     return render_template('update_payment.html',
                            student=student,

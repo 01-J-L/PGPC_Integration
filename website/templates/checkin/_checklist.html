@@ -10,7 +10,7 @@
                 <span class="sr-only">{{ 'met' if it.met else 'not met' }}</span></p>
             <p class="text-xs text-gray-500 break-words">{{ it.detail }}
                 {% if it.approved and it.by %}{% if it.detail %}&middot; {% endif %}Approved by {{ it.by }}{% if it.at %}, {{ it.at.strftime('%b %d, %Y %I:%M %p') }}{% endif %}{% endif %}</p>
-            {% if not it.met and it.approvable and not it.can_act %}<p class="text-xs text-gray-400">Approved by: {{ it.req.roles|join(', ')|title }}</p>{% endif %}
+            {% if not it.met and it.approvable and not it.can_act %}<p class="text-xs text-gray-400">Approved by: {{ it.req.roles|join(', ')|title }} &mdash; on their <em>Checklist Approvals</em> page{% if it.req.kind == 'payment' %} or Enrollment Assessments{% endif %}.</p>{% endif %}
         </div>
         {% if it.can_act and not cl.checkin %}
             {% if it.approved %}

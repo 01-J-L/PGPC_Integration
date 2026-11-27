@@ -8,8 +8,12 @@
 {% else %}
 <div class="flex flex-wrap items-center gap-2 mb-4" role="tablist">
     {% for key, label in [('', 'All'), ('pending', 'Missing items'), ('ready', 'Ready for check-in'), ('checked_in', 'Checked in')] %}
-    <a href="{{ url_for('checkin.queue', state=key or None) }}" class="px-3 py-1.5 text-sm rounded-full border {{ 'bg-primary text-white border-primary' if state == key else 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' }}">{{ label }}</a>
+    <a href="{{ url_for('checkin.queue', state=key or None, q=q or None) }}" class="px-3 py-1.5 text-sm rounded-full border {{ 'bg-primary text-white border-primary' if state == key else 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' }}">{{ label }}</a>
     {% endfor %}
+    <form method="GET" class="flex items-center gap-2">{% if state %}<input type="hidden" name="state" value="{{ state }}">{% endif %}
+        <label for="q-q" class="sr-only">Student ID or name</label>
+        <input id="q-q" name="q" value="{{ q }}" placeholder="Student ID or name" class="px-3 py-1.5 text-sm border border-gray-300 rounded-md w-56">
+        <button class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50">Search</button></form>
     {% if session.user_role == 'admin' %}<a href="{{ url_for('checkin.requirements') }}" class="ml-auto text-sm text-primary hover:underline"><i class="ri-settings-3-line"></i> Checklist settings</a>{% endif %}
 </div>
 <div class="bg-white rounded-xl shadow-sm border border-gray-200 relative overflow-x-auto">

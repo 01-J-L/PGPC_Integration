@@ -76,6 +76,11 @@ def index():
         q = q.filter_by(program_id=program_id)
     forms = q.join(Applicant, Applicant.applicant_id == RegistrationForm.applicant_id) \
              .order_by(Applicant.last_name, Applicant.first_name).all()
+    # student no. / control no. / PGPC control no. / name
+    search = (request.args.get('q') or '').strip()
+    from website.checkin.service import matches_search
+    if search:
+        forms = [f for f in forms if matches_search(f.applicant, search, f.control_number)]
     # Enrolling / enrolled students of the term with no form yet
     missing = []
     if term_id:
@@ -90,8 +95,10 @@ def index():
         if program_id:
             title = (db.session.get(Program, program_id).title or '').strip() if db.session.get(Program, program_id) else ''
             missing = [a for a in missing if (a.program_choice or '').strip() == title]
+        if search:
+            missing = [a for a in missing if matches_search(a, search)]
     return render_template('registration/index.html', forms=forms, missing=missing, terms=terms, term_id=term_id,
-                           status=status, program_id=program_id, programs=Program.query.order_by(Program.program_code).all(),
+                           status=status, program_id=program_id, q=search, programs=Program.query.order_by(Program.program_code).all(),
                            years=YEAR_LABELS, semesters=SEMESTER_LABELS, active_page='registration_forms')
 
 

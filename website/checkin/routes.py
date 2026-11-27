@@ -40,9 +40,26 @@ def queue():
         return redirect(url_for('auth.admin_login'))
     term = service.active_term()
     only = request.args.get('state') or None
-    rows = service.queue(term, only) if term else []
-    return render_template('checkin/queue.html', rows=rows, term=term, state=only or '',
+    search = (request.args.get('q') or '').strip()
+    rows = service.queue(term, only, search=search) if term else []
+    return render_template('checkin/queue.html', rows=rows, term=term, state=only or '', q=search,
                            active_page='checkin_queue')
+
+
+@checkin.route('/approvals')
+def approvals():
+    """Checklist lines the logged-in office approves (e.g. a line 'approved by Accounting')."""
+    role = session.get('user_role')
+    if role not in service.ADMISSION_ROLES:
+        return redirect(url_for('auth.admin_login'))
+    term = service.active_term()
+    show = request.args.get('show') or 'pending'
+    search = (request.args.get('q') or '').strip()
+    rows = service.approvals_for(role, term, search, show) if term else []
+    lines = [r for r in service.requirements() if role in r.roles and r.kind != 'regform']
+    base = {'accounting': 'accounting_base.html', 'cashier': 'cashier_base.html'}.get(role, 'admin_base.html')
+    return render_template('checkin/approvals.html', rows=rows, term=term, show=show, q=search, lines=lines,
+                           role=role, base_template=base, active_page='checklist_approvals')
 
 
 @checkin.route('/<int:applicant_id>/items/<code>/approve', methods=['POST'])
