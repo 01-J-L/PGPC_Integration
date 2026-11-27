@@ -134,6 +134,10 @@ def create_app():
     from .checkin.routes import checkin
     app.register_blueprint(checkin, url_prefix='/admin/enrollment-checkin')
 
+    # Phase 7: grade visibility (release per term / program, holds)
+    from .grades.routes import grade_release
+    app.register_blueprint(grade_release, url_prefix='/admin/grade-release')
+
     # B. FACULTY SYSTEM BLUEPRINTS (Imported from the pasted 'faculty' folder)
     # Note: We wrap this in try/except so the app doesn't crash if files are missing
     try:

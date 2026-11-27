@@ -757,6 +757,55 @@ class ControlNumber(db.Model):
 CONTROL_TABLES = ['control_number_sequences', 'control_numbers']
 
 
+# =========================================================
+# PHASE 7: GRADE VISIBILITY (release per term / program, holds)
+# =========================================================
+
+class GradeRelease(db.Model):
+    """Whether students may see the registrar's grades (student_grades) of a term.
+
+    program_key '' = every program; a program id = an override for that program.
+    Terms are keyed by the same strings student_grades uses (academic_year, semester)."""
+    __tablename__ = 'grade_releases'
+
+    id = db.Column(db.Integer, primary_key=True)
+    academic_year = db.Column(db.String(20), nullable=False)
+    semester = db.Column(db.String(50), nullable=False)
+    program_key = db.Column(db.String(50), nullable=False, default='', server_default='')
+    is_released = db.Column(db.Boolean, nullable=False, default=False, server_default=_sa.text('0'))
+    released_by = db.Column(db.String(150))
+    released_at = db.Column(db.DateTime)
+    withheld_by = db.Column(db.String(150))
+    withheld_at = db.Column(db.DateTime)
+    reason = db.Column(db.String(500))
+    updated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+    __table_args__ = (db.UniqueConstraint('academic_year', 'semester', 'program_key', name='uq_grade_release'), _INNODB)
+
+
+class GradeHold(db.Model):
+    """A registrar hold on one student's grades (one term, or every term when academic_year is '').
+    Lifting keeps the row."""
+    __tablename__ = 'grade_holds'
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False, index=True)
+    academic_year = db.Column(db.String(20), nullable=False, default='', server_default='')
+    semester = db.Column(db.String(50), nullable=False, default='', server_default='')
+    reason = db.Column(db.String(500), nullable=False)
+    placed_by = db.Column(db.String(150), nullable=False)
+    placed_role = db.Column(db.String(30))
+    placed_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+    lifted_by = db.Column(db.String(150))
+    lifted_at = db.Column(db.DateTime)
+    lift_reason = db.Column(db.String(500))
+
+    __table_args__ = (_INNODB,)
+
+
+GRADE_TABLES = ['grade_releases', 'grade_holds']
+
+
 class ProgramObjective(db.Model):
     __tablename__ = 'program_objectives'
 

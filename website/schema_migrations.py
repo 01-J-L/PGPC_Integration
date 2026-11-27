@@ -143,6 +143,19 @@ def _create_and_seed_checkin(cur):
     return statements + [checklist_seed_sql()]
 
 
+# Phase 7: keep today's behaviour on deploy. Students currently see every grade,
+# so each term that already has grades starts out released.
+GRADE_RELEASE_SEED_SQL = (
+    "INSERT IGNORE INTO grade_releases (academic_year, semester, program_key, is_released, released_by, released_at, reason) "
+    "SELECT DISTINCT TRIM(academic_year), TRIM(semester), '', 1, 'migration 0008', NOW(), "
+    "'Grades already visible before grade release control existed' "
+    "FROM student_grades WHERE TRIM(academic_year) <> '' AND TRIM(semester) <> ''")
+
+
+def _create_and_seed_grade_releases(cur):
+    return _create_model_tables(['grade_releases', 'grade_holds'])(cur) + [GRADE_RELEASE_SEED_SQL]
+
+
 MIGRATIONS = [
     {
         'id': '0001_enrollment_shs_document_columns',
@@ -249,6 +262,19 @@ MIGRATIONS = [
         'rollback': [
             "DROP TABLE IF EXISTS `control_numbers`",
             "DROP TABLE IF EXISTS `control_number_sequences`",
+        ],
+    },
+    {
+        'id': '0008_grade_visibility',
+        'description': ("Phase 7: grade visibility. grade_releases (release per term, optional per-program override) "
+                        "and grade_holds (per-student holds, lifting keeps the row). Every term that already has grades "
+                        "is recorded as RELEASED so students keep seeing what they see today. New tables only."),
+        'build': _create_and_seed_grade_releases,
+        'rollback_guard': "SELECT (SELECT COUNT(*) FROM grade_holds) + "
+                          "(SELECT COUNT(*) FROM grade_releases WHERE released_by <> 'migration 0008' OR released_by IS NULL)",
+        'rollback': [
+            "DROP TABLE IF EXISTS `grade_holds`",
+            "DROP TABLE IF EXISTS `grade_releases`",
         ],
     },
 ]
