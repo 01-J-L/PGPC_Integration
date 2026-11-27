@@ -503,6 +503,118 @@ class RegistrationFormChange(db.Model):
 REGISTRATION_TABLES = ['registration_forms', 'registration_form_subjects', 'registration_form_changes']
 
 
+# =========================================================
+# ENROLLMENT FINANCE (Phase 4)
+# ---------------------------------------------------------
+# The existing ledger stays the source of truth: `assessments` (charges) and
+# `payments` (money in, including 'Discount' / 'Voucher' credits). These
+# tables only ADD what was missing: which charges belong to which term's
+# registration form, payment verification, reversals instead of deletes,
+# double-submit protection and an audit trail.
+# =========================================================
+
+class EnrollmentAssessment(db.Model):
+    __tablename__ = 'enrollment_assessments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    registration_form_id = db.Column(db.Integer, db.ForeignKey('registration_forms.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False, index=True)
+    applicant_id = db.Column(db.Integer, db.ForeignKey('applicants.applicant_id', ondelete='RESTRICT'), nullable=False, index=True)
+    academic_term_id = db.Column(db.Integer, db.ForeignKey('academic_terms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    residency = db.Column(db.String(20), nullable=False)          # resident | non_resident (same rule as batch fees)
+    total_units = db.Column(db.Numeric(5, 1), nullable=False)
+    total_assessment = db.Column(db.Numeric(12, 2), nullable=False)
+    generated_by = db.Column(db.String(150))
+    generated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+    regenerated_at = db.Column(db.DateTime)
+    notes = db.Column(db.String(500))
+
+    registration_form = db.relationship('RegistrationForm', backref=db.backref('assessment', uselist=False))
+    items = db.relationship('EnrollmentAssessmentItem', backref='enrollment_assessment', lazy='select', passive_deletes='all')
+
+    __table_args__ = (
+        db.UniqueConstraint('student_user_id', 'academic_term_id', name='uq_enrollment_assessment_term'),
+        _INNODB,
+    )
+
+
+class EnrollmentAssessmentItem(db.Model):
+    __tablename__ = 'enrollment_assessment_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    enrollment_assessment_id = db.Column(db.Integer, db.ForeignKey('enrollment_assessments.id', ondelete='RESTRICT'), nullable=False, index=True)
+    assessment_id = db.Column(db.Integer, db.ForeignKey('assessments.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    batch_id = db.Column(db.Integer, index=True)
+    description = db.Column(db.String(255), nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    adopted = db.Column(db.Boolean, nullable=False, default=False, server_default=_sa.text('0'))  # charge already existed
+
+    __table_args__ = (_INNODB,)
+
+
+class PaymentVerification(db.Model):
+    __tablename__ = 'payment_verifications'
+
+    id = db.Column(db.Integer, primary_key=True)
+    payment_id = db.Column(db.Integer, db.ForeignKey('payments.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    status = db.Column(db.String(20), nullable=False, default='verified', server_default='verified')
+    verified_by = db.Column(db.String(150), nullable=False)
+    verified_role = db.Column(db.String(30))
+    verified_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+    notes = db.Column(db.String(255))
+
+    __table_args__ = (_INNODB,)
+
+
+class PaymentReversal(db.Model):
+    """A payment is never deleted: a reversal adds an equal negative payment
+    row (method 'Reversal') and links the two here."""
+    __tablename__ = 'payment_reversals'
+
+    id = db.Column(db.Integer, primary_key=True)
+    payment_id = db.Column(db.Integer, db.ForeignKey('payments.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    reversal_payment_id = db.Column(db.Integer, db.ForeignKey('payments.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    reason = db.Column(db.String(255), nullable=False)
+    reversed_by = db.Column(db.String(150), nullable=False)
+    reversed_role = db.Column(db.String(30))
+    reversed_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+
+    __table_args__ = (_INNODB,)
+
+
+class PaymentSubmission(db.Model):
+    """One row per payment form submission token: a double click or a browser
+    re-submit of the same form can never record the payment twice."""
+    __tablename__ = 'payment_submissions'
+
+    token = db.Column(db.String(64), primary_key=True)
+    payment_id = db.Column(db.Integer, db.ForeignKey('payments.id', ondelete='RESTRICT'))
+    submitted_by = db.Column(db.String(150))
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+
+    __table_args__ = (_INNODB,)
+
+
+class FinanceAuditLog(db.Model):
+    __tablename__ = 'finance_audit_log'
+
+    id = db.Column(db.Integer, primary_key=True)
+    action = db.Column(db.String(40), nullable=False)
+    applicant_id = db.Column(db.Integer, index=True)
+    payment_id = db.Column(db.Integer, index=True)
+    enrollment_assessment_id = db.Column(db.Integer, index=True)
+    details = db.Column(db.Text)
+    performed_by = db.Column(db.String(150))
+    performed_role = db.Column(db.String(30))
+    performed_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), index=True)
+
+    __table_args__ = (_INNODB,)
+
+
+FINANCE_TABLES = ['enrollment_assessments', 'enrollment_assessment_items', 'payment_verifications',
+                  'payment_reversals', 'payment_submissions', 'finance_audit_log']
+
+
 class ProgramObjective(db.Model):
     __tablename__ = 'program_objectives'
 

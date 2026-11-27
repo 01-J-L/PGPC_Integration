@@ -645,8 +645,16 @@ def finalize(form_id, actor):
     if form.section_id and not ctx.applicant.section_id:
         ctx.applicant.section_id = form.section_id   # first home section for the student
         home_set = True
+    # Phase 4: the term assessment is generated from the finalized form, in the
+    # same transaction (a failure rolls the finalize back as well).
+    from website.finance import service as finance
+    ea, fee_report = finance.generate_for_form(form, actor)
+    if not fee_report['rules_matched']:
+        warnings.append('No fee rule of Accounting matches this student (program/year/semester/residency); '
+                        'the assessment is 0 until Accounting sets up the fees and regenerates it.')
     _log(form.id, 'finalize', actor, details={'subjects': _snapshot(form), 'total_units': form.total_units,
-                                              'warnings': warnings, 'home_section_set': home_set})
+                                              'warnings': warnings, 'home_section_set': home_set,
+                                              'assessment_total': ea.total_assessment})
     return form, warnings
 
 

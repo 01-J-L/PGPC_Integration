@@ -187,6 +187,24 @@
 <p class="text-sm text-gray-500 mb-6"><i class="ri-information-line"></i> Regular students take exactly the curriculum subjects of their term. To customize the subjects (back subjects, failed subjects, cross-semester subjects), mark the student Irregular.</p>
 {% endif %}
 
+<!-- Phase 4: financial status (read-only for the registrar) -->
+<section class="bg-white rounded-xl shadow-sm border border-gray-200 mb-6" id="finance">
+    <div class="px-5 py-3 border-b border-gray-100 flex flex-wrap gap-2 justify-between items-center">
+        <h2 class="font-semibold text-gray-800">Assessment &amp; payments</h2>
+        <span class="text-xs font-semibold px-2 py-1 rounded-full {{ 'bg-green-100 text-green-800' if term_summary.payment_status == 'Fully Paid' else ('bg-yellow-100 text-yellow-800' if term_summary.payment_status == 'Partially Paid' else 'bg-gray-100 text-gray-700') }}">{{ term_summary.payment_status }}{% if term_summary.verification_status %} &middot; {{ term_summary.verification_status }}{% endif %}</span>
+    </div>
+    <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>{% include 'finance/_balance_table.html' %}</div>
+        <div class="text-sm space-y-2">
+            {% if term_summary.assessment %}
+            <p class="text-gray-600">Charges ({{ term_summary.assessment.residency|replace('_', '-') }}):</p>
+            <ul class="text-xs text-gray-700 space-y-0.5">{% for it in term_summary.assessment.items %}<li class="flex justify-between"><span>{{ it.description }}</span><span>{{ it.amount|peso }}</span></li>{% else %}<li class="text-orange-700">No fee rule matched. Accounting must set up the fees.</li>{% endfor %}</ul>
+            {% endif %}
+            <p class="pt-2 border-t border-gray-100"><span class="text-gray-600">Payment policy:</span> {% if policy_ok %}<span class="text-green-700 font-medium"><i class="ri-check-line"></i> {{ policy_why }}</span>{% else %}<span class="text-orange-700 font-medium">{{ policy_why }}</span>{% endif %}</p>
+        </div>
+    </div>
+</section>
+
 <!-- History -->
 <section class="bg-white rounded-xl shadow-sm border border-gray-200">
     <div class="px-5 py-3 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Change history</h2></div>

@@ -57,6 +57,16 @@ def seeded(app):
                  (st['student_user_id'], st['applicant_id'], term['id'], ver, pid))
     dbx.x("INSERT INTO registration_form_subjects (registration_form_id, curriculum_subject_id, subject_code, code_key, description, units, year_level, semester) "
           "VALUES (%s,%s,'CRW 101','CRW101','Crawl subject',3,1,1)", (form, cs1))
+    # Phase 4: an assessment with one charge, a payment, a verification and a reversal
+    ea = dbx.x("INSERT INTO enrollment_assessments (registration_form_id, student_user_id, applicant_id, academic_term_id, residency, total_units, total_assessment, generated_by, generated_at) "
+               "VALUES (%s,%s,%s,%s,'resident',3,500,'crawl',NOW())", (form, st['student_user_id'], st['applicant_id'], term['id']))
+    ch = dbx.x("INSERT INTO assessments (student_id, description, total_amount, amount_paid, balance, status, created_at) VALUES (%s,'Crawl fee',500,0,500,'unpaid',NOW())", (st['applicant_id'],))
+    dbx.x("INSERT INTO enrollment_assessment_items (enrollment_assessment_id, assessment_id, description, amount, adopted) VALUES (%s,%s,'Crawl fee',500,0)", (ea, ch))
+    p1 = dbx.x("INSERT INTO payments (student_id, assessment_id, amount_paid, payment_date, payment_method, cashier_username) VALUES (%s,%s,100,CURDATE(),'Cash','x')", (st['applicant_id'], ch))
+    p2 = dbx.x("INSERT INTO payments (student_id, assessment_id, amount_paid, payment_date, payment_method, cashier_username) VALUES (%s,%s,50,CURDATE(),'Cash','x')", (st['applicant_id'], ch))
+    p3 = dbx.x("INSERT INTO payments (student_id, assessment_id, amount_paid, payment_date, payment_method, cashier_username) VALUES (%s,%s,-50,CURDATE(),'Reversal','y')", (st['applicant_id'], ch))
+    dbx.x("INSERT INTO payment_verifications (payment_id, status, verified_by, verified_role, verified_at) VALUES (%s,'verified','v','accounting',NOW())", (p1,))
+    dbx.x("INSERT INTO payment_reversals (payment_id, reversal_payment_id, reason, reversed_by, reversed_role, reversed_at) VALUES (%s,%s,'crawl','y','accounting',NOW())", (p2, p3))
     import json
     batch = dbx.x("INSERT INTO curriculum_import_batches (program_id, source_filename, source_kind, source_sha256, payload) VALUES (%s,'crawl.xlsx','registration_form',%s,%s)",
                   (pid, 'x' * 64, json.dumps({'parsed': {'kind': 'registration_form', 'title': 'Crawl', 'level': 'First Year-1st sem',

@@ -126,6 +126,10 @@ def create_app():
     app.register_blueprint(registration, url_prefix='/admin/registration')
     app.register_blueprint(student_registration, url_prefix='/')
 
+    # Phase 4: enrollment assessments, payment verification and policy
+    from .finance.routes import finance
+    app.register_blueprint(finance, url_prefix='/accounting/enrollment-finance')
+
     # B. FACULTY SYSTEM BLUEPRINTS (Imported from the pasted 'faculty' folder)
     # Note: We wrap this in try/except so the app doesn't crash if files are missing
     try:

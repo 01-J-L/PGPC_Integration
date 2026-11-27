@@ -1,0 +1,16 @@
+{#- Expects `term_summary` from website.finance.service.summary() -#}
+<table class="w-full text-sm" aria-label="Balance">
+    <tbody class="divide-y divide-gray-100">
+        <tr><th scope="row" class="py-1.5 text-left font-normal text-gray-600">Total Assessment</th><td class="py-1.5 text-right font-medium">{{ term_summary.total_assessment|peso }}</td></tr>
+        <tr><th scope="row" class="py-1.5 text-left font-normal text-gray-600">Previous Balance{% if term_summary.previous_balance < 0 %} <span class="text-xs text-green-700">(credit)</span>{% endif %}</th><td class="py-1.5 text-right font-medium">{{ term_summary.previous_balance|peso }}</td></tr>
+        <tr><th scope="row" class="py-1.5 text-left font-normal text-gray-600">Discounts</th><td class="py-1.5 text-right font-medium">&minus; {{ term_summary.discounts|peso }}</td></tr>
+        <tr><th scope="row" class="py-1.5 text-left font-normal text-gray-600">Total Payments</th><td class="py-1.5 text-right font-medium">&minus; {{ term_summary.payments|peso }}</td></tr>
+        <tr class="border-t-2 border-gray-300"><th scope="row" class="py-2 text-left font-semibold text-gray-800">Remaining Balance</th>
+            <td class="py-2 text-right text-lg font-bold {{ 'text-red-600' if term_summary.remaining > 0 else 'text-green-700' }}">{{ term_summary.remaining|peso }}</td></tr>
+    </tbody>
+</table>
+{% if term_summary.assessment is none %}
+<p class="text-xs text-gray-500 mt-2">No assessment for this term yet: it is generated when the registrar finalizes the registration form.</p>
+{% elif term_summary.latest_payment %}
+<p class="text-xs text-gray-500 mt-2">Latest payment: {{ term_summary.latest_payment.payment_date }}{% if term_summary.latest_payment.receipt_number %} &middot; O.R. {{ term_summary.latest_payment.receipt_number }}{% endif %} &middot; {{ term_summary.verified_count }} verified, {{ term_summary.unverified_count }} waiting for verification.</p>
+{% endif %}
