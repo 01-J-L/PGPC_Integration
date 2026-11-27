@@ -1310,7 +1310,7 @@ def send_admin_created_account_email(user_email, user_full_name, temporary_passw
         
     return _send_email(subject, [user_email], html_body, sender_name_override=sender_name_from_config)
 
-def _prepare_print_transcript(student_user_id):
+def _prepare_print_transcript(student_user_id, for_student=False):
     """
     Helper to fetch and organize grades for printing Class Cards.
     Returns: student_info, transcript_data (dict grouped by Term)
@@ -1350,6 +1350,12 @@ def _prepare_print_transcript(student_user_id):
     
     all_grades = cursor.fetchall()
     conn.close()
+
+    # Phase 7: a student's own class card shows only the terms they may see.
+    if for_student:
+        from website.grades import visibility
+        allowed = {(t['academic_year'], t['semester']) for t in visibility.student_terms(student_user_id) if t['visible']}
+        all_grades = [g for g in all_grades if (visibility.norm(g['academic_year']), visibility.norm(g['semester'])) in allowed]
 
     # 3. Group by Term (Year + Sem) and Calculate GWA
     transcript = {}
@@ -2004,7 +2010,7 @@ def student_print_grade_card():
         return redirect(url_for('auth.student_login_page'))
         
     student_user_id = session['student_id']
-    student, transcript = _prepare_print_transcript(student_user_id)
+    student, transcript = _prepare_print_transcript(student_user_id, for_student=True)
     
     if not student:
         flash("Record not found.", "danger")
@@ -10691,33 +10697,14 @@ def view_student_grades():
             flash("No application found for your account. Cannot display grades.", "info")
             return redirect(url_for('views.application_status_page'))
         
-        # --- NEW LOGIC: Query for all existing grades and group them by term ---
-        cursor.execute("""
-            SELECT 
-                sg.academic_year, 
-                sg.semester, 
-                s.subject_code, 
-                s.subject_title, 
-                sg.grade, 
-                sg.remarks
-            FROM student_grades sg
-            JOIN subjects s ON sg.subject_id = s.id
-            WHERE sg.student_user_id = %s
-            ORDER BY sg.academic_year DESC, sg.semester ASC, s.subject_code ASC
-        """, (student_user_id,))
-        
-        all_grades = cursor.fetchall()
-        
-        # Group grades by term using a dictionary
-        grades_by_term = defaultdict(list)
-        for grade in all_grades:
-            term_key = f"{grade['academic_year']} - {grade['semester']}"
-            grades_by_term[term_key].append(grade)
+        # Phase 7: only released terms without a hold (see website/grades/visibility.py)
+        from website.grades import visibility
+        grade_terms = visibility.student_terms(student_user_id)
 
         return render_template('student_grades.html',
                                student=student_info,
                                application=student_info, # <--- FIX: Added this line
-                               grades_by_term=grades_by_term,
+                               grade_terms=grade_terms,
                                student_logged_in=True)
 
     except Exception as e:

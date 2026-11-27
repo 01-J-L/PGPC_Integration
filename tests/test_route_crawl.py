@@ -35,7 +35,7 @@ def seeded(app):
     sec = dbx.x("INSERT INTO sections (program_id, year_level, section_name, section_letter, max_students, is_active, semester, school_year) VALUES (%s,'1st Year','1A','A',40,1,1,'2026-2027')", (pid,))
     program = {'id': pid, 'title': 'Crawl Program', 'subjects': [sid], 'section_id': sec}
     st = make_student(dbx, program, status='Enrolling')
-    term = dbx.one("SELECT id FROM academic_terms ORDER BY id LIMIT 1")
+    term = dbx.one("SELECT id, year_name, semester FROM academic_terms ORDER BY id LIMIT 1")
     dean_email = 'crawl_dean@example.com'
     dbx.x("DELETE FROM users WHERE email IN (%s, 'crawl_super@example.com')", (dean_email,))
     dean = dbx.x("INSERT INTO users (username, email, password_hash, role, status, full_name, `system`, department) "
@@ -80,6 +80,11 @@ def seeded(app):
     seqid = dbx.x("INSERT INTO control_number_sequences (prefix, year_code, school_year, last_number) VALUES ('PGPC','90','2090-2091',1)")
     dbx.x("INSERT INTO control_numbers (number, sequence_id, seq, student_user_id, applicant_id, academic_term_id, issued_by) "
           "VALUES ('PGPC-90-0001',%s,1,%s,%s,%s,'crawl')", (seqid, st['student_user_id'], st['applicant_id'], term['id']))
+    # Phase 7: a release override and a hold
+    dbx.x("INSERT IGNORE INTO grade_releases (academic_year, semester, program_key, is_released, released_by, released_at) VALUES (%s,%s,'',1,'crawl',NOW())",
+          (term['year_name'], term['semester']))
+    dbx.x("INSERT INTO grade_holds (student_user_id, academic_year, semester, reason, placed_by, placed_at) VALUES (%s,'','','crawl hold','crawl',NOW())",
+          (st['student_user_id'],))
     import json
     batch = dbx.x("INSERT INTO curriculum_import_batches (program_id, source_filename, source_kind, source_sha256, payload) VALUES (%s,'crawl.xlsx','registration_form',%s,%s)",
                   (pid, 'x' * 64, json.dumps({'parsed': {'kind': 'registration_form', 'title': 'Crawl', 'level': 'First Year-1st sem',

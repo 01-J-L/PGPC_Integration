@@ -1423,6 +1423,45 @@ CREATE TABLE IF NOT EXISTS control_numbers (
 	INDEX ix_control_numbers_sequence_id (sequence_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- =====================================================================
+--  PHASE 7: GRADE VISIBILITY (generated from website/models.py)
+-- =====================================================================
+-- ---- grade_releases ----------------------------------------------
+CREATE TABLE IF NOT EXISTS grade_releases (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	academic_year VARCHAR(20) NOT NULL, 
+	semester VARCHAR(50) NOT NULL, 
+	program_key VARCHAR(50) NOT NULL DEFAULT '', 
+	is_released BOOL NOT NULL DEFAULT 0, 
+	released_by VARCHAR(150), 
+	released_at DATETIME, 
+	withheld_by VARCHAR(150), 
+	withheld_at DATETIME, 
+	reason VARCHAR(500), 
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_grade_release UNIQUE (academic_year, semester, program_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- grade_holds -------------------------------------------------
+CREATE TABLE IF NOT EXISTS grade_holds (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	student_user_id INTEGER NOT NULL, 
+	academic_year VARCHAR(20) NOT NULL DEFAULT '', 
+	semester VARCHAR(50) NOT NULL DEFAULT '', 
+	reason VARCHAR(500) NOT NULL, 
+	placed_by VARCHAR(150) NOT NULL, 
+	placed_role VARCHAR(30), 
+	placed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	lifted_by VARCHAR(150), 
+	lifted_at DATETIME, 
+	lift_reason VARCHAR(500), 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT,
+	INDEX ix_grade_holds_student_user_id (student_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------
 --  Schema migration ledger (website/schema_migrations.py).
 --  A database built from THIS file already contains every change below, so
@@ -1440,7 +1479,8 @@ INSERT IGNORE INTO schema_migrations (id, description, applied_at) VALUES
   ('0004_registration_forms', 'built into full.sql', NOW()),
   ('0005_enrollment_finance', 'built into full.sql', NOW()),
   ('0006_enrollment_checkin', 'built into full.sql', NOW()),
-  ('0007_control_numbers', 'built into full.sql', NOW());
+  ('0007_control_numbers', 'built into full.sql', NOW()),
+  ('0008_grade_visibility', 'built into full.sql', NOW());
 
 SET FOREIGN_KEY_CHECKS = 1;
 

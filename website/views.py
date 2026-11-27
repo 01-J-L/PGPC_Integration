@@ -535,6 +535,11 @@ def application_status_page():
                     active_term['semester']
                 ))
                 current_term_grades = cursor.fetchall()
+                # Phase 7: hide the term's grades unless released and not on hold
+                from website.grades import visibility as _gv
+                if current_term_grades and not _gv.visibility(application_data['student_user_id'],
+                                                               active_term['year_name'], active_term['semester'])[0]:
+                    current_term_grades = []
             except Exception as e_grades:
                 print(f"Error fetching grades: {e_grades}")
                 traceback.print_exc()
