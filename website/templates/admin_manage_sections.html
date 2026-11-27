@@ -133,7 +133,10 @@
                                 <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-700">{{
                                     section.current_students }}</td>
                                 <td class="px-3 py-2 whitespace-nowrap text-sm">
-                                    {% if section.is_active %}
+                                    {% if section.is_archived %}
+                                    <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-200 text-gray-700"
+                                        title="{{ section.archive_reason }}">Archived</span>
+                                    {% elif section.is_active %}
                                     <span
                                         class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Active</span>
                                     {% else %}
@@ -150,11 +153,18 @@
                                         title="Edit section">Edit</button>
                                     <form action="{{ url_for('auth.admin_manage_sections') }}" method="POST"
                                         class="inline"
-                                        onsubmit="return confirm('Are you sure you want to delete section {{ section.section_name }}?');">
+                                        onsubmit="return confirm('Delete section {{ section.section_name }}? This is only possible when no student, schedule, class record or registration form uses it.');">
                                         <input type="hidden" name="action" value="delete_section">
                                         <input type="hidden" name="section_id" value="{{ section.id }}">
                                         <button type="submit" class="text-red-500 hover:text-red-700 mx-1"
                                             title="Delete section">Delete</button>
+                                    </form>
+                                    <form action="{{ url_for('auth.admin_manage_sections') }}" method="POST" class="inline"
+                                        {% if not section.is_archived %}onsubmit="var r = prompt('Reason for archiving section {{ section.section_name }} (it keeps its records but takes no new students):'); if (!r) return false; this.reason.value = r; return true;"{% endif %}>
+                                        <input type="hidden" name="action" value="{{ 'restore_section' if section.is_archived else 'archive_section' }}">
+                                        <input type="hidden" name="section_id" value="{{ section.id }}"><input type="hidden" name="reason" value="">
+                                        <button type="submit" class="text-gray-600 hover:text-gray-900 mx-1"
+                                            title="{{ 'Restore section' if section.is_archived else 'Archive section' }}">{{ 'Restore' if section.is_archived else 'Archive' }}</button>
                                     </form>
                                 </td>
                             </tr>

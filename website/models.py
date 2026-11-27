@@ -806,6 +806,34 @@ class GradeHold(db.Model):
 GRADE_TABLES = ['grade_releases', 'grade_holds']
 
 
+# =========================================================
+# PHASE 8: SECTION ARCHIVING (instead of deleting sections that have history)
+# =========================================================
+
+class SectionArchive(db.Model):
+    """Archive state of a section. Archiving sets sections.is_active = 0 (hidden from
+    new enrollment and section pickers) and remembers who, when and why; restoring
+    puts back the previous is_active. One row per section; history is in the audit log."""
+    __tablename__ = 'section_archives'
+
+    id = db.Column(db.Integer, primary_key=True)
+    section_id = db.Column(db.Integer, db.ForeignKey('sections.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    is_archived = db.Column(db.Boolean, nullable=False, default=True, server_default=_sa.text('1'))
+    was_active = db.Column(db.Boolean)
+    reason = db.Column(db.String(500), nullable=False)
+    archived_by = db.Column(db.String(150), nullable=False)
+    archived_role = db.Column(db.String(30))
+    archived_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+    restored_by = db.Column(db.String(150))
+    restored_at = db.Column(db.DateTime)
+    restore_reason = db.Column(db.String(500))
+
+    __table_args__ = (_INNODB,)
+
+
+SECTION_TABLES = ['section_archives']
+
+
 class ProgramObjective(db.Model):
     __tablename__ = 'program_objectives'
 

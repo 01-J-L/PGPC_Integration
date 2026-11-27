@@ -1462,6 +1462,28 @@ CREATE TABLE IF NOT EXISTS grade_holds (
 	INDEX ix_grade_holds_student_user_id (student_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- =====================================================================
+--  PHASE 8: SECTION ARCHIVES (generated from website/models.py)
+-- =====================================================================
+-- ---- section_archives --------------------------------------------
+CREATE TABLE IF NOT EXISTS section_archives (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	section_id INTEGER NOT NULL, 
+	is_archived BOOL NOT NULL DEFAULT 1, 
+	was_active BOOL, 
+	reason VARCHAR(500) NOT NULL, 
+	archived_by VARCHAR(150) NOT NULL, 
+	archived_role VARCHAR(30), 
+	archived_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	restored_by VARCHAR(150), 
+	restored_at DATETIME, 
+	restore_reason VARCHAR(500), 
+	PRIMARY KEY (id), 
+	UNIQUE (section_id), 
+	FOREIGN KEY(section_id) REFERENCES sections (id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------
 --  Schema migration ledger (website/schema_migrations.py).
 --  A database built from THIS file already contains every change below, so
@@ -1480,7 +1502,8 @@ INSERT IGNORE INTO schema_migrations (id, description, applied_at) VALUES
   ('0005_enrollment_finance', 'built into full.sql', NOW()),
   ('0006_enrollment_checkin', 'built into full.sql', NOW()),
   ('0007_control_numbers', 'built into full.sql', NOW()),
-  ('0008_grade_visibility', 'built into full.sql', NOW());
+  ('0008_grade_visibility', 'built into full.sql', NOW()),
+  ('0009_section_archives', 'built into full.sql', NOW());
 
 SET FOREIGN_KEY_CHECKS = 1;
 
