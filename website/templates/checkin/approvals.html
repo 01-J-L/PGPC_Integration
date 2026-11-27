@@ -1,0 +1,64 @@
+{% extends base_template %}
+{% block title %}Checklist Approvals{% endblock %}
+{% block breadcrumb %}Checklist Approvals{% endblock %}
+{% block page_title %}Checklist Approvals{% if term %} &middot; {{ term.year_name }} {{ term.semester }}{% endif %}{% endblock %}
+{% block content %}
+{% set ic = 'px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500' %}
+<p class="text-sm text-gray-600 mb-4 max-w-3xl">The enrollment checklist lines that <strong>{{ role|title }}</strong> approves.
+    A student can be checked in by the Registrar only when every required line is approved.
+    {% if lines %}Your lines: {% for l in lines %}<strong>{{ l.label }}</strong>{% if not l.is_required %} (optional){% endif %}{{ ', ' if not loop.last }}{% endfor %}.{% endif %}</p>
+
+{% if not term %}
+<p class="p-6 bg-white rounded-xl border text-gray-600">There is no active academic term.</p>
+{% elif not lines %}
+<p class="p-6 bg-white rounded-xl border text-gray-600">No active checklist line is approved by {{ role|title }}. An administrator assigns lines under Enrollment Checklist.</p>
+{% else %}
+<form method="GET" class="flex flex-wrap items-end gap-3 mb-4">
+    <div><label for="f-q" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Student ID or name</label>
+        <input id="f-q" name="q" value="{{ q }}" class="{{ ic }} w-64" placeholder="e.g. P202600363 or Dela Cruz"></div>
+    <div><label for="f-show" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Show</label>
+        <select id="f-show" name="show" class="{{ ic }} w-60">
+            <option value="pending" {% if show == 'pending' %}selected{% endif %}>Waiting for my approval</option>
+            <option value="all" {% if show == 'all' %}selected{% endif %}>All (approved too)</option></select></div>
+    <button class="px-4 py-2 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50">Filter</button>
+</form>
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 relative overflow-x-auto">
+    <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 text-xs uppercase text-gray-500"><tr>
+            <th scope="col" class="px-4 py-2 text-left">Student</th><th scope="col" class="px-3 py-2 text-left">Program</th>
+            <th scope="col" class="px-3 py-2 text-left">Checklist line</th><th scope="col" class="px-4 py-2"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody class="divide-y divide-gray-100">
+        {% for r in rows %}{% for it in r['items'] %}
+            <tr class="align-top" id="appr-{{ r.applicant.applicant_id }}-{{ it.req.code }}">
+                {% if loop.first %}<td class="px-4 py-2 font-medium text-gray-900" rowspan="{{ r['items']|length }}">{{ r.applicant.last_name }}, {{ r.applicant.first_name }}
+                    <div class="text-xs text-gray-500 font-normal">{{ r.applicant.old_student_id or r.applicant.control_number or '' }}</div></td>
+                <td class="px-3 py-2" rowspan="{{ r['items']|length }}">{{ r.applicant.program_choice }}<div class="text-xs text-gray-500">{{ r.applicant.enrollment_year_level or '' }}</div></td>{% endif %}
+                <td class="px-3 py-2">{{ it.req.label }}{% if not it.required %} <span class="text-xs text-gray-500">(optional)</span>{% endif %}
+                    <div class="text-xs {{ 'text-green-700' if it.met else 'text-gray-500' }}">{{ it.detail }}{% if it.approved and it.by %}{% if it.detail %} &middot; {% endif %}Approved by {{ it.by }}{% endif %}</div></td>
+                <td class="px-4 py-2 text-right whitespace-nowrap">
+                    {% if it.approved %}
+                    <form method="POST" action="{{ url_for('checkin.revoke_item', applicant_id=r.applicant.applicant_id, code=it.req.code) }}"
+                          onsubmit="var x = prompt('Reason for revoking “{{ it.req.label|e }}”:'); if (!x) return false; this.reason.value = x; return true;">
+                        <input type="hidden" name="term_id" value="{{ term.id }}"><input type="hidden" name="reason" value="">
+                        <button class="text-xs font-medium text-red-600 hover:underline">Revoke</button></form>
+                    {% elif it.req.kind == 'manual' %}
+                    <form method="POST" action="{{ url_for('checkin.approve_item', applicant_id=r.applicant.applicant_id, code=it.req.code) }}" class="flex items-center gap-2 justify-end">
+                        <input type="hidden" name="term_id" value="{{ term.id }}">
+                        <label class="sr-only" for="n-{{ r.applicant.applicant_id }}-{{ it.req.code }}">Note</label>
+                        <input id="n-{{ r.applicant.applicant_id }}-{{ it.req.code }}" name="notes" maxlength="500" placeholder="Note (optional)" class="{{ ic }} w-40 py-1">
+                        <button class="px-2.5 py-1 text-xs font-medium rounded-md bg-green-600 text-white hover:bg-green-700">Approve</button></form>
+                    {% else %}
+                    <form method="POST" action="{{ url_for('checkin.approve_item', applicant_id=r.applicant.applicant_id, code=it.req.code) }}">
+                        <input type="hidden" name="term_id" value="{{ term.id }}">
+                        <button class="px-2.5 py-1 text-xs font-medium rounded-md bg-green-600 text-white hover:bg-green-700">Give clearance</button></form>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}{% else %}
+            <tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">{{ 'Nothing is waiting for your approval.' if show == 'pending' else 'No students found.' }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

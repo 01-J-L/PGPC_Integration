@@ -379,7 +379,31 @@ def undo_check_in(actor, applicant_id, term_id, reason):
 # registrar queue
 # ---------------------------------------------------------------------------
 
-def queue(term, only=None):
+def matches_search(applicant, search, control_number=None):
+    """Student no., applicant control no., PGPC control no. or name contains the search text."""
+    q = (search or '').strip().lower()
+    if not q:
+        return True
+    hay = [applicant.old_student_id, applicant.control_number, control_number, applicant.last_name, applicant.first_name,
+           '%s, %s' % (applicant.last_name or '', applicant.first_name or ''), '%s %s' % (applicant.first_name or '', applicant.last_name or '')]
+    return any(q in (h or '').lower() for h in hay)
+
+
+def approvals_for(role, term, search=None, show='pending'):
+    """Checklist lines this office may approve, per student enrolling in the term (not yet checked in)."""
+    out = []
+    for r in queue(term, role=role):
+        if r['state'] == 'checked_in' or not matches_search(r['applicant'], search, r['cl']['control_number']):
+            continue
+        mine = [i for i in r['cl']['items'] if i['can_act']]
+        if show == 'pending':
+            mine = [i for i in mine if not i['met']]
+        if mine:
+            out.append({'applicant': r['applicant'], 'items': mine, 'cl': r['cl']})
+    return out
+
+
+def queue(term, only=None, role=None, search=None):
     """Students enrolling in (or checked in for) the term, with checklist progress."""
     rows = []
     apps = Applicant.query.filter(Applicant.application_status.in_(CHECKIN_STATUSES),
@@ -389,7 +413,9 @@ def queue(term, only=None):
         ci = active_checkin(a.student_user_id, term.id)
         if a.application_status == 'Enrolled' and ci is None and _form(a.student_user_id, term.id) is None:
             continue          # enrolled in an earlier term and not (yet) enrolling for this one
-        cl = checklist(a, term.id)
+        cl = checklist(a, term.id, role)
+        if search and not matches_search(a, search, cl['control_number']):
+            continue
         state = 'checked_in' if ci else ('ready' if cl['ready'] else 'pending')
         if only and state != only:
             continue

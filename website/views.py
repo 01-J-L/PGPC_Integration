@@ -555,9 +555,22 @@ def application_status_page():
         if cursor: cursor.close()
         if conn and conn.is_connected(): conn.close()
 
+    # What Accounting requires before check-in (Phase 4 policy), shown while enrolling
+    enrollment_payment = None
+    try:
+        if application_data and active_term and application_data.get('student_user_id') and \
+                application_data.get('application_status') in ('Passed', 'Eligible for Enrollment', 'Enrolling'):
+            from website.finance import service as _fin
+            from website.checkin.service import is_checked_in as _checked_in
+            if not _checked_in(application_data['student_user_id'], active_term['id']):
+                enrollment_payment = _fin.enrollment_requirement(application_data['student_user_id'], active_term['id'])
+    except Exception as e_pay:
+        print(f"[WARN] enrollment payment requirement unavailable: {e_pay}")
+
     return render_template(
         "pending_application.html", 
         application=application_data, 
+        enrollment_payment=enrollment_payment,
         current_term_grades=current_term_grades,
         status_downloads=status_downloads,
         active_term=active_term,

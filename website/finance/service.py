@@ -349,6 +349,41 @@ def check_policy(student_user_id, term_id, s=None):
     return ok, (f'{peso(counted + s["discounts"])} paid of the {peso(minimum)} down payment{note}.')
 
 
+def enrollment_requirement(student_user_id, term_id, s=None):
+    """What the student still has to do at Accounting/Cashier before the Registrar can
+    check them in, in plain words (for the cashier's page and the student's dashboard).
+
+    Returns {'mode', 'ok', 'why', 'required' (Decimal or None), 'paid', 'still_to_pay' (Decimal or None),
+             'message' (for the student)}."""
+    s = s or summary(student_user_id, term_id)
+    pol = get_policy()
+    ok, why = check_policy(student_user_id, term_id, s)
+    counted = s['verified_payments'] if pol['require_verification'] else s['payments']
+    paid = counted + s['discounts']
+    required = still = None
+    if pol['mode'] == 'minimum' and pol['min_down_payment'] is not None:
+        required = pol['min_down_payment']
+        still = max(required - paid, money(0))
+        msg = ('Down payment of %s is complete.' % peso(required) if ok else
+               'Pay at least %s at the Cashier before you can be enrolled (still to pay: %s).' % (peso(required), peso(still)))
+    elif pol['mode'] == 'full':
+        if s['assessment'] is not None:
+            required = s['total_assessment'] + s['previous_balance'] - s['discounts']
+            still = max(required - counted, money(0))
+        msg = ('Your assessment is fully paid.' if ok else
+               ('Pay your full assessment at the Cashier before you can be enrolled (still to pay: %s).' % peso(still)
+                if still is not None else 'Your assessment is prepared when the Registrar finalizes your registration form.'))
+    elif pol['mode'] == 'partial':
+        msg = ('Your payment has been received.' if ok else
+               'Make a payment toward your assessment at the Cashier before you can be enrolled.')
+    else:
+        msg = 'Accounting has cleared your account.' if ok else 'Accounting must clear your account before you can be enrolled.'
+    if pol['require_verification'] and not ok and s['unverified_count']:
+        msg += ' Payments are counted once Accounting has verified them.'
+    return {'mode': pol['mode'], 'label': pol['label'], 'ok': ok, 'why': why, 'required': required,
+            'paid': paid, 'still_to_pay': still, 'message': msg, 'verified_only': pol['require_verification']}
+
+
 # ---------------------------------------------------------------------------
 # payments
 # ---------------------------------------------------------------------------

@@ -455,6 +455,13 @@
                     id="enrolledCountSide">{{ stats.enrolled if stats else '' }}</span>
             </a>
             {% endif %}
+            {% if session.user_role in ['admin', 'registrar', 'guidance', 'osa', 'secretary'] %}
+            <a href="{{ url_for('checkin.approvals') }}" id="checklistApprovalsMenu"
+                class="sidebar-link flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded {% if active_page == 'checklist_approvals' %}active{% endif %}">
+                <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-checkbox-multiple-line"></i></div>
+                Checklist Approvals
+            </a>
+            {% endif %}
 
             {% if session.user_role in ['admin', 'registrar'] %}
             <a href="{{ url_for('auth.admin_dropped_applications') }}" id="droppedMenu"
