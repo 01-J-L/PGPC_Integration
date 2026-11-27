@@ -662,6 +662,9 @@ def reopen(form_id, actor, reason):
     form = _lock_form(form_id)
     if form.status != 'finalized':
         raise RegformError('Only a finalized form can be reopened.')
+    from website.checkin.service import is_checked_in
+    if is_checked_in(form.student_user_id, form.academic_term_id):
+        raise RegformError('The student is already checked in for this term. Undo the check-in before changing the registration form.')
     reason = (reason or '').strip()
     if not reason:
         raise RegformError('Give a reason for reopening the form.')

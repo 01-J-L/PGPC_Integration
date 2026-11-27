@@ -67,6 +67,15 @@ def seeded(app):
     p3 = dbx.x("INSERT INTO payments (student_id, assessment_id, amount_paid, payment_date, payment_method, cashier_username) VALUES (%s,%s,-50,CURDATE(),'Reversal','y')", (st['applicant_id'], ch))
     dbx.x("INSERT INTO payment_verifications (payment_id, status, verified_by, verified_role, verified_at) VALUES (%s,'verified','v','accounting',NOW())", (p1,))
     dbx.x("INSERT INTO payment_reversals (payment_id, reversal_payment_id, reason, reversed_by, reversed_role, reversed_at) VALUES (%s,%s,'crawl','y','accounting',NOW())", (p2, p3))
+    # Phase 5: an approved checklist line, an undone and an active check-in
+    req = dbx.one("SELECT id FROM enrollment_checklist_requirements WHERE code='documents'")['id']
+    dbx.x("INSERT INTO enrollment_checklist_items (student_user_id, academic_term_id, requirement_id, status, approved_by, approved_role, approved_at) "
+          "VALUES (%s,%s,%s,'approved','crawl','registrar',NOW())", (st['student_user_id'], term['id'], req))
+    dbx.x("INSERT INTO enrollment_checkins (student_user_id, applicant_id, academic_term_id, active, checklist_snapshot, checked_in_by, checked_in_role, "
+          "checked_in_at, undone_by, undone_role, undone_at, undo_reason) VALUES (%s,%s,%s,NULL,'[]','crawl','registrar',NOW(),'crawl','admin',NOW(),'crawl test')",
+          (st['student_user_id'], st['applicant_id'], term['id']))
+    dbx.x("INSERT INTO enrollment_checkins (student_user_id, applicant_id, academic_term_id, active, checklist_snapshot, checked_in_by, checked_in_role, checked_in_at) "
+          "VALUES (%s,%s,%s,1,'[]','crawl','registrar',NOW())", (st['student_user_id'], st['applicant_id'], term['id']))
     import json
     batch = dbx.x("INSERT INTO curriculum_import_batches (program_id, source_filename, source_kind, source_sha256, payload) VALUES (%s,'crawl.xlsx','registration_form',%s,%s)",
                   (pid, 'x' * 64, json.dumps({'parsed': {'kind': 'registration_form', 'title': 'Crawl', 'level': 'First Year-1st sem',

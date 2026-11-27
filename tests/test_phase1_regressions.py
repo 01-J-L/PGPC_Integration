@@ -10,7 +10,7 @@ import re
 
 import pytest
 
-from conftest import login_as, login_student, make_student
+from conftest import clear_accounting, login_as, login_student, make_student
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +39,7 @@ def test_p1_01_json_post_without_csrf_header_is_rejected(csrf_app, dbx, program,
 
 def test_p1_01_pages_carry_a_csrf_token_and_header_shim(csrf_app, program, student, active_term):
     client = csrf_app.test_client()
-    login_as(client, 'registrar')
+    login_as(client, 'admin')      # Phase 5: the Accounting line is approved by accounting/admin, not the registrar
     html = client.get('/admin/enrollment-review/%d' % student['applicant_id']).get_data(as_text=True)
     assert 'name="csrf-token"' in html
     token = re.search(r'name="csrf-token" content="([^"]+)"', html).group(1)
@@ -120,13 +120,17 @@ def test_p1_04_add_and_delete_account_redirects(client, dbx):
 #        (uncommitted working-copy change; display-only, threshold default 0)
 # ---------------------------------------------------------------------------
 
+def _payment_line(html):
+    # Phase 5: the old checkbox became the "Accounting / enrollment payment policy" checklist line
+    return re.search(r'<li[^>]*id="chk-payment".*?</li>', html, re.S).group(0)
+
+
 def test_p1_05_accounting_box_not_ticked_without_payment(client, dbx, program, student, active_term):
     dbx.x("INSERT INTO student_enrollment_records (student_user_id, academic_term_id, enrollment_status) "
           "VALUES (%s, %s, 'Enrolling')", (student['student_user_id'], active_term['id']))
     login_as(client, 'registrar')
     html = client.get('/admin/enrollment-review/%d?term_id=%d' % (student['applicant_id'], active_term['id'])).get_data(as_text=True)
-    box = re.search(r'<input type="checkbox" data-role="accounting"[^>]*>', html, re.S).group(0)
-    assert 'checked' not in box
+    assert '<span class="sr-only">not met</span>' in _payment_line(html)
 
 
 def test_p1_05_accounting_box_reflects_the_stored_approval(client, dbx, program, student, active_term):
@@ -135,15 +139,15 @@ def test_p1_05_accounting_box_reflects_the_stored_approval(client, dbx, program,
           (student['student_user_id'], active_term['id']))
     login_as(client, 'registrar')
     html = client.get('/admin/enrollment-review/%d?term_id=%d' % (student['applicant_id'], active_term['id'])).get_data(as_text=True)
-    box = re.search(r'<input type="checkbox" data-role="accounting"[^>]*>', html, re.S).group(0)
-    assert 'checked' in box
+    assert '<span class="sr-only">met</span>' in _payment_line(html)
 
 
 # ---------------------------------------------------------------------------
 # P1-06  Approving an enrollment left no per-term enrollment record
 # ---------------------------------------------------------------------------
 
-def test_p1_06_approve_creates_term_record(client, dbx, program, student, active_term):
+def test_p1_06_approve_creates_term_record(client, dbx, program, student, active_term, minimal_checklist):
+    clear_accounting(dbx, student, active_term)
     login_as(client, 'registrar')
     resp = client.post('/admin/enrollment/%d/action' % student['applicant_id'],
                        json={'action': 'approve', 'term_id': active_term['id']})
@@ -159,8 +163,9 @@ def test_p1_06_approve_creates_term_record(client, dbx, program, student, active
 #        was committed (student "Enrolled" without fees or permanent ID).
 # ---------------------------------------------------------------------------
 
-def test_p1_07_fee_failure_rolls_back_the_approval(client, dbx, program, student, active_term, monkeypatch):
+def test_p1_07_fee_failure_rolls_back_the_approval(client, dbx, program, student, active_term, monkeypatch, minimal_checklist):
     import website.auth as auth_mod
+    clear_accounting(dbx, student, active_term)
 
     def boom(*a, **k):
         raise RuntimeError('simulated fee failure')
@@ -172,6 +177,7 @@ def test_p1_07_fee_failure_rolls_back_the_approval(client, dbx, program, student
     row = dbx.one("SELECT application_status, old_student_id FROM applicants WHERE applicant_id=%s", (student['applicant_id'],))
     assert row['application_status'] == 'Enrolling'
     assert not str(row['old_student_id']).startswith('P')
+    assert not dbx.one("SELECT id FROM enrollment_checkins WHERE student_user_id=%s", (student['student_user_id'],))
 
 
 def test_p1_07_fee_helper_propagates_sql_errors(app):

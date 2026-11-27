@@ -615,6 +615,103 @@ FINANCE_TABLES = ['enrollment_assessments', 'enrollment_assessment_items', 'paym
                   'payment_reversals', 'payment_submissions', 'finance_audit_log']
 
 
+# =========================================================
+# PHASE 5: APPROVAL CHECKLIST AND CHECK-IN
+# =========================================================
+
+class EnrollmentChecklistRequirement(db.Model):
+    """One line of the enrollment approval checklist (configurable by an administrator).
+
+    kind: 'regform' (met when the term's registration form is finalized),
+          'payment' (met when the Phase 4 enrollment payment policy is met),
+          'manual'  (met when an authorised office approves it for the student and term).
+    """
+    __tablename__ = 'enrollment_checklist_requirements'
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(40), nullable=False, unique=True)
+    label = db.Column(db.String(150), nullable=False)
+    description = db.Column(db.String(500))
+    kind = db.Column(db.String(20), nullable=False, default='manual', server_default='manual')
+    approver_roles = db.Column(db.String(200), nullable=False, default='registrar,admin', server_default='registrar,admin')
+    applies_to = db.Column(db.String(20), nullable=False, default='all', server_default='all')     # all / new / existing
+    is_required = db.Column(db.Boolean, nullable=False, default=True, server_default=_sa.text('1'))
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=_sa.text('1'))
+    sort_order = db.Column(db.Integer, nullable=False, default=100, server_default=_sa.text('100'))
+    updated_by = db.Column(db.String(150))
+    updated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+    __table_args__ = (_INNODB,)
+
+    @property
+    def roles(self):
+        return [r.strip() for r in (self.approver_roles or '').split(',') if r.strip()]
+
+
+class EnrollmentChecklistItem(db.Model):
+    """The current state of a manual checklist line for one student and term (history is in the audit log)."""
+    __tablename__ = 'enrollment_checklist_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False)
+    academic_term_id = db.Column(db.Integer, db.ForeignKey('academic_terms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    requirement_id = db.Column(db.Integer, db.ForeignKey('enrollment_checklist_requirements.id', ondelete='RESTRICT'), nullable=False, index=True)
+    status = db.Column(db.String(20), nullable=False, default='approved', server_default='approved')   # approved / revoked
+    notes = db.Column(db.String(500))
+    approved_by = db.Column(db.String(150))
+    approved_role = db.Column(db.String(30))
+    approved_at = db.Column(db.DateTime)
+    revoked_by = db.Column(db.String(150))
+    revoked_at = db.Column(db.DateTime)
+    revoke_reason = db.Column(db.String(500))
+
+    requirement = db.relationship('EnrollmentChecklistRequirement')
+
+    __table_args__ = (db.UniqueConstraint('student_user_id', 'academic_term_id', 'requirement_id', name='uq_checklist_item'), _INNODB)
+
+
+class EnrollmentCheckin(db.Model):
+    """Final registrar check-in of a student for a term. Undoing keeps the row (active becomes NULL)."""
+    __tablename__ = 'enrollment_checkins'
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False)
+    applicant_id = db.Column(db.Integer, db.ForeignKey('applicants.applicant_id', ondelete='RESTRICT'), nullable=False, index=True)
+    academic_term_id = db.Column(db.Integer, db.ForeignKey('academic_terms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    registration_form_id = db.Column(db.Integer, db.ForeignKey('registration_forms.id', ondelete='RESTRICT'), index=True)
+    active = db.Column(db.Boolean)                # 1 while in force, NULL once undone (lets the unique key keep one active row)
+    checklist_snapshot = db.Column(db.Text)       # JSON: every checklist line as it stood at check-in
+    checked_in_by = db.Column(db.String(150), nullable=False)
+    checked_in_role = db.Column(db.String(30), nullable=False)
+    checked_in_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+    undone_by = db.Column(db.String(150))
+    undone_role = db.Column(db.String(30))
+    undone_at = db.Column(db.DateTime)
+    undo_reason = db.Column(db.String(500))
+
+    __table_args__ = (db.UniqueConstraint('student_user_id', 'academic_term_id', 'active', name='uq_checkin_active'), _INNODB)
+
+
+class EnrollmentAuditLog(db.Model):
+    __tablename__ = 'enrollment_audit_log'
+
+    id = db.Column(db.Integer, primary_key=True)
+    action = db.Column(db.String(40), nullable=False)
+    student_user_id = db.Column(db.Integer, index=True)
+    applicant_id = db.Column(db.Integer, index=True)
+    academic_term_id = db.Column(db.Integer, index=True)
+    details = db.Column(db.Text)
+    performed_by = db.Column(db.String(150))
+    performed_role = db.Column(db.String(30))
+    performed_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), index=True)
+
+    __table_args__ = (_INNODB,)
+
+
+CHECKIN_TABLES = ['enrollment_checklist_requirements', 'enrollment_checklist_items', 'enrollment_checkins',
+                  'enrollment_audit_log']
+
+
 class ProgramObjective(db.Model):
     __tablename__ = 'program_objectives'
 

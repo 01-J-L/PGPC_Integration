@@ -85,13 +85,19 @@ def test_registrar_checklist_fetch_and_upload(server, browser, dbx, program, act
         page.click('form[action$="/admin_login"] [type="submit"]')
 
     page.goto(server + '/admin/enrollment-review/%d?term_id=%d' % (s['applicant_id'], active_term['id']))
-    # fetch() JSON POST: tick the Accounting checklist item
-    with page.expect_response(lambda r: 'toggle-approval' in r.url) as resp:
-        page.check('input[data-role="accounting"]')
-    assert resp.value.status == 200, resp.value.text()
-    rec = dbx.one("SELECT is_approved_by_accounting FROM student_enrollment_records "
-                  "WHERE student_user_id=%s AND academic_term_id=%s", (s['student_user_id'], active_term['id']))
-    assert rec and rec['is_approved_by_accounting'] == 1
+    # Phase 5: plain form POST (hidden token added by the CSRF shim): approve the documents line
+    with page.expect_navigation():
+        page.click('#chk-documents button:has-text("Approve")')
+    item = dbx.one("SELECT i.status, i.approved_by FROM enrollment_checklist_items i JOIN enrollment_checklist_requirements r "
+                   "ON r.id = i.requirement_id WHERE r.code='documents' AND i.student_user_id=%s AND i.academic_term_id=%s",
+                   (s['student_user_id'], active_term['id']))
+    assert item and item['status'] == 'approved'
+    # fetch() JSON POST with the X-CSRFToken header: the old checkbox endpoint (registrar may not clear Accounting)
+    status = page.evaluate("""async (args) => { const r = await fetch('/admin/enrollment/' + args[0] + '/toggle-approval',
+        {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({role: 'accounting', status: true, term_id: args[1]})});
+        return [r.status, await r.text()]; }""", [s['applicant_id'], active_term['id']])
+    assert status[0] == 400 and 'accounting or admin' in status[1], status   # reached the view: not a CSRF 400 page
+    assert 'CSRF' not in status[1]
 
     # multipart fetch() POST: upload a document from the Documents tab
     page.goto(server + '/admin/enrollment-review/%d?term_id=%d' % (s['applicant_id'], active_term['id']))

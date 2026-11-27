@@ -1279,6 +1279,104 @@ CREATE TABLE IF NOT EXISTS finance_audit_log (
 	INDEX ix_finance_audit_log_applicant_id (applicant_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- =====================================================================
+--  PHASE 5: APPROVAL CHECKLIST AND CHECK-IN (generated from website/models.py)
+-- =====================================================================
+-- ---- enrollment_checklist_requirements ---------------------------
+CREATE TABLE IF NOT EXISTS enrollment_checklist_requirements (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	code VARCHAR(40) NOT NULL, 
+	label VARCHAR(150) NOT NULL, 
+	description VARCHAR(500), 
+	kind VARCHAR(20) NOT NULL DEFAULT 'manual', 
+	approver_roles VARCHAR(200) NOT NULL DEFAULT 'registrar,admin', 
+	applies_to VARCHAR(20) NOT NULL DEFAULT 'all', 
+	is_required BOOL NOT NULL DEFAULT 1, 
+	is_active BOOL NOT NULL DEFAULT 1, 
+	sort_order INTEGER NOT NULL DEFAULT 100, 
+	updated_by VARCHAR(150), 
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	UNIQUE (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- enrollment_checklist_items ----------------------------------
+CREATE TABLE IF NOT EXISTS enrollment_checklist_items (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	student_user_id INTEGER NOT NULL, 
+	academic_term_id INTEGER NOT NULL, 
+	requirement_id INTEGER NOT NULL, 
+	status VARCHAR(20) NOT NULL DEFAULT 'approved', 
+	notes VARCHAR(500), 
+	approved_by VARCHAR(150), 
+	approved_role VARCHAR(30), 
+	approved_at DATETIME, 
+	revoked_by VARCHAR(150), 
+	revoked_at DATETIME, 
+	revoke_reason VARCHAR(500), 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_checklist_item UNIQUE (student_user_id, academic_term_id, requirement_id), 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(academic_term_id) REFERENCES academic_terms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(requirement_id) REFERENCES enrollment_checklist_requirements (id) ON DELETE RESTRICT,
+	INDEX ix_enrollment_checklist_items_requirement_id (requirement_id),
+	INDEX ix_enrollment_checklist_items_academic_term_id (academic_term_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- enrollment_checkins -----------------------------------------
+CREATE TABLE IF NOT EXISTS enrollment_checkins (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	student_user_id INTEGER NOT NULL, 
+	applicant_id INTEGER NOT NULL, 
+	academic_term_id INTEGER NOT NULL, 
+	registration_form_id INTEGER, 
+	active BOOL, 
+	checklist_snapshot TEXT, 
+	checked_in_by VARCHAR(150) NOT NULL, 
+	checked_in_role VARCHAR(30) NOT NULL, 
+	checked_in_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	undone_by VARCHAR(150), 
+	undone_role VARCHAR(30), 
+	undone_at DATETIME, 
+	undo_reason VARCHAR(500), 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_checkin_active UNIQUE (student_user_id, academic_term_id, active), 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(applicant_id) REFERENCES applicants (applicant_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(academic_term_id) REFERENCES academic_terms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(registration_form_id) REFERENCES registration_forms (id) ON DELETE RESTRICT,
+	INDEX ix_enrollment_checkins_applicant_id (applicant_id),
+	INDEX ix_enrollment_checkins_registration_form_id (registration_form_id),
+	INDEX ix_enrollment_checkins_academic_term_id (academic_term_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- enrollment_audit_log ----------------------------------------
+CREATE TABLE IF NOT EXISTS enrollment_audit_log (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	action VARCHAR(40) NOT NULL, 
+	student_user_id INTEGER, 
+	applicant_id INTEGER, 
+	academic_term_id INTEGER, 
+	details TEXT, 
+	performed_by VARCHAR(150), 
+	performed_role VARCHAR(30), 
+	performed_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id),
+	INDEX ix_enrollment_audit_log_academic_term_id (academic_term_id),
+	INDEX ix_enrollment_audit_log_applicant_id (applicant_id),
+	INDEX ix_enrollment_audit_log_performed_at (performed_at),
+	INDEX ix_enrollment_audit_log_student_user_id (student_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Default enrollment checklist (same rows as migration 0006)
+INSERT IGNORE INTO enrollment_checklist_requirements (code, label, description, kind, approver_roles, applies_to, is_required, is_active, sort_order, updated_by) VALUES
+  ('regform', 'Registration form finalized', 'Met automatically when the registrar finalizes this term''s registration form.', 'regform', 'registrar,admin', 'all', 1, 1, 10, 'migration 0006'),
+  ('documents', 'Enrollment documents reviewed', 'The registrar has checked the uploaded documents on the Documents tab.', 'manual', 'registrar,admin', 'all', 1, 1, 20, 'migration 0006'),
+  ('payment', 'Accounting / enrollment payment policy', 'Met when the policy set on Enrollment Assessments is met. Under ''Accounting clearance'', Accounting gives the clearance.', 'payment', 'accounting,admin', 'all', 1, 1, 30, 'migration 0006'),
+  ('dean', 'Dean approval', 'Inactive by default (removed from the review screen of the uploaded system).', 'manual', 'admin', 'all', 0, 0, 40, 'migration 0006'),
+  ('president', 'President approval', 'Inactive by default (removed from the review screen of the uploaded system).', 'manual', 'admin', 'all', 0, 0, 50, 'migration 0006');
+
 -- ---------------------------------------------------------------------
 --  Schema migration ledger (website/schema_migrations.py).
 --  A database built from THIS file already contains every change below, so
@@ -1294,7 +1392,8 @@ INSERT IGNORE INTO schema_migrations (id, description, applied_at) VALUES
   ('0002_document_columns_mediumblob', 'built into full.sql', NOW()),
   ('0003_curriculum_management', 'built into full.sql', NOW()),
   ('0004_registration_forms', 'built into full.sql', NOW()),
-  ('0005_enrollment_finance', 'built into full.sql', NOW());
+  ('0005_enrollment_finance', 'built into full.sql', NOW()),
+  ('0006_enrollment_checkin', 'built into full.sql', NOW());
 
 SET FOREIGN_KEY_CHECKS = 1;
 

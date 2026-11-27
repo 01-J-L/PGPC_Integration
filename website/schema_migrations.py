@@ -102,6 +102,47 @@ def _create_model_tables(table_names):
     return build
 
 
+# Default checklist (Phase 5). These mirror the process of the uploaded system:
+# the registration form, the registrar's document review and Accounting. The Dean
+# and President flags exist in student_enrollment_records but were removed from the
+# review screen, so they are seeded inactive for an administrator to switch on.
+CHECKLIST_SEED = [
+    # code, label, description, kind, approver_roles, applies_to, required, active, sort
+    ('regform', 'Registration form finalized',
+     "Met automatically when the registrar finalizes this term's registration form.",
+     'regform', 'registrar,admin', 'all', 1, 1, 10),
+    ('documents', 'Enrollment documents reviewed',
+     'The registrar has checked the uploaded documents on the Documents tab.',
+     'manual', 'registrar,admin', 'all', 1, 1, 20),
+    ('payment', 'Accounting / enrollment payment policy',
+     "Met when the policy set on Enrollment Assessments is met. Under 'Accounting clearance', Accounting gives the clearance.",
+     'payment', 'accounting,admin', 'all', 1, 1, 30),
+    ('dean', 'Dean approval', 'Inactive by default (removed from the review screen of the uploaded system).',
+     'manual', 'admin', 'all', 0, 0, 40),
+    ('president', 'President approval', 'Inactive by default (removed from the review screen of the uploaded system).',
+     'manual', 'admin', 'all', 0, 0, 50),
+]
+
+def _sql_literal(v):
+    if isinstance(v, int):
+        return str(v)
+    return "'" + str(v).replace('\\', '\\\\').replace("'", "''") + "'"
+
+
+def checklist_seed_sql():
+    """INSERT IGNORE for the default checklist lines (used by migration 0006 and full.sql)."""
+    rows = ',\n  '.join('(' + ', '.join(_sql_literal(v) for v in row) + ", 'migration 0006')" for row in CHECKLIST_SEED)
+    return ("INSERT IGNORE INTO enrollment_checklist_requirements "
+            "(code, label, description, kind, approver_roles, applies_to, is_required, is_active, sort_order, updated_by) "
+            "VALUES\n  " + rows)
+
+
+def _create_and_seed_checkin(cur):
+    statements = _create_model_tables(['enrollment_checklist_requirements', 'enrollment_checklist_items',
+                                       'enrollment_checkins', 'enrollment_audit_log'])(cur)
+    return statements + [checklist_seed_sql()]
+
+
 MIGRATIONS = [
     {
         'id': '0001_enrollment_shs_document_columns',
@@ -182,6 +223,20 @@ MIGRATIONS = [
             "DROP TABLE IF EXISTS `payment_verifications`",
             "DROP TABLE IF EXISTS `enrollment_assessment_items`",
             "DROP TABLE IF EXISTS `enrollment_assessments`",
+        ],
+    },
+    {
+        'id': '0006_enrollment_checkin',
+        'description': ("Phase 5: configurable enrollment approval checklist, per-student checklist approvals, "
+                        "registrar check-in records (undo keeps history) and the enrollment audit log. "
+                        "New tables only; seeds the default checklist lines."),
+        'build': _create_and_seed_checkin,
+        'rollback_guard': "SELECT (SELECT COUNT(*) FROM enrollment_checkins) + (SELECT COUNT(*) FROM enrollment_checklist_items)",
+        'rollback': [
+            "DROP TABLE IF EXISTS `enrollment_audit_log`",
+            "DROP TABLE IF EXISTS `enrollment_checkins`",
+            "DROP TABLE IF EXISTS `enrollment_checklist_items`",
+            "DROP TABLE IF EXISTS `enrollment_checklist_requirements`",
         ],
     },
 ]

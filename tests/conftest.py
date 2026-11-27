@@ -178,6 +178,20 @@ def active_term(dbx):
     return dbx.one("SELECT * FROM academic_terms WHERE id=%s", (row['id'],))
 
 
+@pytest.fixture()
+def minimal_checklist(dbx):
+    """Phase 5: only the Accounting line stays active, and it is cleared per test.
+    Lets pre-Phase-3 tests check a student in without a registration form."""
+    dbx.x("UPDATE enrollment_checklist_requirements SET is_active = 0 WHERE code IN ('regform', 'documents')")
+    yield
+    dbx.x("UPDATE enrollment_checklist_requirements SET is_active = 1 WHERE code IN ('regform', 'documents')")
+
+
+def clear_accounting(dbx, student, term):
+    dbx.x("INSERT INTO student_enrollment_records (student_user_id, academic_term_id, is_approved_by_accounting, accounting_approval_date) "
+          "VALUES (%s, %s, 1, NOW()) ON DUPLICATE KEY UPDATE is_approved_by_accounting = 1", (student['student_user_id'], term['id']))
+
+
 def make_student(dbx, program, status='Enrolling', student_type='new', control='A00001'):
     email = _uniq('student') + '@example.com'
     from werkzeug.security import generate_password_hash
