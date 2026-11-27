@@ -30,7 +30,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.exc import IntegrityError
 
 from website import db
-from website.models import (AcademicTerm, Applicant, EnrollmentAssessment, EnrollmentAssessmentItem, FinanceAuditLog,
+from website.models import (AcademicTerm, EnrollmentAssessment, EnrollmentAssessmentItem, FinanceAuditLog,
                             PaymentReversal, PaymentSubmission, PaymentVerification, RegistrationForm, YEAR_LABELS)
 
 CENT = Decimal('0.01')

@@ -9715,6 +9715,20 @@ def submit_enrollment(applicant_id):
             flash("Application not found or unauthorized.", "danger")
             return redirect(url_for('views.application_status_page'))
 
+        # Phase 9: the same gate as the GET form (views.enrollment_form_page). Without it a
+        # Pending / Rejected / Failed applicant, or an already enrolled student, could POST
+        # this form directly and become 'Enrolling' with a permanent ID and fees.
+        if application['application_status'] not in ('Passed', 'Enrolling', 'Eligible for Enrollment'):
+            flash(f"This application is not ready for enrollment (Status: {application['application_status']}).", "warning")
+            return redirect(url_for('views.application_status_page'))
+        _active = _get_active_term()
+        if _active:
+            cursor.execute("SELECT 1 FROM enrollment_checkins WHERE student_user_id = %s AND academic_term_id = %s AND active = 1",
+                           (student_user_id, _active['id']))
+            if cursor.fetchone():
+                flash("You are already officially enrolled for this term. Contact the Registrar's Office for changes.", "warning")
+                return redirect(url_for('views.application_status_page'))
+
         # Check User Type (New vs Old)
         cursor.execute("SELECT student_type FROM student_users WHERE id = %s", (student_user_id,))
         user_data = cursor.fetchone()

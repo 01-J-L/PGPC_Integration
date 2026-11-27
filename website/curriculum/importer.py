@@ -19,10 +19,10 @@ import io
 import json
 import re
 import warnings
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from website import db
-from website.models import CurriculumImportBatch, CurriculumPrerequisite, CurriculumSubject, CurriculumVersion
+from website.models import CurriculumImportBatch, CurriculumPrerequisite, CurriculumSubject
 from website.curriculum import service
 from website.curriculum.service import CurriculumError, normalize_code, clean_code, term_label
 
@@ -44,7 +44,10 @@ def _clean(s):
 # ---------------------------------------------------------------------------
 
 def parse_plan_of_study(data):
-    import docx  # python-docx
+    try:
+        import docx  # python-docx (requirements.txt)
+    except ImportError:
+        raise ImportFormatError('Word import is not available on this server: install python-docx (pip install -r requirements.txt).')
     try:
         document = docx.Document(io.BytesIO(data))
     except Exception as e:

@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 
 from website import db
-from website.models import AcademicTerm, EnrollmentChecklistRequirement
+from website.models import AcademicTerm
 from website.curriculum.service import Actor
 from website.checkin import service
 from website.checkin.service import CheckinError
@@ -157,6 +157,8 @@ def control_numbers():
 
 @checkin.route('/control-numbers/next', methods=['POST'])
 def control_next():
+    if session.get('user_role') not in service.CHECKIN_ROLES:
+        return redirect(url_for('auth.admin_login'))
     from website.checkin import control
     try:
         nxt = control.set_next(_actor(), request.form.get('school_year'), request.form.get('next_number'))
@@ -169,6 +171,8 @@ def control_next():
 
 @checkin.route('/control-numbers/backfill', methods=['POST'])
 def control_backfill():
+    if session.get('user_role') not in service.CHECKIN_ROLES:
+        return redirect(url_for('auth.admin_login'))
     from website.checkin import control
     term = service.active_term()
     try:
