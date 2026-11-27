@@ -231,6 +231,17 @@
                                 {% if enrollment_record and enrollment_record.is_approved_by_accounting %}checked{% endif %}>
                         </div>
                     </label>
+                    {% if accounting_hint %}
+                    <p class="text-xs text-gray-500" id="accounting-payment-hint">
+                        Total paid: &#8369;{{ '{:,.2f}'.format(accounting_hint.total_paid) }}
+                        {% if accounting_hint.min_payment is not none %}
+                        &middot; Required: &#8369;{{ '{:,.2f}'.format(accounting_hint.min_payment) }}
+                        {% if accounting_hint.requirement_met and not (enrollment_record and enrollment_record.is_approved_by_accounting) %}
+                        &middot; <span class="text-green-700 font-medium">Payment requirement met &mdash; tick Accounting to record it.</span>
+                        {% endif %}
+                        {% endif %}
+                    </p>
+                    {% endif %}
                 </div>
             </div>
             <!-- END: Approval Checklist -->

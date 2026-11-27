@@ -155,3 +155,13 @@ class UploadProofForm(FlaskForm):
         FileAllowed(['jpg', 'png', 'jpeg'], 'Images only!')
     ])
     submit = SubmitField('Upload Proof')
+
+class GradingSubjectForm(FlaskForm):
+    # P1-14: grading/admin/add_subject.html renders {{ form.* }}, but the view
+    # never passed a form, so the dean's "Add Subject" button returned HTTP 500.
+    code = StringField('Subject Code', validators=[DataRequired(), Length(max=20)])
+    units = FloatField('Units', validators=[DataRequired()])
+    description = StringField('Description', validators=[DataRequired(), Length(max=255)])
+    year = SelectField('Year Level', choices=[('1', '1st Year'), ('2', '2nd Year'), ('3', '3rd Year'), ('4', '4th Year')], validators=[DataRequired()])
+    semester = SelectField('Semester', choices=[('1', '1st Semester'), ('2', '2nd Semester'), ('3', 'Summer')], validators=[DataRequired()])
+    submit = SubmitField('Add Subject')

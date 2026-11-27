@@ -344,7 +344,7 @@ tailwind.config = {
                                     {% endif %}
 
                                     {% if status == 'Passed' %}
-                                    <a href="{{ url_for('auth.enrollment_form_page', applicant_id=application.applicant_id) }}" class="bg-green-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-green-700 transition-colors shadow-sm flex items-center gap-2">
+                                    <a href="{{ url_for('views.enrollment_form_page', applicant_id=application.applicant_id) }}" class="bg-green-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-green-700 transition-colors shadow-sm flex items-center gap-2">
                                         <i class="ri-file-edit-line"></i> Complete Enrollment Form
                                     </a>
                                     <button id="viewPassedConfirmationBtn" class="bg-white border border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-2">

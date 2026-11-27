@@ -1,0 +1,4 @@
+# Test-only dependencies (not needed on the production server)
+-r requirements.txt
+pytest>=8
+playwright>=1.40   # optional: browser tests in tests/test_e2e_browser_csrf.py (skipped if missing)
