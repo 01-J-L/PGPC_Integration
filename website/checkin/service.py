@@ -80,6 +80,12 @@ def is_checked_in(student_user_id, term_id):
     return active_checkin(student_user_id, term_id) is not None
 
 
+def _control_number(student_user_id, term_id):
+    from website.checkin.control import for_student_term
+    cn = for_student_term(student_user_id, term_id)
+    return cn.number if cn else None
+
+
 def _form(student_user_id, term_id):
     return RegistrationForm.query.filter_by(student_user_id=student_user_id, academic_term_id=term_id).first()
 
@@ -153,6 +159,7 @@ def checklist(applicant, term_id, actor_role=None):
     return {'items': items, 'ready': not blockers, 'blockers': blockers,
             'checkin': next((h for h in history if h.active), None), 'history': history,
             'form': form, 'summary': fin, 'policy': policy, 'policy_ok': pol_ok, 'policy_why': pol_why,
+            'control_number': _control_number(applicant.student_user_id, term_id),
             'kind': kind}
 
 
@@ -317,10 +324,18 @@ def check_in(actor, applicant_id, term_id=None, manual_section_id=None):
     finally:
         cur.close()
 
+    # E. Phase 6: the PGPC-YY-NNNN enrollment control number (kept if the check-in is redone)
+    from website.checkin import control
+    try:
+        cn, _ = control.issue(actor, applicant, term, form)
+    except control.ControlNumberError as e:
+        raise CheckinError(*e.messages)
+
     snapshot = [{'code': i['req'].code, 'label': i['req'].label, 'required': i['required'], 'met': i['met'],
                  'detail': i['detail'], 'by': i['by'], 'at': i['at']} for i in cl['items']]
     snapshot.append({'code': '_finance', 'total_assessment': cl['summary']['total_assessment'],
-                     'remaining': cl['summary']['remaining'], 'policy': cl['policy']['mode']})
+                     'remaining': cl['summary']['remaining'], 'policy': cl['policy']['mode'],
+                     'control_number': cn.number})
     ci = EnrollmentCheckin(student_user_id=applicant.student_user_id, applicant_id=applicant.applicant_id,
                            academic_term_id=term.id, registration_form_id=form.id if form else None, active=True,
                            checklist_snapshot=json.dumps(snapshot, default=str, ensure_ascii=False),
@@ -329,9 +344,9 @@ def check_in(actor, applicant_id, term_id=None, manual_section_id=None):
     db.session.flush()
     db.session.expire_all()
     a = db.session.get(Applicant, applicant_id)
-    _audit('check_in', actor, a, term.id, {'checkin_id': ci.id, 'new_student_id': new_id or None,
+    _audit('check_in', actor, a, term.id, {'checkin_id': ci.id, 'new_student_id': new_id or None, 'control_number': cn.number,
                                            'section_id': a.section_id, 'checked_in_by': actor.name})
-    return {'checkin': ci, 'new_id': new_id, 'fee_note': fee_note, 'email': a.email_address,
+    return {'checkin': ci, 'new_id': new_id, 'fee_note': fee_note, 'email': a.email_address, 'control_number': cn.number,
             'name': '%s %s' % (a.first_name, a.last_name), 'applicant_id': a.applicant_id}
 
 

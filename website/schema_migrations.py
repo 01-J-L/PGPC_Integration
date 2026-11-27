@@ -239,6 +239,18 @@ MIGRATIONS = [
             "DROP TABLE IF EXISTS `enrollment_checklist_requirements`",
         ],
     },
+    {
+        'id': '0007_control_numbers',
+        'description': ("Phase 6: PGPC-YY-NNNN enrollment control numbers: one locked counter per school-year code "
+                        "(control_number_sequences) and the register of issued numbers (control_numbers, unique, "
+                        "never reused). New tables only."),
+        'build': _create_model_tables(['control_number_sequences', 'control_numbers']),
+        'rollback_guard': "SELECT (SELECT COUNT(*) FROM control_numbers) + (SELECT COUNT(*) FROM control_number_sequences)",
+        'rollback': [
+            "DROP TABLE IF EXISTS `control_numbers`",
+            "DROP TABLE IF EXISTS `control_number_sequences`",
+        ],
+    },
 ]
 
 _LEDGER_DDL = """

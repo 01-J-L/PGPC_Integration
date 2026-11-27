@@ -4453,7 +4453,7 @@ def _check_in_json(applicant_id, term_id, manual_section_id=None):
         traceback.print_exc()
         return jsonify({"success": False, "message": f"Server error: {e}"}), 500
     notify_enrolled(res)
-    msg = f"{res['name']} is checked in and officially enrolled."
+    msg = f"{res['name']} is checked in and officially enrolled. Control No. {res['control_number']}."
     if res['new_id']:
         msg += f" New ID: {res['new_id']} assigned."
     return jsonify({"success": True, "message": msg + res['fee_note'], "reload": True})

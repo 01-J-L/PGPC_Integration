@@ -76,6 +76,10 @@ def seeded(app):
           (st['student_user_id'], st['applicant_id'], term['id']))
     dbx.x("INSERT INTO enrollment_checkins (student_user_id, applicant_id, academic_term_id, active, checklist_snapshot, checked_in_by, checked_in_role, checked_in_at) "
           "VALUES (%s,%s,%s,1,'[]','crawl','registrar',NOW())", (st['student_user_id'], st['applicant_id'], term['id']))
+    # Phase 6: an issued control number
+    seqid = dbx.x("INSERT INTO control_number_sequences (prefix, year_code, school_year, last_number) VALUES ('PGPC','90','2090-2091',1)")
+    dbx.x("INSERT INTO control_numbers (number, sequence_id, seq, student_user_id, applicant_id, academic_term_id, issued_by) "
+          "VALUES ('PGPC-90-0001',%s,1,%s,%s,%s,'crawl')", (seqid, st['student_user_id'], st['applicant_id'], term['id']))
     import json
     batch = dbx.x("INSERT INTO curriculum_import_batches (program_id, source_filename, source_kind, source_sha256, payload) VALUES (%s,'crawl.xlsx','registration_form',%s,%s)",
                   (pid, 'x' * 64, json.dumps({'parsed': {'kind': 'registration_form', 'title': 'Crawl', 'level': 'First Year-1st sem',

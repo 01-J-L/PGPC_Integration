@@ -1,0 +1,73 @@
+{% extends 'admin_base.html' %}
+{% block title %}Control Numbers{% endblock %}
+{% block breadcrumb %}Control Numbers{% endblock %}
+{% block page_title %}Enrollment Control Numbers{% endblock %}
+{% block content %}
+{% set ic = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500' %}
+<p class="text-sm text-gray-600 mb-4 max-w-3xl">A <strong>PGPC-YY-NNNN</strong> control number is issued when the registrar checks a student in: YY is the school year (2026-2027 &rarr; 26) and NNNN runs on across all programs. Each student keeps one number per term, also if the check-in is undone and done again. Numbers are never reused.</p>
+
+<div class="grid grid-cols-1 2xl:grid-cols-3 gap-6">
+    <section class="space-y-4 self-start">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+            <h2 class="font-semibold text-gray-800 mb-3">Counters</h2>
+            <ul class="divide-y divide-gray-100 text-sm">
+            {% for s in sequences %}
+                <li class="py-2 flex justify-between gap-3"><span>{{ s.seq.school_year or ('20' ~ s.seq.year_code) }}</span>
+                    <span class="text-right">{{ s.issued }} issued<br><span class="text-xs text-gray-500">next <span class="font-mono">{{ s.next }}</span></span></span></li>
+            {% else %}<li class="py-2 text-gray-500">No number issued yet.</li>{% endfor %}
+            </ul>
+        </div>
+        {% if session.user_role == 'admin' %}
+        <form method="POST" action="{{ url_for('checkin.control_next') }}" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 space-y-3"
+              onsubmit="return confirm('Change the next control number? Numbers already issued are never changed.')">
+            <h2 class="font-semibold text-gray-800">Set the next number</h2>
+            <p class="text-xs text-gray-500">For example to continue from a paper register. It cannot go back to a number already issued.</p>
+            <div><label for="cn-sy" class="block text-xs text-gray-600 mb-1">School year</label>
+                <select id="cn-sy" name="school_year" class="{{ ic }}">{% for sy in school_years %}<option {% if active and active.year_name == sy %}selected{% endif %}>{{ sy }}</option>{% endfor %}</select></div>
+            <div><label for="cn-next" class="block text-xs text-gray-600 mb-1">Next number (NNNN)</label>
+                <input id="cn-next" name="next_number" inputmode="numeric" class="{{ ic }}" placeholder="e.g. 1434" required></div>
+            <button class="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">Save</button>
+        </form>
+        {% if missing %}
+        <form method="POST" action="{{ url_for('checkin.control_backfill') }}" class="bg-yellow-50 p-4 rounded-xl border border-yellow-200 text-sm"
+              onsubmit="return confirm('Issue control numbers to {{ missing }} checked-in student(s) in check-in order?')">
+            <p class="text-yellow-900 mb-2">{{ missing }} student(s) checked in for {{ active.year_name }} {{ active.semester }} have no control number (checked in before numbers existed).</p>
+            <button class="px-3 py-1.5 bg-yellow-600 text-white text-xs font-medium rounded-md hover:bg-yellow-700">Issue their numbers</button>
+        </form>
+        {% endif %}
+        {% endif %}
+    </section>
+
+    <section class="2xl:col-span-2 space-y-4">
+        <form method="GET" class="flex flex-wrap items-end gap-3">
+            <div><label for="f-term" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Term</label>
+                <select id="f-term" name="term_id" class="{{ ic }} w-60"><option value="">All terms</option>{% for t in terms %}<option value="{{ t.id }}" {% if t.id == term_id %}selected{% endif %}>{{ t.year_name }} &ndash; {{ t.semester }}</option>{% endfor %}</select></div>
+            <div><label for="f-q" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Search</label>
+                <input id="f-q" name="q" value="{{ q }}" class="{{ ic }} w-56" placeholder="Number, name or student no."></div>
+            <button class="px-4 py-2 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50">Filter</button>
+        </form>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 relative overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50 text-xs uppercase text-gray-500"><tr>
+                    <th scope="col" class="px-4 py-2 text-left">Control no.</th><th scope="col" class="px-3 py-2 text-left">Student</th>
+                    <th scope="col" class="px-3 py-2 text-left">Issued</th><th scope="col" class="px-3 py-2 text-left">Status</th>
+                    <th scope="col" class="px-4 py-2"><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody class="divide-y divide-gray-100">
+                {% for r in rows %}
+                    <tr>
+                        <td class="px-4 py-2 font-mono font-medium text-gray-900 whitespace-nowrap">{{ r.cn.number }}</td>
+                        <td class="px-3 py-2">{{ r.applicant.last_name }}, {{ r.applicant.first_name }}<div class="text-xs text-gray-500">{{ r.applicant.old_student_id or r.applicant.control_number or '' }}</div></td>
+                        <td class="px-3 py-2 text-xs whitespace-nowrap">{{ r.cn.issued_at.strftime('%b %d, %Y %I:%M %p') }}<div class="text-gray-500">{{ r.cn.issued_by }}{% if r.cn.source == 'backfill' %} (bulk){% endif %}</div></td>
+                        <td class="px-3 py-2 text-xs">{% if r.active %}<span class="text-green-700">Checked in</span>{% else %}<span class="text-orange-700">Check-in undone</span>{% endif %}</td>
+                        <td class="px-4 py-2 text-right whitespace-nowrap">
+                            <a class="text-blue-600 text-xs font-medium hover:underline" href="{{ url_for('auth.admin_enrollment_review_page', applicant_id=r.cn.applicant_id, term_id=r.cn.academic_term_id) }}#checklist">Review</a>
+                            {% if r.cn.registration_form_id %}<a class="text-blue-600 text-xs font-medium hover:underline ml-2" href="{{ url_for('registration.form', form_id=r.cn.registration_form_id) }}">REGFORM</a>{% endif %}
+                        </td>
+                    </tr>
+                {% else %}<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">No control numbers for this filter.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}
