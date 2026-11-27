@@ -11,6 +11,8 @@ from website.models import AcademicTerm, EnrollmentAssessment, RegistrationForm,
 from website.curriculum.service import Actor
 from website.finance import service
 from website.finance.service import FinanceError
+from website.checkin.service import is_checked_in
+from sqlalchemy import text
 
 finance = Blueprint('finance', __name__)
 
@@ -50,11 +52,18 @@ def index():
             label = s['verification_status'] if status in ('For Verification', 'Payment Verified') else s['payment_status']
             if status and label != status:
                 continue
-            rows.append({'ea': ea, 'applicant': db.session.get(Applicant, ea.applicant_id), 's': s, 'policy_ok': ok, 'policy_why': why})
+            rows.append({'ea': ea, 'applicant': db.session.get(Applicant, ea.applicant_id), 's': s, 'policy_ok': ok, 'policy_why': why,
+                         'cleared': _cleared(ea.student_user_id, term_id), 'checked_in': is_checked_in(ea.student_user_id, term_id)})
     base = 'admin_base.html' if role == 'admin' else 'accounting_base.html'
     return render_template('finance/index.html', rows=rows, terms=terms, term_id=term_id, status=status,
                            policy=service.get_policy(), modes=service.POLICY_MODES, base_template=base,
                            can_edit_policy=role in ('accounting', 'admin'), years=YEAR_LABELS, active_page='enrollment_finance')
+
+
+def _cleared(student_user_id, term_id):
+    return bool(db.session.execute(text("SELECT is_approved_by_accounting FROM student_enrollment_records "
+                                        "WHERE student_user_id = :s AND academic_term_id = :t"),
+                                   {'s': student_user_id, 't': term_id}).scalar())
 
 
 @finance.route('/policy', methods=['POST'])

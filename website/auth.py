@@ -4271,6 +4271,17 @@ def admin_enrollment_review_page(applicant_id):
             except Exception as fin_err:
                 print(f"[WARN] finance summary unavailable: {fin_err}")
 
+        # Phase 5: approval checklist and check-in state for the selected term
+        checklist_state, is_active_term = None, False
+        if selected_term_id and application.get('student_user_id'):
+            from website.checkin import service as checkin_service
+            from website.models import Applicant as _Applicant
+            from website import db as _db
+            checklist_state = checkin_service.checklist(_db.session.get(_Applicant, application['applicant_id']),
+                                                        selected_term_id, session.get('user_role'))
+            _active = checkin_service.active_term()
+            is_active_term = bool(_active and _active.id == selected_term_id)
+
         student_user_id = application.get('student_user_id')
         program_id = application.get('program_id')
 
@@ -4383,6 +4394,7 @@ def admin_enrollment_review_page(applicant_id):
                                accounting_hint=accounting_hint,
                                regform=regform,
                                term_summary=term_summary, policy_ok=policy_ok, policy_why=policy_why,
+                               cl=checklist_state, is_active_term=is_active_term, user_role=session.get('user_role'),
                                active_page='enrolling')
 
     except Exception as e:
@@ -4397,74 +4409,55 @@ def admin_enrollment_review_page(applicant_id):
 # --- NEW ROUTE FOR HANDLING APPROVAL CHECKBOXES ---
 @auth.route('/admin/enrollment/<int:applicant_id>/toggle-approval', methods=['POST'])
 def admin_toggle_enrollment_approval(applicant_id):
-    if session.get('user_role') not in ['admin', 'registrar']:
+    """Old checkbox endpoint, kept for compatibility. Phase 5: it records the
+    matching checklist line through the checklist service, which enforces who may
+    approve it (Accounting clearance: accounting/admin; Dean/President: as configured)."""
+    if session.get('user_role') not in ['admin', 'registrar', 'accounting']:
         return jsonify({"success": False, "message": "Unauthorized"}), 401
-    
-    data = request.get_json()
-    role = data.get('role')
-    status = data.get('status', False)
-    academic_term_id = data.get('term_id')
-
-    if not all([role, academic_term_id]):
-         return jsonify({"success": False, "message": "Missing role or term ID."}), 400
-
-    valid_roles = ['president', 'accounting', 'dean']
-    if role not in valid_roles:
-        return jsonify({"success": False, "message": "Invalid role specified."}), 400
-
-    conn = None
-    cursor = None
+    data = request.get_json(silent=True) or {}
+    code = {'accounting': 'payment', 'dean': 'dean', 'president': 'president'}.get(data.get('role'))
+    if not code or not data.get('term_id'):
+        return jsonify({"success": False, "message": "Missing or invalid role or term ID."}), 400
+    from website import db as _db
+    from website.checkin import service as checkin_service
     try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"success": False, "message": "Database connection error."}), 500
-        
-        cursor = conn.cursor(dictionary=True)
-        
-        # Get student_user_id from applicant_id
-        cursor.execute("SELECT student_user_id FROM applicants WHERE applicant_id = %s", (applicant_id,))
-        applicant = cursor.fetchone()
-        if not applicant or not applicant.get('student_user_id'):
-            return jsonify({"success": False, "message": "Applicant not found or not linked to a student account."}), 404
-        
-        student_user_id = applicant['student_user_id']
-
-        # Build query dynamically but safely
-        flag_column = f"is_approved_by_{role}"
-        date_column = f"{role}_approval_date"
-        approval_date = datetime.datetime.now() if status else None
-
-        # Use INSERT ... ON DUPLICATE KEY UPDATE to handle both new and existing records
-        update_sql = f"""
-            INSERT INTO student_enrollment_records (student_user_id, academic_term_id, {flag_column}, {date_column})
-            VALUES (%s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE
-                {flag_column} = VALUES({flag_column}),
-                {date_column} = VALUES({date_column})
-        """
-        
-        insert_cursor = conn.cursor()
-        insert_cursor.execute(update_sql, (student_user_id, academic_term_id, status, approval_date))
-        conn.commit()
-        insert_cursor.close()
-
-        message = f"{role.title()} approval has been {'recorded' if status else 'revoked'} for this term."
-        return jsonify({"success": True, "message": message})
-
-    except mysql.connector.Error as err:
-        if conn: conn.rollback()
-        print(f"DB Error toggling approval for applicant {applicant_id}: {err}")
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"Database error: {err.msg}"}), 500
-    except Exception as e:
-        if conn: conn.rollback()
-        print(f"Error toggling approval for applicant {applicant_id}: {e}")
-        traceback.print_exc()
-        return jsonify({"success": False, "message": "A server error occurred."}), 500
-    finally:
-        if cursor: cursor.close()
-        if conn and conn.is_connected(): conn.close()
+        if data.get('status'):
+            checkin_service.approve_item(_checkin_actor(), applicant_id, data['term_id'], code, data.get('notes'))
+        else:
+            checkin_service.revoke_item(_checkin_actor(), applicant_id, data['term_id'], code, data.get('reason'))
+        _db.session.commit()
+    except checkin_service.CheckinError as e:
+        _db.session.rollback()
+        return jsonify({"success": False, "message": ' '.join(e.messages)}), 400
+    return jsonify({"success": True, "message": "Approval %s for this term." % ('recorded' if data.get('status') else 'revoked')})
 # --- END NEW ROUTE ---
+
+def _checkin_actor():
+    from website.curriculum.service import Actor
+    return Actor(session.get('user_name'), session.get('user_role'))
+
+
+def _check_in_json(applicant_id, term_id, manual_section_id=None):
+    """Phase 5: run one registrar check-in and answer the review page / status menus in JSON."""
+    from website import db as _db
+    from website.checkin import service as checkin_service
+    from website.checkin.routes import notify_enrolled
+    try:
+        res = checkin_service.check_in(_checkin_actor(), applicant_id, term_id, manual_section_id)
+        _db.session.commit()
+    except checkin_service.CheckinError as e:
+        _db.session.rollback()
+        return jsonify({"success": False, "message": ' '.join(e.messages)}), 400
+    except Exception as e:
+        _db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"Server error: {e}"}), 500
+    notify_enrolled(res)
+    msg = f"{res['name']} is checked in and officially enrolled."
+    if res['new_id']:
+        msg += f" New ID: {res['new_id']} assigned."
+    return jsonify({"success": True, "message": msg + res['fee_note'], "reload": True})
+
 
 @auth.route('/admin/enrollment/<int:applicant_id>/action', methods=['POST'])
 def admin_enrollment_action(applicant_id):
@@ -4484,6 +4477,17 @@ def admin_enrollment_action(applicant_id):
 
     if action not in ('approve', 'reject', 'drop') or not academic_term_id:
         return jsonify({"success": False, "message": "Invalid action or missing term ID."}), 400
+
+    # Phase 5: 'approve' is the registrar check-in. It enforces the approval
+    # checklist on the server and runs the enrollment steps in one transaction.
+    if action == 'approve':
+        return _check_in_json(applicant_id, academic_term_id, manual_section_id)
+    if action == 'reject':
+        from website.checkin import service as checkin_service
+        from website.models import Applicant as _Applicant
+        _a = checkin_service.db.session.get(_Applicant, applicant_id)
+        if _a and _a.student_user_id and checkin_service.is_checked_in(_a.student_user_id, int(academic_term_id)):
+            return jsonify({"success": False, "message": "The student is checked in for this term. Undo the check-in first."}), 400
 
     conn = None
     cursor = None
@@ -4513,50 +4517,10 @@ def admin_enrollment_action(applicant_id):
         generated_id_msg = "" 
         fee_msg = ""
 
-        # ==========================================================
-        # ACTION: APPROVE (Finalize Enrollment & Balance)
-        # ==========================================================
-        if action == 'approve':
-            new_status_record = 'Enrolled'
-            
-            # A. SECTION FINALIZATION
-            if manual_section_id:
-                # Use Admin override
-                cursor.execute("UPDATE applicants SET section_id = %s, is_section_permanent = TRUE WHERE applicant_id = %s", 
-                               (manual_section_id, applicant_id))
-            elif not app_data['section_id']:
-                # Attempt auto-assign if no section exists (New students or shifters)
-                cursor.execute("SELECT program_id FROM programs WHERE title = %s", (app_data['program_choice'],))
-                prog_res = cursor.fetchone()
-                if prog_res:
-                    _assign_section_automatically(cursor, applicant_id, prog_res['program_id'], app_data['enrollment_year_level'])
-            
-            # B. PERMANENT STUDENT ID GENERATION
-            # If New Student and ID still starts with 'A' (Temporary), generate a permanent 'P' ID.
-            new_permanent_id = _assign_permanent_student_id(cursor, applicant_id)
-            if new_permanent_id:
-                generated_id_msg = f" New ID: {new_permanent_id} assigned."
-
-            # C. CUMULATIVE FINANCIAL TRIGGER
-            # Assigns batch fees matching the student's CURRENT level.
-            # Adds rows to the ledger even if an old balance exists.
-            fees_added = _auto_assign_fees(cursor, applicant_id, app_data)
-            if fees_added > 0:
-                fee_msg = f" {fees_added} new assessments added to ledger."
-
-            # D. Finalize Applicant Status
-            cursor.execute("""
-                UPDATE applicants 
-                SET application_status = 'Enrolled', 
-                    original_enrollment_status = NULL, 
-                    last_updated_at = NOW() 
-                WHERE applicant_id = %s
-            """, (applicant_id,))
-
         # ==========================================
         # ACTION: DROP
         # ==========================================
-        elif action == 'drop':
+        if action == 'drop':
             new_status_record = 'Dropped'
             cursor.execute("UPDATE applicants SET application_status = 'Dropped', last_updated_at = NOW() WHERE applicant_id = %s", (applicant_id,))
         
@@ -10081,6 +10045,9 @@ def admin_update_application_status(applicant_id):
     new_status = request.form.get('status')
     valid_statuses = ['Pending', 'In Review', 'Approved', 'Scheduled', 'Rejected', 'Passed', 'Failed', 'Enrolling', 'Dropped', 'Enrolled', 'Not Enrolled']
     if not new_status or new_status not in valid_statuses: return jsonify({"success": False, "message": "Invalid status"}), 400
+    # Phase 5: 'Enrolled' is only reachable through the registrar check-in (checklist enforced).
+    if new_status == 'Enrolled':
+        return _check_in_json(applicant_id, None)
 
     conn = None; cursor = None 
     try:
@@ -10300,6 +10267,28 @@ def admin_bulk_update_status():
 
     if not ids or not isinstance(ids, list) or not action:
         return jsonify({"success": False, "message": "Invalid request. Missing IDs or action."}), 400
+
+    # Phase 5: bulk 'Enrolled' = one registrar check-in per student, each with its
+    # own checklist check and transaction. Students who are not ready are listed.
+    if action_type == 'status' and action == 'Enrolled':
+        from website import db as _db
+        from website.checkin import service as checkin_service
+        from website.checkin.routes import notify_enrolled
+        done, failed = [], []
+        for raw_id in ids:
+            try:
+                res = checkin_service.check_in(_checkin_actor(), int(raw_id), None)
+                _db.session.commit()
+                done.append(res)
+            except (checkin_service.CheckinError, ValueError) as e:
+                _db.session.rollback()
+                failed.append({'id': raw_id, 'reason': ' '.join(getattr(e, 'messages', [str(e)]))})
+        for res in done:
+            notify_enrolled(res)
+        msg = f"{len(done)} student(s) checked in and enrolled."
+        if failed:
+            msg += f" {len(failed)} not checked in: " + ' | '.join(f"#{f['id']}: {f['reason']}" for f in failed[:10])
+        return jsonify({"success": bool(done) or not failed, "message": msg, "failed": failed})
 
     conn = None
     cursor = None

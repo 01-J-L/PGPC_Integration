@@ -56,9 +56,21 @@
                         <td class="px-3 py-2 text-right">{{ r.s.payments|peso }}</td>
                         <td class="px-3 py-2 text-right font-semibold {{ 'text-red-600' if r.s.remaining > 0 else 'text-green-700' }}">{{ r.s.remaining|peso }}</td>
                         <td class="px-3 py-2 text-xs">{{ r.s.payment_status }}{% if r.s.verification_status %}<div class="{{ 'text-yellow-700' if r.s.verification_status == 'For Verification' else 'text-green-700' }}">{{ r.s.verification_status }}</div>{% endif %}</td>
-                        <td class="px-3 py-2 text-xs">{% if r.policy_ok %}<span class="text-green-700"><i class="ri-check-line"></i> Met</span>{% else %}<span class="text-gray-600">{{ r.policy_why }}</span>{% endif %}</td>
+                        <td class="px-3 py-2 text-xs">{% if r.policy_ok %}<span class="text-green-700"><i class="ri-check-line"></i> Met</span>{% else %}<span class="text-gray-600">{{ r.policy_why }}</span>{% endif %}{% if r.checked_in %}<div class="text-green-700">Checked in</div>{% endif %}</td>
                         <td class="px-4 py-2 text-right whitespace-nowrap">
                             <a class="text-blue-600 text-xs font-medium hover:underline" href="{{ url_for('auth.update_payment', student_id_db=r.ea.applicant_id) }}#payments">Payments</a>
+                            {% if policy.mode == 'clearance' and session.user_role in ['accounting', 'admin'] and not r.checked_in %}
+                            {% if r.cleared %}
+                            <form method="POST" action="{{ url_for('checkin.revoke_item', applicant_id=r.ea.applicant_id, code='payment') }}" class="inline ml-2"
+                                  onsubmit="var x = prompt('Reason for withdrawing the accounting clearance:'); if (!x) return false; this.reason.value = x; return true;">
+                                <input type="hidden" name="term_id" value="{{ term_id }}"><input type="hidden" name="reason" value="">
+                                <button class="text-red-600 text-xs hover:underline">Withdraw clearance</button></form>
+                            {% else %}
+                            <form method="POST" action="{{ url_for('checkin.approve_item', applicant_id=r.ea.applicant_id, code='payment') }}" class="inline ml-2">
+                                <input type="hidden" name="term_id" value="{{ term_id }}">
+                                <button class="px-2 py-0.5 text-xs font-medium rounded bg-green-600 text-white hover:bg-green-700">Give clearance</button></form>
+                            {% endif %}
+                            {% endif %}
                             {% if session.user_role == 'accounting' %}
                             <form method="POST" action="{{ url_for('finance.regenerate', form_id=r.ea.registration_form_id) }}" class="inline ml-2" onsubmit="return confirm('Re-apply the current fee rules to this assessment? Existing charges are kept.')">
                                 <button class="text-gray-600 text-xs hover:underline">Re-apply fees</button></form>

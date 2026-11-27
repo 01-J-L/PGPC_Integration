@@ -327,15 +327,16 @@ def check_policy(student_user_id, term_id, s=None):
     Returns (satisfied: bool, explanation: str)."""
     s = s or summary(student_user_id, term_id)
     pol = get_policy()
-    if s['assessment'] is None:
-        return False, 'No assessment has been generated for this term (finalize the registration form).'
-    counted = s['verified_payments'] if pol['require_verification'] else s['payments']
-    note = ' (verified payments only)' if pol['require_verification'] else ''
     if pol['mode'] == 'clearance':
+        # Accounting's explicit decision; it does not depend on a generated assessment.
         row = _q("SELECT is_approved_by_accounting FROM student_enrollment_records WHERE student_user_id = :s AND academic_term_id = :t",
                  s=student_user_id, t=term_id).fetchone()
         ok = bool(row and row[0])
         return ok, ('Accounting has cleared the student.' if ok else 'Waiting for accounting clearance.')
+    if s['assessment'] is None:
+        return False, 'No assessment has been generated for this term (finalize the registration form).'
+    counted = s['verified_payments'] if pol['require_verification'] else s['payments']
+    note = ' (verified payments only)' if pol['require_verification'] else ''
     if pol['mode'] == 'full':
         left = s['total_assessment'] + s['previous_balance'] - s['discounts'] - counted
         return left <= 0, (f'Fully paid{note}.' if left <= 0 else f'{peso(left)} still to pay{note}.')

@@ -130,6 +130,10 @@ def create_app():
     from .finance.routes import finance
     app.register_blueprint(finance, url_prefix='/accounting/enrollment-finance')
 
+    # Phase 5: approval checklist and registrar check-in
+    from .checkin.routes import checkin
+    app.register_blueprint(checkin, url_prefix='/admin/enrollment-checkin')
+
     # B. FACULTY SYSTEM BLUEPRINTS (Imported from the pasted 'faculty' folder)
     # Note: We wrap this in try/except so the app doesn't crash if files are missing
     try:

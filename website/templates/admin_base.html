@@ -420,6 +420,18 @@
                 <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-file-list-3-line"></i></div>
                 Registration Forms
             </a>
+            <a href="{{ url_for('checkin.queue') }}" id="checkinMenu"
+                class="sidebar-link flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded {% if active_page == 'checkin_queue' %}active{% endif %}">
+                <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-shield-check-line"></i></div>
+                Enrollment Check-in
+            </a>
+            {% if session.user_role == 'admin' %}
+            <a href="{{ url_for('checkin.requirements') }}" id="checklistSettingsMenu"
+                class="sidebar-link flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded {% if active_page == 'checkin_requirements' %}active{% endif %}">
+                <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-list-check-3"></i></div>
+                Enrollment Checklist
+            </a>
+            {% endif %}
             {% endif %}
             {% endif %}
 
