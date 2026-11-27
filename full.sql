@@ -571,15 +571,15 @@ CREATE TABLE IF NOT EXISTS applicants (
 	tertiary_course TEXT,
 	tertiary_year_from VARCHAR(10),
 	tertiary_year_to VARCHAR(10),
-	photo BLOB,
+	photo MEDIUMBLOB,
 	photo_mimetype VARCHAR(100),
-	shs_diploma_file BLOB,
+	shs_diploma_file MEDIUMBLOB,
 	shs_diploma_filename VARCHAR(255),
 	shs_diploma_mimetype VARCHAR(100),
-	shs_card_file BLOB,
+	shs_card_file MEDIUMBLOB,
 	shs_card_filename VARCHAR(255),
 	shs_card_mimetype VARCHAR(100),
-	birth_certificate_file BLOB,
+	birth_certificate_file MEDIUMBLOB,
 	birth_certificate_filename VARCHAR(255),
 	birth_certificate_mimetype VARCHAR(100),
 	application_status VARCHAR(50) NOT NULL DEFAULT 'Pending',
@@ -642,27 +642,33 @@ CREATE TABLE IF NOT EXISTS applicants (
 	inventory_emergency_contact_name VARCHAR(255),
 	inventory_emergency_contact_number VARCHAR(255),
 	inventory_emergency_contact_relationship VARCHAR(255),
-	enrollment_good_moral_file BLOB,
+	enrollment_good_moral_file MEDIUMBLOB,
 	enrollment_good_moral_filename VARCHAR(255),
 	enrollment_good_moral_mimetype VARCHAR(100),
-	enrollment_psa_birth_file BLOB,
+	enrollment_psa_birth_file MEDIUMBLOB,
 	enrollment_psa_birth_filename VARCHAR(255),
 	enrollment_psa_birth_mimetype VARCHAR(100),
-	enrollment_photos_2x2_file BLOB,
+	enrollment_photos_2x2_file MEDIUMBLOB,
 	enrollment_photos_2x2_filename VARCHAR(255),
 	enrollment_photos_2x2_mimetype VARCHAR(100),
-	enrollment_entrance_fee_proof_file BLOB,
+	enrollment_entrance_fee_proof_file MEDIUMBLOB,
 	enrollment_entrance_fee_proof_filename VARCHAR(255),
 	enrollment_entrance_fee_proof_mimetype VARCHAR(100),
-	enrollment_voters_id_file BLOB,
+	enrollment_voters_id_file MEDIUMBLOB,
 	enrollment_voters_id_filename VARCHAR(255),
 	enrollment_voters_id_mimetype VARCHAR(100),
-	enrollment_cbs_file BLOB,
+	enrollment_cbs_file MEDIUMBLOB,
 	enrollment_cbs_filename VARCHAR(255),
 	enrollment_cbs_mimetype VARCHAR(100),
-	enrollment_brgy_cert_file BLOB,
+	enrollment_brgy_cert_file MEDIUMBLOB,
 	enrollment_brgy_cert_filename VARCHAR(255),
 	enrollment_brgy_cert_mimetype VARCHAR(100),
+	enrollment_shs_card_file MEDIUMBLOB,
+	enrollment_shs_card_filename VARCHAR(255),
+	enrollment_shs_card_mimetype VARCHAR(100),
+	enrollment_shs_diploma_file MEDIUMBLOB,
+	enrollment_shs_diploma_filename VARCHAR(255),
+	enrollment_shs_diploma_mimetype VARCHAR(100),
 	is_approved_by_president BOOL NOT NULL DEFAULT 0,
 	president_approval_date DATETIME,
 	is_approved_by_accounting BOOL NOT NULL DEFAULT 0,
@@ -670,7 +676,7 @@ CREATE TABLE IF NOT EXISTS applicants (
 	is_approved_by_dean BOOL NOT NULL DEFAULT 0,
 	dean_approval_date DATETIME,
 	section_id INTEGER,
-	pwd_id_file BLOB,
+	pwd_id_file MEDIUMBLOB,
 	pwd_id_filename VARCHAR(255),
 	pwd_id_mimetype VARCHAR(100),
 	is_section_permanent BOOL DEFAULT 0,
@@ -960,6 +966,21 @@ CREATE TABLE IF NOT EXISTS payments (
 	FOREIGN KEY(student_id) REFERENCES applicants (applicant_id),
 	FOREIGN KEY(assessment_id) REFERENCES assessments (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ---------------------------------------------------------------------
+--  Schema migration ledger (website/schema_migrations.py).
+--  A database built from THIS file already contains every change below, so
+--  they are recorded as applied. Existing databases: python scripts/migrate.py
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS schema_migrations (
+	id VARCHAR(100) NOT NULL PRIMARY KEY,
+	description VARCHAR(500),
+	applied_at DATETIME NOT NULL
+) DEFAULT CHARSET=utf8mb4;
+INSERT IGNORE INTO schema_migrations (id, description, applied_at) VALUES
+  ('0001_enrollment_shs_document_columns', 'built into full.sql', NOW()),
+  ('0002_document_columns_mediumblob', 'built into full.sql', NOW());
 
 SET FOREIGN_KEY_CHECKS = 1;
 

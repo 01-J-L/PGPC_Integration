@@ -6,7 +6,7 @@ from website import db, mail
 from website.faculty.models import User, TeachingLoad, Program, Course, TimeSlot, SubstitutionRequest, Notification, SystemSetting, Section, Room, ProgramCourse, Subject, FacultyAssignment, Applicant, Grade
 from website.faculty.auth.forms import AdminAddUserForm, UserFilterForm
 
-from website.faculty.main.forms import ScheduleForm, DeleteScheduleForm, AddTimeSlotForm, SubstitutionRequestForm, SystemSettingsForm, EditProfileForm, ProgramForm, FileUploadForm, SchoolYearAnalyticsForm, SectionGridScheduleForm, EditScheduleForm, CourseForm, CreateSectionForm, DeleteSectionForm, RoomForm, UpdateRateForm, UploadProofForm
+from website.faculty.main.forms import ScheduleForm, DeleteScheduleForm, AddTimeSlotForm, SubstitutionRequestForm, SystemSettingsForm, EditProfileForm, ProgramForm, FileUploadForm, SchoolYearAnalyticsForm, SectionGridScheduleForm, EditScheduleForm, CourseForm, CreateSectionForm, DeleteSectionForm, RoomForm, UpdateRateForm, UploadProofForm, GradingSubjectForm
 
 from datetime import datetime, time, timedelta
 from collections import defaultdict
@@ -3942,6 +3942,23 @@ def grading_student_records():
     )
 
 
+def grading_student_program_id(student):
+    """Program of a student for the grading screens (P1-15).
+
+    Students without a section (irregular, not yet sectioned, or moved out of a
+    deleted section) used to crash the grade view with
+    AttributeError: 'NoneType' object has no attribute 'program_id'.
+    Fall back to the program the student applied/enrolled for.
+    """
+    if student.section is not None:
+        return student.section.program_id
+    if student.program_choice:
+        prog = Program.query.filter(func.trim(Program.title) == student.program_choice.strip()).first()
+        if prog:
+            return prog.id
+    return None
+
+
 @main.route("/grading-admin/student/<int:student_id>/grades")
 @login_required
 @grading_admin_required
@@ -3955,7 +3972,7 @@ def grading_view_student_grades(student_id):
     selected_semester = request.args.get('semester', 1, type=int)
 
     all_subjects = Subject.query.filter_by(
-        program_id=student.section.program_id,
+        program_id=grading_student_program_id(student),
         year_level=selected_year, semester=selected_semester
     ).order_by(Subject.subject_title).all()
 
@@ -4009,7 +4026,7 @@ def grading_print_student_grades(student_id):
     selected_semester = request.args.get('semester', 1, type=int)
 
     all_subjects = Subject.query.filter_by(
-        program_id=student.section.program_id,
+        program_id=grading_student_program_id(student),
         year_level=selected_year, semester=selected_semester
     ).order_by(Subject.subject_title).all()
 
@@ -4132,24 +4149,25 @@ def grading_view_program_subjects(program_id):
 @grading_admin_required
 def grading_add_subject(program_id):
     program = Program.query.get_or_404(program_id)
-    if request.method == 'POST':
-        code = request.form.get('code', '').strip().upper()
-        description = request.form.get('description', '').strip()
-        units = request.form.get('units', 3, type=int)
-        year = request.form.get('year', 1, type=int)
-        semester = request.form.get('semester', 1, type=int)
-        subject = Subject(
-            subject_code=code, subject_title=description,
-            units=units, year_level=year, semester=semester,
-            program_id=program.id
-        )
-        db.session.add(subject)
-        db.session.commit()
-        flash(f'Subject {subject.subject_code} added to {program.program_code}.', 'success')
-        return redirect(url_for('faculty_main.grading_view_program_subjects', program_id=program.id))
+    form = GradingSubjectForm()
+    if form.validate_on_submit():
+        code = form.code.data.strip().upper()
+        # subjects.subject_code is UNIQUE; refuse duplicates instead of a 500.
+        if Subject.query.filter_by(subject_code=code).first():
+            flash(f'Subject code {code} already exists. Use a different code.', 'danger')
+        else:
+            subject = Subject(
+                subject_code=code, subject_title=form.description.data.strip(),
+                units=form.units.data, year_level=int(form.year.data), semester=int(form.semester.data),
+                program_id=program.id
+            )
+            db.session.add(subject)
+            db.session.commit()
+            flash(f'Subject {subject.subject_code} added to {program.program_code}.', 'success')
+            return redirect(url_for('faculty_main.grading_view_program_subjects', program_id=program.id))
     return render_template(
         'grading/admin/add_subject.html',
-        title="Add Subject", active_nav='programs', program=program
+        title="Add Subject", active_nav='programs', program=program, form=form
     )
 
 

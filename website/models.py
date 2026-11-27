@@ -9,6 +9,11 @@
 
 import sqlalchemy as _sa
 from website import db, login_manager
+from sqlalchemy.dialects import mysql as _mysql
+
+# Uploaded documents/photos: uploads are capped at 5 MB, plain BLOB holds only
+# 64 KB on MySQL/MariaDB (P1-12, migration 0002), so use MEDIUMBLOB (16 MB).
+_DOC_BLOB = db.LargeBinary().with_variant(_mysql.MEDIUMBLOB(), 'mysql', 'mariadb')
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
@@ -458,15 +463,15 @@ class Applicant(db.Model):
     tertiary_course = db.Column(db.Text)
     tertiary_year_from = db.Column(db.String(10))
     tertiary_year_to = db.Column(db.String(10))
-    photo = db.Column(db.LargeBinary)
+    photo = db.Column(_DOC_BLOB)
     photo_mimetype = db.Column(db.String(100))
-    shs_diploma_file = db.Column(db.LargeBinary)
+    shs_diploma_file = db.Column(_DOC_BLOB)
     shs_diploma_filename = db.Column(db.String(255))
     shs_diploma_mimetype = db.Column(db.String(100))
-    shs_card_file = db.Column(db.LargeBinary)
+    shs_card_file = db.Column(_DOC_BLOB)
     shs_card_filename = db.Column(db.String(255))
     shs_card_mimetype = db.Column(db.String(100))
-    birth_certificate_file = db.Column(db.LargeBinary)
+    birth_certificate_file = db.Column(_DOC_BLOB)
     birth_certificate_filename = db.Column(db.String(255))
     birth_certificate_mimetype = db.Column(db.String(100))
     application_status = db.Column(db.String(50), default='Pending', nullable=False)
@@ -529,27 +534,33 @@ class Applicant(db.Model):
     inventory_emergency_contact_name = db.Column(db.String(255))
     inventory_emergency_contact_number = db.Column(db.String(255))
     inventory_emergency_contact_relationship = db.Column(db.String(255))
-    enrollment_good_moral_file = db.Column(db.LargeBinary)
+    enrollment_good_moral_file = db.Column(_DOC_BLOB)
     enrollment_good_moral_filename = db.Column(db.String(255))
     enrollment_good_moral_mimetype = db.Column(db.String(100))
-    enrollment_psa_birth_file = db.Column(db.LargeBinary)
+    enrollment_psa_birth_file = db.Column(_DOC_BLOB)
     enrollment_psa_birth_filename = db.Column(db.String(255))
     enrollment_psa_birth_mimetype = db.Column(db.String(100))
-    enrollment_photos_2x2_file = db.Column(db.LargeBinary)
+    enrollment_photos_2x2_file = db.Column(_DOC_BLOB)
     enrollment_photos_2x2_filename = db.Column(db.String(255))
     enrollment_photos_2x2_mimetype = db.Column(db.String(100))
-    enrollment_entrance_fee_proof_file = db.Column(db.LargeBinary)
+    enrollment_entrance_fee_proof_file = db.Column(_DOC_BLOB)
     enrollment_entrance_fee_proof_filename = db.Column(db.String(255))
     enrollment_entrance_fee_proof_mimetype = db.Column(db.String(100))
-    enrollment_voters_id_file = db.Column(db.LargeBinary)
+    enrollment_voters_id_file = db.Column(_DOC_BLOB)
     enrollment_voters_id_filename = db.Column(db.String(255))
     enrollment_voters_id_mimetype = db.Column(db.String(100))
-    enrollment_cbs_file = db.Column(db.LargeBinary)
+    enrollment_cbs_file = db.Column(_DOC_BLOB)
     enrollment_cbs_filename = db.Column(db.String(255))
     enrollment_cbs_mimetype = db.Column(db.String(100))
-    enrollment_brgy_cert_file = db.Column(db.LargeBinary)
+    enrollment_brgy_cert_file = db.Column(_DOC_BLOB)
     enrollment_brgy_cert_filename = db.Column(db.String(255))
     enrollment_brgy_cert_mimetype = db.Column(db.String(100))
+    # NOTE (P1-03): the columns enrollment_shs_card_{file,filename,mimetype} and
+    # enrollment_shs_diploma_{file,filename,mimetype} exist in the database
+    # (full.sql / migration 0001) but are intentionally NOT mapped here. They are
+    # read and written only by raw SQL in auth.py. Mapping them would make every
+    # Applicant ORM query fail on a database where `scripts/migrate.py apply`
+    # has not been run yet (deferred() does not cover Query.count()).
     is_approved_by_president = db.Column(db.Boolean, default=False, nullable=False)
     president_approval_date = db.Column(db.DateTime)
     is_approved_by_accounting = db.Column(db.Boolean, default=False, nullable=False)
@@ -557,7 +568,7 @@ class Applicant(db.Model):
     is_approved_by_dean = db.Column(db.Boolean, default=False, nullable=False)
     dean_approval_date = db.Column(db.DateTime)
     section_id = db.Column(db.Integer, db.ForeignKey('sections.id'))
-    pwd_id_file = db.Column(db.LargeBinary)
+    pwd_id_file = db.Column(_DOC_BLOB)
     pwd_id_filename = db.Column(db.String(255))
     pwd_id_mimetype = db.Column(db.String(100))
     is_section_permanent = db.Column(db.Boolean, default=False)

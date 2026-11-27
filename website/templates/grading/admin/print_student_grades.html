@@ -41,7 +41,7 @@
 
     <div style="margin-bottom: 15px;">
         <strong>Name:</strong> {{ student.name }} <br>
-        <strong>Program:</strong> {{ student.section.program.name }} <br>
+        <strong>Program:</strong> {{ student.section.program.name if student.section else student.program_choice }} <br>
         <strong>Term:</strong> {{ selected_year }} Year, {{ selected_semester }} Semester
     </div>
 
