@@ -414,6 +414,13 @@
                 <span class="ml-auto bg-purple-100 text-purple-800 text-xs font-medium px-2 py-0.5 rounded-full"
                     id="enrollingCountSide">{{ stats.enrolling if stats else '0' }}</span>
             </a>
+            {% if session.user_role in ['admin', 'registrar'] %}
+            <a href="{{ url_for('registration.index') }}" id="regformMenu"
+                class="sidebar-link flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded {% if active_page == 'registration_forms' %}active{% endif %}">
+                <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-file-list-3-line"></i></div>
+                Registration Forms
+            </a>
+            {% endif %}
             {% endif %}
 
             <!-- ENROLLED: Visible to Admin, Registrar, Guidance, OSA -->

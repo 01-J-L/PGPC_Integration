@@ -175,6 +175,20 @@
                 </div>
             </div>
 
+            <!-- START: Registration Form (Phase 3) -->
+            <div class="mt-6 p-4 border border-indigo-200 rounded-lg bg-indigo-50" id="regform-panel">
+                <h4 class="text-md font-semibold text-indigo-900 mb-2">Registration Form</h4>
+                {% if regform %}
+                <p class="text-sm text-indigo-900">{{ regform.classification }} &middot; {{ regform.subjects }} subject(s) &middot; {{ regform.total_units|fmt_units }} units &middot;
+                    {% if regform.status == 'finalized' %}<span class="font-semibold text-green-700">Finalized</span>{% else %}<span class="font-semibold text-yellow-700">{{ regform.status|title }}</span>{% endif %}</p>
+                <a href="{{ url_for('registration.form', form_id=regform.id) }}" class="inline-flex items-center mt-2 text-sm font-medium text-primary hover:underline"><i class="ri-file-list-3-line mr-1"></i>Open registration form</a>
+                {% else %}
+                <p class="text-sm text-indigo-900">No registration form for this term yet.</p>
+                <a href="{{ url_for('registration.student', applicant_id=application.applicant_id, term_id=selected_term_id) }}" class="inline-flex items-center mt-2 text-sm font-medium text-primary hover:underline"><i class="ri-file-add-line mr-1"></i>Prepare registration form</a>
+                {% endif %}
+            </div>
+            <!-- END: Registration Form -->
+
             <!-- START: Section Management (Admin Override) -->
             <div class="mt-6 mb-4 p-4 border border-blue-200 rounded-lg bg-blue-50">
                 <h4 class="text-md font-semibold text-blue-800 mb-2">Section Assignment</h4>

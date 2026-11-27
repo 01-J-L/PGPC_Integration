@@ -1,0 +1,240 @@
+{% extends 'admin_base.html' %}
+{% from 'curriculum/_macros.html' import input_class, btn_primary, btn_secondary, btn_danger %}
+
+{% set a = f.applicant %}
+{% block title %}REGFORM - {{ a.last_name }}{% endblock %}
+{% block breadcrumb %}
+<a href="{{ url_for('registration.index', term_id=f.academic_term_id) }}" class="text-gray-500 hover:text-primary">Registration Forms</a>
+<i class="ri-arrow-right-s-line mx-1 text-gray-400"></i><span>{{ a.last_name }}, {{ a.first_name }}</span>
+{% endblock %}
+{% block page_title %}Registration form &middot; {{ f.term.year_name }} {{ f.term.semester }}{% endblock %}
+
+{% block content %}
+{% set editable = f.status == 'draft' %}
+{% set custom = editable and f.classification == 'Irregular' %}
+
+<!-- Student / form header -->
+<section class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
+    <div class="flex flex-col lg:flex-row justify-between gap-6">
+        <dl class="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm flex-1 min-w-0 [overflow-wrap:anywhere]">
+            <div class="col-span-2"><dt class="text-gray-500">Student</dt><dd class="font-semibold text-gray-900">{{ a.last_name }}, {{ a.first_name }} {{ a.middle_name or '' }}</dd></div>
+            <div><dt class="text-gray-500">Student no.</dt><dd class="font-medium">{{ a.old_student_id or a.control_number or '—' }}</dd></div>
+            <div><dt class="text-gray-500">Control no.</dt><dd class="font-medium">{{ f.control_number or 'Not yet assigned' }}</dd></div>
+            <div class="col-span-2"><dt class="text-gray-500">Program</dt><dd class="font-medium">{{ f.program.title }}</dd></div>
+            <div><dt class="text-gray-500">Level</dt><dd class="font-medium">{{ years.get(f.year_level) }} &middot; {{ semesters.get(f.semester) }}</dd></div>
+            <div><dt class="text-gray-500">Academic year</dt><dd class="font-medium">{{ f.term.year_name }}</dd></div>
+            <div class="col-span-2"><dt class="text-gray-500">Curriculum</dt><dd class="font-medium"><a class="hover:underline" href="{{ url_for('curriculum.version_detail', version_id=f.curriculum_version_id) }}">{{ f.curriculum.name }}</a></dd></div>
+            <div><dt class="text-gray-500">Home section</dt><dd class="font-medium">{{ section_label(f.section) if f.section else 'Not set' }}</dd></div>
+            <div><dt class="text-gray-500">Status</dt><dd>{% if f.status == 'finalized' %}<span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-800">Finalized</span>{% elif f.status == 'draft' %}<span class="px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-800">Draft</span>{% else %}<span class="px-2 py-0.5 rounded-full text-xs bg-gray-200">Cancelled</span>{% endif %}</dd></div>
+            <div class="col-span-2 md:col-span-4"><dt class="text-gray-500">Classification</dt>
+                <dd><span class="px-2 py-0.5 rounded-full text-xs {{ 'bg-orange-100 text-orange-800' if f.classification == 'Irregular' else 'bg-blue-100 text-blue-800' }}">{{ f.classification }}</span>
+                    <span class="text-gray-600 ml-1">{{ f.classification_reason or '' }}</span></dd></div>
+        </dl>
+        <div class="grid grid-cols-2 gap-3 text-center shrink-0 self-start">
+            <div class="px-4 py-2 bg-gray-50 rounded-lg"><p class="text-xs text-gray-500 uppercase">Units</p><p class="text-2xl font-bold {{ 'text-red-600' if f.total_units > f.max_units else 'text-gray-800' }}">{{ f.total_units|fmt_units }}</p></div>
+            <div class="px-4 py-2 bg-gray-50 rounded-lg"><p class="text-xs text-gray-500 uppercase">Limit</p><p class="text-2xl font-bold text-gray-800">{{ f.max_units|fmt_units }}</p></div>
+        </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 mt-5 pt-4 border-t border-gray-100">
+        <a href="{{ url_for('registration.print_form', form_id=f.id) }}" target="_blank" class="{{ btn_secondary() }}"><i class="ri-printer-line mr-2"></i>Print{% if f.status != 'finalized' %} draft{% endif %}</a>
+        <a href="{{ url_for('auth.admin_enrollment_review_page', applicant_id=a.applicant_id, term_id=f.academic_term_id) }}" class="{{ btn_secondary() }}"><i class="ri-user-search-line mr-2"></i>Enrollment review</a>
+        {% if editable %}
+        <button type="button" class="{{ btn_secondary() }}" onclick="document.getElementById('class-dialog').showModal()"><i class="ri-exchange-line mr-2"></i>Mark {{ 'Irregular' if f.classification == 'Regular' else 'Regular' }}</button>
+        <form method="POST" action="{{ url_for('registration.block_section', form_id=f.id) }}" class="flex flex-wrap gap-2">
+            <label for="block-sec" class="sr-only">Home section</label>
+            <select id="block-sec" name="section_id" class="{{ input_class() }} w-44 max-w-full">
+                <option value="">Home section&hellip;</option>
+                {% for s in block_options %}<option value="{{ s.id }}" {% if s.id == f.section_id %}selected{% endif %}>{{ section_label(s) }} ({{ s.year_level }})</option>{% endfor %}
+            </select>
+            <button class="{{ btn_secondary() }}" title="Set the home section and place every subject it offers in it">Apply</button>
+        </form>
+        <form method="POST" action="{{ url_for('registration.finalize', form_id=f.id) }}" class="ml-auto" onsubmit="return confirm('Finalize this registration form?')">
+            <button class="{{ btn_primary() }}" {% if errors %}disabled title="Resolve the issues listed below first"{% endif %}><i class="ri-checkbox-circle-line mr-2"></i>Finalize</button>
+        </form>
+        {% elif f.status == 'finalized' %}
+        <button type="button" class="{{ btn_secondary() }} ml-auto" onclick="document.getElementById('reopen-dialog').showModal()"><i class="ri-lock-unlock-line mr-2"></i>Reopen for changes</button>
+        {% endif %}
+    </div>
+</section>
+
+{% if ctx_error %}
+<div class="p-4 rounded-lg border border-red-200 bg-red-50 text-sm text-red-800 mb-6" role="alert">{{ ctx_error }}</div>
+{% endif %}
+
+{% if editable and (errors or warnings) %}
+<div class="mb-6 p-4 rounded-lg border {{ 'border-red-200 bg-red-50' if errors else 'border-yellow-200 bg-yellow-50' }}" role="status">
+    <p class="text-sm font-semibold {{ 'text-red-800' if errors else 'text-yellow-800' }} mb-1">{{ 'To finalize, resolve:' if errors else 'Notes:' }}</p>
+    <ul class="list-disc ml-5 text-sm {{ 'text-red-800' if errors else 'text-yellow-900' }}">{% for m in errors %}<li>{{ m }}</li>{% endfor %}{% for m in warnings %}<li class="text-yellow-900">{{ m }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if pending_ack %}
+<div class="mb-6 p-4 rounded-lg border border-orange-300 bg-orange-50" role="alertdialog" aria-labelledby="ack-title">
+    <p id="ack-title" class="text-sm font-semibold text-orange-900 mb-1">{{ pending_ack.messages[0] }}</p>
+    <ul class="list-disc ml-5 text-sm text-orange-900 mb-3">{% for m in pending_ack.messages[1:] %}<li>{{ m }}</li>{% endfor %}</ul>
+    <form method="POST" action="{{ url_for('registration.add', form_id=f.id) }}" class="flex flex-col md:flex-row gap-2 md:items-end">
+        <input type="hidden" name="curriculum_subject_id" value="{{ pending_ack.curriculum_subject_id }}">
+        <input type="hidden" name="section_id" value="{{ pending_ack.section_id }}">
+        <input type="hidden" name="acknowledge" value="1">
+        <div class="flex-1"><label for="ack-remarks" class="block text-xs text-gray-600 mb-1">Basis (recorded on the line)</label>
+            <input id="ack-remarks" name="remarks" required maxlength="255" class="{{ input_class() }}" placeholder="e.g. Dean confirmed the requirement on 27 Nov"></div>
+        <button class="{{ btn_primary() }}">Confirm and add</button>
+        <a href="{{ url_for('registration.form', form_id=f.id) }}" class="{{ btn_secondary() }}">Cancel</a>
+    </form>
+</div>
+{% endif %}
+
+<!-- Selected subjects -->
+<section id="selected" class="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
+    <div class="px-5 py-3 border-b border-gray-100 flex justify-between items-center">
+        <h2 class="font-semibold text-gray-800">Selected subjects</h2>
+        <span class="text-sm text-gray-500">{{ f.lines|length }} subject(s) &middot; <strong>{{ f.total_units|fmt_units }}</strong> / {{ f.max_units|fmt_units }} units</span>
+    </div>
+    <div class="relative overflow-x-auto">
+    <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 text-xs uppercase text-gray-500"><tr>
+            <th scope="col" class="px-5 py-2 text-left">Code</th><th scope="col" class="px-3 py-2 text-left">Description</th>
+            <th scope="col" class="px-3 py-2 text-right">Units</th><th scope="col" class="px-3 py-2 text-left">Curriculum term</th>
+            <th scope="col" class="px-3 py-2 text-left min-w-[11rem]">Section</th><th scope="col" class="px-3 py-2 text-left min-w-[12rem]">Schedule</th>
+            <th scope="col" class="px-5 py-2"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody class="divide-y divide-gray-100">
+        {% for ln in f.lines %}
+            <tr class="align-top">
+                <td class="px-5 py-2 font-medium text-gray-900 whitespace-nowrap">{{ ln.subject_code }}
+                    {% if ln.source == 'back_subject' %}<span class="block text-[11px] font-normal text-orange-700">back subject</span>{% elif ln.source == 'added' %}<span class="block text-[11px] font-normal text-indigo-700">added</span>{% endif %}</td>
+                <td class="px-3 py-2 text-gray-700">{{ ln.description }}{% if ln.remarks %}<div class="text-xs text-gray-500">{{ ln.remarks }}</div>{% endif %}</td>
+                <td class="px-3 py-2 text-right">{{ ln.units|fmt_units }}</td>
+                <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ years.get(ln.year_level) }}, {{ semesters.get(ln.semester) }}</td>
+                <td class="px-3 py-2">
+                    {% if editable %}
+                    <form method="POST" action="{{ url_for('registration.line_section', form_id=f.id, line_id=ln.id) }}">
+                        <label for="sec-{{ ln.id }}" class="sr-only">Section for {{ ln.subject_code }}</label>
+                        <select id="sec-{{ ln.id }}" name="section_id" class="{{ input_class() }} min-w-[9rem] py-1 {{ 'border-red-400' if not ln.section_id }}" onchange="this.form.submit()">
+                            <option value="">— choose —</option>
+                            {% for s in sections_by_line.get(ln.id, []) %}<option value="{{ s.id }}" {% if s.id == ln.section_id %}selected{% endif %}>{{ section_label(s) }}</option>{% endfor %}
+                        </select>
+                        <noscript><button class="text-xs text-primary">Save</button></noscript>
+                    </form>
+                    {% else %}{{ section_label(ln.section) if ln.section else '—' }}{% endif %}
+                </td>
+                <td class="px-3 py-2 text-gray-600 text-xs">{{ ln.schedule_text or 'TBA' }}</td>
+                <td class="px-5 py-2 text-right">
+                    {% if custom %}
+                    <form method="POST" action="{{ url_for('registration.remove', form_id=f.id, line_id=ln.id) }}" onsubmit="return confirm('Remove {{ ln.subject_code }}?')">
+                        <button class="text-red-600 text-sm hover:underline">Remove</button></form>
+                    {% endif %}
+                </td>
+            </tr>
+        {% else %}<tr><td colspan="7" class="px-5 py-8 text-center text-gray-500">No subjects yet.{% if custom %} Add them from the list below.{% endif %}</td></tr>{% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<!-- Available subjects (irregular) -->
+{% if custom %}
+<section class="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
+    <div class="px-5 py-3 border-b border-gray-100 flex flex-wrap gap-3 justify-between items-center">
+        <h2 class="font-semibold text-gray-800">Available subjects in the curriculum</h2>
+        <div class="flex gap-2 text-xs" role="group" aria-label="Filter available subjects">
+            <button type="button" class="avail-filter px-2 py-1 rounded border border-gray-300 bg-gray-100" data-filter="addable">Can be added</button>
+            <button type="button" class="avail-filter px-2 py-1 rounded border border-gray-300" data-filter="back">Back subjects</button>
+            <button type="button" class="avail-filter px-2 py-1 rounded border border-gray-300" data-filter="all">All</button>
+        </div>
+    </div>
+    <div class="relative overflow-x-auto">
+    <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 text-xs uppercase text-gray-500"><tr>
+            <th scope="col" class="px-5 py-2 text-left">Code</th><th scope="col" class="px-3 py-2 text-left">Description</th>
+            <th scope="col" class="px-3 py-2 text-right">Units</th><th scope="col" class="px-3 py-2 text-left">Curriculum term</th>
+            <th scope="col" class="px-3 py-2 text-left min-w-[16rem]">Eligibility</th><th scope="col" class="px-5 py-2 text-left min-w-[14rem]">Add</th></tr></thead>
+        <tbody class="divide-y divide-gray-100">
+        {% for r in available %}
+            {% set s = r.subject %}
+            <tr class="avail-row align-top {{ 'bg-gray-50 text-gray-400' if r.status == 'blocked' }}" data-status="{{ r.status }}" data-back="{{ '1' if r.back else '0' }}">
+                <td class="px-5 py-2 font-medium whitespace-nowrap">{{ s.subject_code }}</td>
+                <td class="px-3 py-2">{{ s.description }}</td>
+                <td class="px-3 py-2 text-right">{{ s.units|fmt_units }}</td>
+                <td class="px-3 py-2 whitespace-nowrap">{{ years.get(s.year_level) }}, {{ semesters.get(s.semester) }}{% if r.back %}<span class="block text-[11px] text-orange-700">back subject</span>{% endif %}</td>
+                <td class="px-3 py-2 text-xs space-y-0.5">
+                    {% if r.status == 'eligible' %}<p class="text-green-700 font-medium"><i class="ri-check-line"></i> Eligible</p>
+                    {% elif r.status == 'confirm' %}<p class="text-orange-700 font-medium"><i class="ri-question-line"></i> Needs confirmation</p>
+                    {% else %}<p class="text-red-700 font-medium"><i class="ri-close-circle-line"></i> Not allowed</p>{% endif %}
+                    {% for m in r.eval.errors %}<p class="text-red-700">{{ m }}</p>{% endfor %}
+                    {% for m in r.eval.acks %}<p class="text-orange-800">{{ m }}</p>{% endfor %}
+                    {% for m in r.eval.info %}<p class="text-gray-500">{{ m }}</p>{% endfor %}
+                </td>
+                <td class="px-5 py-2">
+                    {% if r.status != 'blocked' %}
+                    <form method="POST" action="{{ url_for('registration.add', form_id=f.id) }}" class="flex gap-2">
+                        <input type="hidden" name="curriculum_subject_id" value="{{ s.id }}">
+                        <label for="add-sec-{{ s.id }}" class="sr-only">Section for {{ s.subject_code }}</label>
+                        <select id="add-sec-{{ s.id }}" name="section_id" class="{{ input_class() }} min-w-[8rem] py-1">
+                            <option value="">Auto</option>
+                            {% for sec in r.sections %}<option value="{{ sec.id }}">{{ section_label(sec) }}</option>{% endfor %}
+                        </select>
+                        <button class="{{ btn_primary() }} px-3 py-1 text-xs">Add</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+        {% else %}<tr><td colspan="6" class="px-5 py-6 text-center text-gray-500">Every curriculum subject is already on the form.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+{% elif editable %}
+<p class="text-sm text-gray-500 mb-6"><i class="ri-information-line"></i> Regular students take exactly the curriculum subjects of their term. To customize the subjects (back subjects, failed subjects, cross-semester subjects), mark the student Irregular.</p>
+{% endif %}
+
+<!-- History -->
+<section class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-5 py-3 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Change history</h2></div>
+    <div class="relative overflow-x-auto max-h-96 overflow-y-auto">
+    <table class="min-w-full text-xs">
+        <thead class="bg-gray-50 text-gray-500 uppercase sticky top-0"><tr><th scope="col" class="px-5 py-2 text-left">When</th><th scope="col" class="px-3 py-2 text-left">Who</th><th scope="col" class="px-3 py-2 text-left">Action</th><th scope="col" class="px-3 py-2 text-left">Details</th></tr></thead>
+        <tbody class="divide-y divide-gray-100">
+        {% for e in log %}<tr><td class="px-5 py-2 whitespace-nowrap text-gray-600">{{ e.performed_at.strftime('%b %d, %Y %I:%M %p') if e.performed_at }}</td>
+            <td class="px-3 py-2">{{ e.performed_by }}</td><td class="px-3 py-2 text-gray-800">{{ e.action|replace('_', ' ') }}{% if e.subject_code %} &middot; {{ e.subject_code }}{% endif %}</td>
+            <td class="px-3 py-2 text-gray-500 break-all">{{ e.details|truncate(240) }}</td></tr>
+        {% else %}<tr><td colspan="4" class="px-5 py-4 text-gray-500">No changes yet.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<dialog id="class-dialog" class="rounded-xl p-0 w-full max-w-lg backdrop:bg-black/40">
+    <form method="POST" action="{{ url_for('registration.classification', form_id=f.id) }}" class="p-6 space-y-4">
+        <h3 class="text-lg font-semibold text-gray-800">Mark {{ 'Irregular' if f.classification == 'Regular' else 'Regular' }}</h3>
+        <input type="hidden" name="classification" value="{{ 'Irregular' if f.classification == 'Regular' else 'Regular' }}">
+        {% if f.classification == 'Irregular' %}<p class="text-sm text-orange-800">Marking the student Regular replaces the selected subjects with the curriculum subjects of the term.</p>{% endif %}
+        <div><label for="cl-reason" class="block text-sm font-medium text-gray-700 mb-1">Reason (recorded)</label>
+            <input id="cl-reason" name="reason" required maxlength="255" class="{{ input_class() }}" placeholder="e.g. Transferee; subjects credited per evaluation"></div>
+        <div class="flex justify-end gap-2"><button type="button" class="{{ btn_secondary() }}" onclick="this.closest('dialog').close()">Cancel</button><button class="{{ btn_primary() }}">Save</button></div>
+    </form>
+</dialog>
+<dialog id="reopen-dialog" class="rounded-xl p-0 w-full max-w-lg backdrop:bg-black/40">
+    <form method="POST" action="{{ url_for('registration.reopen', form_id=f.id) }}" class="p-6 space-y-4">
+        <h3 class="text-lg font-semibold text-gray-800">Reopen registration form</h3>
+        <p class="text-sm text-gray-600">The current subjects are saved in the change history before any edit.</p>
+        <div><label for="ro-reason" class="block text-sm font-medium text-gray-700 mb-1">Reason (recorded)</label>
+            <input id="ro-reason" name="reason" required maxlength="255" class="{{ input_class() }}"></div>
+        <div class="flex justify-end gap-2"><button type="button" class="{{ btn_secondary() }}" onclick="this.closest('dialog').close()">Cancel</button><button class="{{ btn_primary() }}">Reopen</button></div>
+    </form>
+</dialog>
+
+<script>
+(function () {
+    var buttons = document.querySelectorAll('.avail-filter');
+    function apply(mode) {
+        document.querySelectorAll('.avail-row').forEach(function (tr) {
+            var show = mode === 'all' || (mode === 'addable' && tr.dataset.status !== 'blocked') || (mode === 'back' && tr.dataset.back === '1');
+            tr.classList.toggle('hidden', !show);
+        });
+        buttons.forEach(function (b) { b.classList.toggle('bg-gray-100', b.dataset.filter === mode); b.setAttribute('aria-pressed', b.dataset.filter === mode); });
+    }
+    buttons.forEach(function (b) { b.addEventListener('click', function () { apply(b.dataset.filter); }); });
+    if (buttons.length) apply('addable');
+})();
+</script>
+{% endblock %}

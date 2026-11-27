@@ -153,6 +153,19 @@ MIGRATIONS = [
             "DROP TABLE IF EXISTS `curriculum_versions`",
         ],
     },
+    {
+        'id': '0004_registration_forms',
+        'description': ("Phase 3: per-term registration forms (registration_forms), their subject lines with "
+                        "section/schedule snapshots (registration_form_subjects) and the registrar change log "
+                        "(registration_form_changes). New tables only."),
+        'build': _create_model_tables(['registration_forms', 'registration_form_subjects', 'registration_form_changes']),
+        'rollback_guard': "SELECT COUNT(*) FROM registration_forms",
+        'rollback': [
+            "DROP TABLE IF EXISTS `registration_form_changes`",
+            "DROP TABLE IF EXISTS `registration_form_subjects`",
+            "DROP TABLE IF EXISTS `registration_forms`",
+        ],
+    },
 ]
 
 _LEDGER_DDL = """

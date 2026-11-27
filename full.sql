@@ -1091,6 +1091,89 @@ CREATE TABLE IF NOT EXISTS curriculum_audit_log (
 	INDEX ix_curriculum_audit_log_performed_at (performed_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- =====================================================================
+--  PHASE 3: REGISTRATION FORMS (generated from website/models.py)
+-- =====================================================================
+-- ---- registration_forms ------------------------------------------
+CREATE TABLE IF NOT EXISTS registration_forms (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	student_user_id INTEGER NOT NULL, 
+	applicant_id INTEGER NOT NULL, 
+	academic_term_id INTEGER NOT NULL, 
+	curriculum_version_id INTEGER NOT NULL, 
+	program_id VARCHAR(50) NOT NULL, 
+	year_level INTEGER NOT NULL, 
+	semester INTEGER NOT NULL, 
+	classification VARCHAR(20) NOT NULL DEFAULT 'Regular', 
+	classification_reason VARCHAR(255), 
+	status VARCHAR(20) NOT NULL DEFAULT 'draft', 
+	section_id INTEGER, 
+	max_units NUMERIC(5, 1) NOT NULL, 
+	total_units NUMERIC(5, 1) NOT NULL DEFAULT 0, 
+	control_number VARCHAR(30), 
+	notes VARCHAR(500), 
+	created_by VARCHAR(150), 
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	finalized_by VARCHAR(150), 
+	finalized_at DATETIME, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_regform_student_term UNIQUE (student_user_id, academic_term_id), 
+	CONSTRAINT ck_regform_semester CHECK (semester IN (1, 2, 3)), 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(applicant_id) REFERENCES applicants (applicant_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(academic_term_id) REFERENCES academic_terms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(curriculum_version_id) REFERENCES curriculum_versions (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(program_id) REFERENCES programs (program_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(section_id) REFERENCES sections (id) ON DELETE RESTRICT,
+	INDEX ix_registration_forms_curriculum_version_id (curriculum_version_id),
+	INDEX ix_registration_forms_student_user_id (student_user_id),
+	INDEX ix_registration_forms_applicant_id (applicant_id),
+	INDEX ix_registration_forms_academic_term_id (academic_term_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- registration_form_subjects ----------------------------------
+CREATE TABLE IF NOT EXISTS registration_form_subjects (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	registration_form_id INTEGER NOT NULL, 
+	curriculum_subject_id INTEGER NOT NULL, 
+	subject_code VARCHAR(30) NOT NULL, 
+	code_key VARCHAR(30) NOT NULL, 
+	description VARCHAR(500) NOT NULL, 
+	units NUMERIC(4, 1) NOT NULL, 
+	year_level INTEGER NOT NULL, 
+	semester INTEGER NOT NULL, 
+	section_id INTEGER, 
+	schedule_text VARCHAR(500), 
+	source VARCHAR(20) NOT NULL DEFAULT 'curriculum', 
+	remarks VARCHAR(255), 
+	added_by VARCHAR(150), 
+	added_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_regform_line_code UNIQUE (registration_form_id, code_key), 
+	FOREIGN KEY(registration_form_id) REFERENCES registration_forms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(curriculum_subject_id) REFERENCES curriculum_subjects (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(section_id) REFERENCES sections (id) ON DELETE RESTRICT,
+	INDEX ix_registration_form_subjects_registration_form_id (registration_form_id),
+	INDEX ix_registration_form_subjects_curriculum_subject_id (curriculum_subject_id),
+	INDEX ix_registration_form_subjects_section_id (section_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- registration_form_changes -----------------------------------
+CREATE TABLE IF NOT EXISTS registration_form_changes (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	registration_form_id INTEGER NOT NULL, 
+	action VARCHAR(30) NOT NULL, 
+	subject_code VARCHAR(30), 
+	details TEXT, 
+	performed_by VARCHAR(150), 
+	performed_role VARCHAR(30), 
+	performed_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id),
+	INDEX ix_registration_form_changes_registration_form_id (registration_form_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------
 --  Schema migration ledger (website/schema_migrations.py).
 --  A database built from THIS file already contains every change below, so
@@ -1104,7 +1187,8 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 INSERT IGNORE INTO schema_migrations (id, description, applied_at) VALUES
   ('0001_enrollment_shs_document_columns', 'built into full.sql', NOW()),
   ('0002_document_columns_mediumblob', 'built into full.sql', NOW()),
-  ('0003_curriculum_management', 'built into full.sql', NOW());
+  ('0003_curriculum_management', 'built into full.sql', NOW()),
+  ('0004_registration_forms', 'built into full.sql', NOW());
 
 SET FOREIGN_KEY_CHECKS = 1;
 
