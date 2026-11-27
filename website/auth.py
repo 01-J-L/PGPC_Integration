@@ -6430,6 +6430,7 @@ def _program_delete_blockers(cursor, program_id, program_title):
         ("class record grade(s)", "SELECT COUNT(*) AS n FROM grades WHERE subject_id IN (SELECT id FROM subjects WHERE program_id = %s)", (program_id,)),
         ("student application(s)", "SELECT COUNT(*) AS n FROM applicants WHERE TRIM(program_choice) = TRIM(%s) OR section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_title or '', program_id)),
         ("faculty class assignment(s)", "SELECT COUNT(*) AS n FROM faculty_assignments WHERE subject_id IN (SELECT id FROM subjects WHERE program_id = %s) OR section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_id, program_id)),
+        ("curriculum version(s)", "SELECT COUNT(*) AS n FROM curriculum_versions WHERE program_id = %s", (program_id,)),
         # teaching_loads.section stores the label "<PROGRAM_CODE> <SECTION>" (no FK).
         ("scheduled class(es)", """SELECT COUNT(*) AS n FROM sections s
                                    JOIN programs p ON p.program_id = s.program_id

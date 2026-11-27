@@ -485,6 +485,11 @@
                 <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-layout-grid-line"></i></div>
                 Manage Sections
             </a>
+            <a href="{{ url_for('curriculum.index') }}" id="curriculumMenu"
+                class="sidebar-link flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded {% if active_page == 'curriculum' %}active{% endif %}">
+                <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-book-2-line"></i></div>
+                Curriculum
+            </a>
             {% endif %}
             {% endif %}
 
@@ -528,7 +533,7 @@
     </aside>
     <div id="sidebarBackdrop" class="fixed inset-0 bg-black/30 z-30 hidden sm:hidden"></div>
 
-    <div class="flex-1 sm:ml-64 transition-all duration-300 ease-in-out" id="mainContentArea">
+    <div class="flex-1 min-w-0 sm:ml-64 transition-all duration-300 ease-in-out" id="mainContentArea">
         <header class="bg-white shadow-sm">
             <div class="flex items-center justify-between px-4 sm:px-6 h-16 border-b border-gray-200">
                 <div class="flex items-center">

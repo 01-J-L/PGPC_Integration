@@ -1,0 +1,124 @@
+{% extends 'admin_base.html' %}
+{% from 'curriculum/_macros.html' import status_badge, input_class, btn_primary, btn_secondary %}
+
+{% block title %}Curriculum Management{% endblock %}
+{% block breadcrumb %}Curriculum Management{% endblock %}
+{% block page_title %}Curriculum Management{% endblock %}
+
+{% block content %}
+<div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
+    <form method="GET" class="flex items-end gap-2">
+        <div>
+            <label for="program-filter" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Program</label>
+            <select id="program-filter" name="program" class="{{ input_class() }} w-64" onchange="this.form.submit()">
+                <option value="">All programs</option>
+                {% for p in programs %}
+                <option value="{{ p.id }}" {% if p.id == selected %}selected{% endif %}>{{ p.program_code or p.id|upper }} &ndash; {{ p.title }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+    <div class="flex gap-2">
+        <a href="{{ url_for('curriculum.import_upload') }}" class="{{ btn_secondary() }}"><i class="ri-upload-2-line mr-2"></i>Import reference file</a>
+        <button type="button" class="{{ btn_primary() }}" onclick="document.getElementById('new-version-dialog').showModal()">
+            <i class="ri-add-line mr-2"></i>New curriculum
+        </button>
+    </div>
+</div>
+
+{% if pending_imports %}
+<div class="mb-6 p-4 rounded-lg border border-yellow-200 bg-yellow-50">
+    <p class="text-sm font-semibold text-yellow-800 mb-2"><i class="ri-file-search-line mr-1"></i>Imports waiting for review</p>
+    <ul class="text-sm text-yellow-900 space-y-1">
+        {% for b in pending_imports %}
+        <li><a class="underline hover:text-primary" href="{{ url_for('curriculum.import_review', batch_id=b.id) }}">#{{ b.id }} {{ b.source_filename }}</a>
+            &middot; {{ b.program.program_code or b.program_id|upper }} &middot; uploaded by {{ b.uploaded_by }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if not rows %}
+<div class="bg-white p-10 rounded-xl border border-gray-200 text-center text-gray-500">No programs found. Add programs under Manage Content &rarr; Programs first.</div>
+{% endif %}
+
+{% for program, versions in rows %}
+<section class="bg-white rounded-xl shadow-sm border border-gray-200 mb-6" aria-labelledby="prog-{{ program.id }}">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 id="prog-{{ program.id }}" class="text-lg font-semibold text-gray-800">{{ program.program_code or program.id|upper }}
+            <span class="text-sm font-normal text-gray-500">&ndash; {{ program.title }}</span></h2>
+        <span class="text-xs text-gray-500">{{ versions|length }} curriculum version(s)</span>
+    </div>
+    {% if versions %}
+    <div class="relative overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                <tr>
+                    <th scope="col" class="px-6 py-3 text-left">Curriculum</th>
+                    <th scope="col" class="px-4 py-3 text-left">Effective A.Y.</th>
+                    <th scope="col" class="px-4 py-3 text-left">Status</th>
+                    <th scope="col" class="px-4 py-3 text-right">Subjects</th>
+                    <th scope="col" class="px-4 py-3 text-right">Units</th>
+                    <th scope="col" class="px-4 py-3 text-right">Students</th>
+                    <th scope="col" class="px-6 py-3"><span class="sr-only">Open</span></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for v, s in versions %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-3 font-medium text-gray-900">{{ v.name }}{% if s.locked %} <i class="ri-lock-line text-gray-400" title="Locked: in use"></i>{% endif %}
+                        {% if v.description %}<div class="text-xs text-gray-500 font-normal">{{ v.description }}</div>{% endif %}</td>
+                    <td class="px-4 py-3 text-gray-700">{{ v.effective_academic_year }}</td>
+                    <td class="px-4 py-3">{{ status_badge(v) }}</td>
+                    <td class="px-4 py-3 text-right">{{ s.subjects }}</td>
+                    <td class="px-4 py-3 text-right">{{ s.units|units }}</td>
+                    <td class="px-4 py-3 text-right">{{ s.students }}</td>
+                    <td class="px-6 py-3 text-right"><a href="{{ url_for('curriculum.version_detail', version_id=v.id) }}" class="text-primary font-medium hover:underline">Open</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="px-6 py-6 text-sm text-gray-500">No curriculum yet. Create one or import a plan of study.</p>
+    {% endif %}
+</section>
+{% endfor %}
+
+<dialog id="new-version-dialog" class="rounded-xl p-0 w-full max-w-lg backdrop:bg-black/40">
+    <form method="POST" action="{{ url_for('curriculum.create_version') }}" class="p-6 space-y-4">
+        <h3 class="text-lg font-semibold text-gray-800">New curriculum (draft)</h3>
+        <div>
+            <label for="nv-program" class="block text-sm font-medium text-gray-700 mb-1">Program</label>
+            <select id="nv-program" name="program_id" required class="{{ input_class() }}">
+                {% for p in programs %}<option value="{{ p.id }}" {% if p.id == selected %}selected{% endif %}>{{ p.program_code or p.id|upper }} &ndash; {{ p.title }}</option>{% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="nv-name" class="block text-sm font-medium text-gray-700 mb-1">Curriculum name</label>
+            <input id="nv-name" name="name" required maxlength="150" placeholder="e.g. BSCS Curriculum 2026" class="{{ input_class() }}">
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label for="nv-ay" class="block text-sm font-medium text-gray-700 mb-1">Effective academic year</label>
+                <input id="nv-ay" name="effective_academic_year" required pattern="\d{4}-\d{4}" placeholder="2026-2027" class="{{ input_class() }}">
+                <p class="text-xs text-gray-500 mt-1">The year the cohort using this plan entered.</p>
+            </div>
+            <div>
+                <label for="nv-years" class="block text-sm font-medium text-gray-700 mb-1">Year levels</label>
+                <select id="nv-years" name="max_year_level" class="{{ input_class() }}">
+                    {% for y in range(1, 6) %}<option value="{{ y }}" {% if y == 4 %}selected{% endif %}>{{ y }}</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+        <div>
+            <label for="nv-desc" class="block text-sm font-medium text-gray-700 mb-1">Description <span class="text-gray-400">(optional)</span></label>
+            <textarea id="nv-desc" name="description" rows="2" class="{{ input_class() }}" placeholder="e.g. For students who entered in A.Y. 2026-2027"></textarea>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="{{ btn_secondary() }}" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="submit" class="{{ btn_primary() }}">Create draft</button>
+        </div>
+    </form>
+</dialog>
+{% endblock %}

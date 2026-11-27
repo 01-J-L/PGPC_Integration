@@ -61,6 +61,47 @@ def _widen_document_blobs(cur):
     return ["ALTER TABLE `applicants` " + ", ".join(f"MODIFY `{c}` MEDIUMBLOB NULL" for c in narrow)]
 
 
+_TABLE_EXISTS = ("SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s")
+
+
+def model_table_ddl(table_names):
+    """CREATE TABLE statements generated from website/models.py, so the model
+    stays the single source of truth for new tables."""
+    from sqlalchemy.schema import CreateTable, CreateIndex
+    from sqlalchemy.dialects import mysql
+    from website import db
+    from website import models  # noqa: F401  (registers every table)
+    out = []
+    for name in table_names:
+        table = db.metadata.tables[name]
+        ddl = str(CreateTable(table).compile(dialect=mysql.dialect())).strip()
+        ddl = ddl.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS', 1)
+        out.append((name, ddl, [str(CreateIndex(ix).compile(dialect=mysql.dialect())).strip() for ix in table.indexes]))
+    return out
+
+
+def _create_model_tables(table_names):
+    def build(cur):
+        # New tables reference programs.program_id / student_users.id; a FOREIGN
+        # KEY on a VARCHAR needs the same charset+collation, so copy it from the
+        # live programs table instead of trusting the server default.
+        cur.execute("SELECT CHARACTER_SET_NAME, COLLATION_NAME FROM information_schema.COLUMNS "
+                    "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'programs' AND COLUMN_NAME = 'program_id'")
+        row = cur.fetchone()
+        options = (f" ENGINE=InnoDB DEFAULT CHARSET={row[0]} COLLATE={row[1]}" if row and row[0]
+                   else " ENGINE=InnoDB")
+        statements = []
+        for name, ddl, index_ddl in model_table_ddl(table_names):
+            cur.execute(_TABLE_EXISTS, (name,))
+            if cur.fetchone():
+                continue
+            # Replace the model's table options with the live database's.
+            statements.append(ddl[:ddl.rstrip().rfind(')') + 1] + options)
+            statements.extend(index_ddl)
+        return statements
+    return build
+
+
 MIGRATIONS = [
     {
         'id': '0001_enrollment_shs_document_columns',
@@ -92,6 +133,25 @@ MIGRATIONS = [
         # which is the safe outcome; restore from the backup instead in that case.
         'rollback': ["ALTER TABLE `applicants` " + ", ".join(
             f"MODIFY `{c}` BLOB NULL" for c in DOCUMENT_BLOB_COLUMNS)],
+    },
+    {
+        'id': '0003_curriculum_management',
+        'description': ("Phase 2: versioned curricula (curriculum_versions, curriculum_subjects, "
+                        "curriculum_prerequisites), student curriculum assignment (student_curricula), "
+                        "staged reference imports (curriculum_import_batches) and curriculum_audit_log. "
+                        "New tables only; no existing table is changed."),
+        'build': _create_model_tables(['curriculum_versions', 'curriculum_subjects', 'curriculum_prerequisites',
+                                       'student_curricula', 'curriculum_import_batches', 'curriculum_audit_log']),
+        # Refuse to drop tables that already hold curriculum data (use --force after exporting).
+        'rollback_guard': "SELECT (SELECT COUNT(*) FROM curriculum_versions) + (SELECT COUNT(*) FROM student_curricula)",
+        'rollback': [
+            "DROP TABLE IF EXISTS `curriculum_audit_log`",
+            "DROP TABLE IF EXISTS `curriculum_import_batches`",
+            "DROP TABLE IF EXISTS `student_curricula`",
+            "DROP TABLE IF EXISTS `curriculum_prerequisites`",
+            "DROP TABLE IF EXISTS `curriculum_subjects`",
+            "DROP TABLE IF EXISTS `curriculum_versions`",
+        ],
     },
 ]
 

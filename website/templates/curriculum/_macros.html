@@ -1,0 +1,15 @@
+{% macro status_badge(v) -%}
+{%- if v.status == 'active' -%}
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>
+{%- elif v.status == 'draft' -%}
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Draft</span>
+{%- else -%}
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-700">Archived</span>
+{%- endif -%}
+{%- if v.is_default_for_new %} <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700" title="Given to new first-year students">Default for new students</span>{% endif -%}
+{%- endmacro %}
+
+{% macro input_class() -%}w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary{%- endmacro %}
+{% macro btn_primary() -%}inline-flex items-center justify-center px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary/90 disabled:opacity-50{%- endmacro %}
+{% macro btn_secondary() -%}inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50{%- endmacro %}
+{% macro btn_danger() -%}inline-flex items-center justify-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700{%- endmacro %}

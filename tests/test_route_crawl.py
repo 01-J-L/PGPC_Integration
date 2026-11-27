@@ -47,12 +47,21 @@ def seeded(app):
     aid = dbx.x("INSERT INTO assessments (student_id, description, total_amount, amount_paid, balance, status) VALUES (%s,'Tuition',100,0,100,'unpaid')", (st['applicant_id'],))
     pay = dbx.x("INSERT INTO payments (student_id, assessment_id, amount_paid, payment_date, payment_method, cashier_username) VALUES (%s,%s,10,CURDATE(),'Cash','crawler')", (st['applicant_id'], aid))
     room = dbx.x("INSERT INTO room (room_name) VALUES (%s)", (_uniq('R'),))
+    ver = dbx.x("INSERT INTO curriculum_versions (program_id, name, effective_academic_year, status) VALUES (%s,'Crawl curriculum','2026-2027','active')", (pid,))
+    cs1 = dbx.x("INSERT INTO curriculum_subjects (curriculum_version_id, year_level, semester, subject_code, code_key, description, units) VALUES (%s,1,1,'CRW 101','CRW101','Crawl subject',3)", (ver,))
+    cs2 = dbx.x("INSERT INTO curriculum_subjects (curriculum_version_id, year_level, semester, subject_code, code_key, description, units) VALUES (%s,1,2,'CRW 102','CRW102','Crawl subject 2',3)", (ver,))
+    dbx.x("INSERT INTO curriculum_prerequisites (curriculum_subject_id, kind, prerequisite_subject_id) VALUES (%s,'subject',%s)", (cs2, cs1))
+    import json
+    batch = dbx.x("INSERT INTO curriculum_import_batches (program_id, source_filename, source_kind, source_sha256, payload) VALUES (%s,'crawl.xlsx','registration_form',%s,%s)",
+                  (pid, 'x' * 64, json.dumps({'parsed': {'kind': 'registration_form', 'title': 'Crawl', 'level': 'First Year-1st sem',
+                                                         'rows': [{'subject_code': 'CRW 101', 'description': 'Crawl subject', 'units': '3', 'prerequisite': '', 'year_level': 1, 'semester': 1},
+                                                                  {'subject_code': 'CRW 103', 'description': 'New one', 'units': '', 'prerequisite': 'CRW 999', 'year_level': 1, 'semester': 1}]}, 'edits': {}})))
     values = {
         'applicant_id': st['applicant_id'], 'student_id': st['applicant_id'], 'student_id_db': st['applicant_id'],
         'student_user_id': st['student_user_id'], 'program_id': pid, 'subject_id': sid, 'section_id': sec,
         'term_id': term['id'], 'payment_id': pay, 'user_id': dean, 'room_id': room, 'semester': 1,
         'section_name': '1A', 'year': '1st Year', 'id': 1, 'export_type': 'all', 'doc_type': 'card',
-        'filename': 'none.pdf', 'token': 'bad-token', 'batch_id': 1, 'assignment_id': 1, 'report_type': 'prelim',
+        'filename': 'none.pdf', 'token': 'bad-token', 'batch_id': batch, 'version_id': ver, 'assignment_id': 1, 'report_type': 'prelim',
     }
     yield {'values': values, 'student_user_id': st['student_user_id'], 'dean': dean, 'super': sup}
     dbx.close()

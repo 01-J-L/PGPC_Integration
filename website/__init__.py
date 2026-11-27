@@ -117,6 +117,10 @@ def create_app():
     app.register_blueprint(views, url_prefix='/')
     app.register_blueprint(auth, url_prefix='/')
 
+    # Phase 2: registrar curriculum management
+    from .curriculum.routes import curriculum
+    app.register_blueprint(curriculum, url_prefix='/admin/curriculum')
+
     # B. FACULTY SYSTEM BLUEPRINTS (Imported from the pasted 'faculty' folder)
     # Note: We wrap this in try/except so the app doesn't crash if files are missing
     try:
