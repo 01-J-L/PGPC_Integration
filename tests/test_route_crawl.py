@@ -85,6 +85,10 @@ def seeded(app):
           (term['year_name'], term['semester']))
     dbx.x("INSERT INTO grade_holds (student_user_id, academic_year, semester, reason, placed_by, placed_at) VALUES (%s,'','','crawl hold','crawl',NOW())",
           (st['student_user_id'],))
+    # Phase 8: an archived section
+    arch = dbx.x("INSERT INTO sections (program_id, year_level, section_name, section_letter, max_students, is_active, semester, school_year) "
+                 "VALUES (%s,'4th Year','4Z','Z',40,0,1,'2026-2027')", (pid,))
+    dbx.x("INSERT INTO section_archives (section_id, is_archived, was_active, reason, archived_by, archived_at) VALUES (%s,1,1,'crawl','crawl',NOW())", (arch,))
     import json
     batch = dbx.x("INSERT INTO curriculum_import_batches (program_id, source_filename, source_kind, source_sha256, payload) VALUES (%s,'crawl.xlsx','registration_form',%s,%s)",
                   (pid, 'x' * 64, json.dumps({'parsed': {'kind': 'registration_form', 'title': 'Crawl', 'level': 'First Year-1st sem',

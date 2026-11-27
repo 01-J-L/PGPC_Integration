@@ -6331,6 +6331,9 @@ def _program_delete_blockers(cursor, program_id, program_title):
         ("student application(s)", "SELECT COUNT(*) AS n FROM applicants WHERE TRIM(program_choice) = TRIM(%s) OR section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_title or '', program_id)),
         ("faculty class assignment(s)", "SELECT COUNT(*) AS n FROM faculty_assignments WHERE subject_id IN (SELECT id FROM subjects WHERE program_id = %s) OR section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_id, program_id)),
         ("curriculum version(s)", "SELECT COUNT(*) AS n FROM curriculum_versions WHERE program_id = %s", (program_id,)),
+        # Phase 8: registration forms / lines pointing at the program's sections
+        ("registration form(s)", "SELECT COUNT(*) AS n FROM registration_forms WHERE program_id = %s OR section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_id, program_id)),
+        ("registration-form subject line(s)", "SELECT COUNT(*) AS n FROM registration_form_subjects WHERE section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_id,)),
         # teaching_loads.section stores the label "<PROGRAM_CODE> <SECTION>" (no FK).
         ("scheduled class(es)", """SELECT COUNT(*) AS n FROM sections s
                                    JOIN programs p ON p.program_id = s.program_id
@@ -6401,6 +6404,7 @@ def admin_delete_program(program_id):
         cursor.execute("UPDATE subjects SET prerequisite_subject_id = NULL WHERE program_id = %s", (program_id,))
         cursor.execute("DELETE FROM subjects WHERE program_id = %s", (program_id,))
         cursor.execute("UPDATE applicants SET section_id = NULL WHERE section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_id,))
+        cursor.execute("DELETE FROM section_archives WHERE section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_id,))
         cursor.execute("DELETE FROM sections WHERE program_id = %s", (program_id,))
         cursor.execute("DELETE FROM program_courses WHERE program_id = %s", (program_id,))
         cursor.execute("DELETE FROM program_careers WHERE program_id = %s", (program_id,))
@@ -9506,7 +9510,8 @@ def admin_manage_sections():
                     cursor.execute("""
                         INSERT INTO sections (program_id, year_level, section_name, section_letter, max_students, semester, school_year)
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        ON DUPLICATE KEY UPDATE max_students = %s, is_active = TRUE
+                        ON DUPLICATE KEY UPDATE max_students = %s,
+                            is_active = IF(id IN (SELECT section_id FROM section_archives WHERE is_archived = 1), is_active, TRUE)
                     """, (program_id, year_level, section_name, letter, max_students, semester, school_year, max_students))
                 conn.commit()
                 flash(f"Generated {num_sections} sections.", "success")
@@ -9516,20 +9521,36 @@ def admin_manage_sections():
                 section_id = request.form.get('section_id')
                 max_students = request.form.get('max_students_edit')
                 is_active = True if request.form.get('is_active_edit') else False
-                cursor.execute("UPDATE sections SET max_students = %s, is_active = %s WHERE id = %s", (max_students, is_active, section_id))
-                conn.commit()
-                flash("Section updated.", "success")
+                cursor.execute("SELECT 1 FROM section_archives WHERE section_id = %s AND is_archived = 1", (section_id,))
+                if is_active and cursor.fetchone():
+                    flash("This section is archived. Restore it before making it active.", "danger")
+                else:
+                    cursor.execute("UPDATE sections SET max_students = %s, is_active = %s WHERE id = %s", (max_students, is_active, section_id))
+                    conn.commit()
+                    flash("Section updated.", "success")
 
             # 3. DELETE SECTION
-            elif action == 'delete_section':
+            # Phase 8: delete only unused sections; archive the others (website/sections/protection.py)
+            elif action in ('delete_section', 'archive_section', 'restore_section'):
+                from website import db as _db
+                from website.sections import protection
+                actor = _checkin_actor()
                 section_id = request.form.get('section_id')
-                cursor.execute("SELECT COUNT(*) as count FROM applicants WHERE section_id = %s", (section_id,))
-                if cursor.fetchone()['count'] > 0:
-                    flash("Cannot delete section with assigned students.", "danger")
-                else:
-                    cursor.execute("DELETE FROM sections WHERE id = %s", (section_id,))
-                    conn.commit()
-                    flash("Section deleted.", "success")
+                try:
+                    if action == 'delete_section':
+                        name = protection.delete(actor, section_id)
+                        msg = f'Section "{name}" deleted.'
+                    elif action == 'archive_section':
+                        sec = protection.archive(actor, section_id, request.form.get('reason'))
+                        msg = f'Section "{protection.display_name(sec)}" archived. Its records are kept; it no longer takes new students.'
+                    else:
+                        sec = protection.restore(actor, section_id, request.form.get('reason'))
+                        msg = f'Section "{protection.display_name(sec)}" restored.'
+                    _db.session.commit()
+                    flash(msg, "success")
+                except protection.SectionError as e:
+                    _db.session.rollback()
+                    flash(' '.join(e.messages), "danger")
 
             # 4. EQUALIZE / DISTRIBUTE STUDENTS
             elif action == 'distribute_year_level':
@@ -9611,7 +9632,9 @@ def admin_manage_sections():
         # 3. Fetch All Sections with Student Counts
         cursor.execute("""
             SELECT s.*, p.title as program_title,
-            (SELECT COUNT(*) FROM applicants a WHERE a.section_id = s.id) as current_students
+            (SELECT COUNT(*) FROM applicants a WHERE a.section_id = s.id) as current_students,
+            (SELECT sa.is_archived FROM section_archives sa WHERE sa.section_id = s.id) as is_archived,
+            (SELECT sa.reason FROM section_archives sa WHERE sa.section_id = s.id AND sa.is_archived = 1) as archive_reason
             FROM sections s
             JOIN programs p ON s.program_id = p.program_id
             ORDER BY p.title, s.year_level, s.section_letter

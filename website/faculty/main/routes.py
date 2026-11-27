@@ -1671,8 +1671,9 @@ def manage_section_schedule_hub():
 
     term_ended, term_ended_message = academic_term_status()
 
+    from website.sections.protection import archived_ids
     return render_template('faculty/manage_section_schedule_hub.html', 
-                           title='Manage Sections', 
+                           title='Manage Sections', archived_ids=archived_ids(),
                            form=form,
                            delete_form=delete_form, 
                            programs_with_sections=programs_with_sections,
@@ -2652,9 +2653,16 @@ def delete_program(program_id):
     program = Program.query.get_or_404(program_id)
     
     # Safety check: Do not allow deletion if courses are associated with this program
+    from website.sections import protection
+    in_use = protection.program_section_blockers(program_id)
     if program.courses.first():
         flash('Cannot delete this program because it has courses associated with it. Please remove the courses first.', 'error')
+    elif in_use:
+        # Phase 8: the ORM cascade would otherwise try to delete sections that still have history
+        flash('Cannot delete this program: section(s) still in use (%s). Archive the sections instead.'
+              % '; '.join('%s: %s' % (name, protection.describe(b)) for name, b in in_use), 'error')
     else:
+        db.session.execute(text("DELETE FROM section_archives WHERE section_id IN (SELECT id FROM sections WHERE program_id = :p)"), {'p': program_id})
         db.session.delete(program)
         db.session.commit()
         flash('Program has been deleted successfully.', 'success')
@@ -2967,40 +2975,45 @@ def delete_section_schedule(schedule_id):
 @main.route('/section/delete/<int:section_id>', methods=['POST'])
 @login_required
 def delete_section(section_id):
+    """Phase 8: delete only an unused section. A section with schedules, students,
+    class records or registration forms is refused (archive it instead). The class
+    records (faculty_assignments) used to be deleted silently here."""
+    return _section_action(section_id, 'delete')
+
+
+@main.route('/section/archive/<int:section_id>', methods=['POST'])
+@login_required
+def archive_section(section_id):
+    return _section_action(section_id, 'archive')
+
+
+@main.route('/section/restore/<int:section_id>', methods=['POST'])
+@login_required
+def restore_section(section_id):
+    return _section_action(section_id, 'restore')
+
+
+def _section_action(section_id, action):
     if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
-    
-    section_to_delete = Section.query.get_or_404(section_id)
-    
-    # SAFETY CHECK: Do not allow deletion if the section has classes scheduled.
-    full_section_name = f"{section_to_delete.program.program_code} {section_to_delete.name}"
-    has_loads = TeachingLoad.query.filter_by(
-        section=full_section_name,
-        school_year=section_to_delete.school_year,
-    ).join(Course, TeachingLoad.course_code == Course.course_code)\
-     .filter(Course.semester == section_to_delete.semester)\
-     .first()
-
-    if has_loads:
-        flash(f'Cannot delete section "{full_section_name}" because it has classes scheduled. Please remove them from the schedule grid first.', 'error')
-    elif Applicant.query.filter_by(section_id=section_to_delete.id).count() > 0:
-        flash(f'Cannot delete section "{full_section_name}" because it still has students assigned. Move them to another section first.', 'error')
-    else:
-        try:
-            # faculty_assignments.section_id is NOT NULL, so the assignments cannot
-            # simply be detached. Deleting them explicitly avoids the IntegrityError
-            # ("Column 'section_id' cannot be null") that SQLAlchemy throws when it
-            # tries to NULL the FK while flushing the section delete.
-            FacultyAssignment.query.filter_by(section_id=section_to_delete.id).delete(synchronize_session=False)
-            db.session.delete(section_to_delete)
-            db.session.commit()
-            flash(f'Section "{full_section_name}" has been deleted successfully.', 'success')
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.exception('Failed to delete section %s', section_id)
-            flash(f'Could not delete section "{full_section_name}": {e}', 'error')
-
+    from website.curriculum.service import Actor
+    from website.sections import protection
+    actor = Actor(current_user.full_name, current_user.role)
+    try:
+        if action == 'delete':
+            msg = 'Section "%s" has been deleted.' % protection.delete(actor, section_id)
+        elif action == 'archive':
+            sec = protection.archive(actor, section_id, request.form.get('reason'))
+            msg = 'Section "%s" archived: its schedules and records are kept, it takes no new students.' % protection.display_name(sec)
+        else:
+            sec = protection.restore(actor, section_id, request.form.get('reason'))
+            msg = 'Section "%s" restored.' % protection.display_name(sec)
+        db.session.commit()
+        flash(msg, 'success')
+    except protection.SectionError as e:
+        db.session.rollback()
+        flash(' '.join(e.messages), 'error')
     return redirect(url_for('faculty_main.manage_section_schedule_hub'))
 
 @main.route('/download-curriculum-template')
@@ -4183,6 +4196,19 @@ def grading_delete_program(program_id):
         return redirect(url_for('faculty_main.manage_programs'))
 
     program = Program.query.get_or_404(program_id)
+    # Phase 8: even the force delete may not destroy academic or enrollment history
+    # (grades, students, class records, schedules, registration forms). It now removes
+    # configuration only; archive the sections / hide the program instead.
+    from website.auth import _program_delete_blockers
+    raw = db.session.connection().connection.cursor(dictionary=True)
+    try:
+        history = _program_delete_blockers(raw, program_id, program.title)
+    finally:
+        raw.close()
+    if history:
+        flash('Cannot delete program "%s": it has %s. Academic and enrollment history is never deleted; '
+              'archive its sections and hide the program instead.' % (program.program_code, ', '.join(history)), 'danger')
+        return redirect(url_for('faculty_main.manage_programs'))
     try:
         db.session.execute(text("""
             DELETE FROM subject_prerequisites
@@ -4210,6 +4236,7 @@ def grading_delete_program(program_id):
         db.session.execute(text("UPDATE subjects SET prerequisite_subject_id = NULL WHERE program_id = :pid"), {'pid': program_id})
         db.session.execute(text("DELETE FROM subjects WHERE program_id = :pid"), {'pid': program_id})
         db.session.execute(text("UPDATE applicants SET section_id = NULL WHERE section_id IN (SELECT id FROM sections WHERE program_id = :pid)"), {'pid': program_id})
+        db.session.execute(text("DELETE FROM section_archives WHERE section_id IN (SELECT id FROM sections WHERE program_id = :pid)"), {'pid': program_id})
         db.session.execute(text("DELETE FROM sections WHERE program_id = :pid"), {'pid': program_id})
         db.session.execute(text("DELETE FROM program_courses WHERE program_id = :pid"), {'pid': program_id})
         db.session.execute(text("DELETE FROM program_careers WHERE program_id = :pid"), {'pid': program_id})

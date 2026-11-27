@@ -277,6 +277,15 @@ MIGRATIONS = [
             "DROP TABLE IF EXISTS `grade_releases`",
         ],
     },
+    {
+        'id': '0009_section_archives',
+        'description': ("Phase 8: section_archives (archive instead of deleting a section that has students, "
+                        "schedules, class records or registration forms). New table only; sections is not altered "
+                        "(the existing foreign keys to sections are already ON DELETE RESTRICT)."),
+        'build': _create_model_tables(['section_archives']),
+        'rollback_guard': "SELECT COUNT(*) FROM section_archives",
+        'rollback': ["DROP TABLE IF EXISTS `section_archives`"],
+    },
 ]
 
 _LEDGER_DDL = """
