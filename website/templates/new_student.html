@@ -418,8 +418,8 @@
                         <i id="photoPlaceholder" class="ri-user-line text-gray-400 text-4xl"></i>
                     </div>
                     
-                    <p class="text-sm text-gray-700 text-center mb-2">Attach Recent 2x2 Photo (White BG) <span class="text-red-500">*</span></p>
-                    <input type="file" id="photoInput" name="photo" accept="image/*" class="hidden" required />
+                    <p class="text-sm text-gray-700 text-center mb-2">Attach Recent 2x2 Photo (White BG) <span class="text-gray-400 text-xs">(Optional)</span></p>
+                    <input type="file" id="photoInput" name="photo" accept="image/*" class="hidden" />
                     <button type="button" id="uploadPhotoBtn" class="bg-primary text-white px-4 py-2 rounded-button text-sm whitespace-nowrap">Upload Photo</button>
                     <div id="photoToast" class="hidden"></div>
                   </div>
@@ -991,11 +991,8 @@
             return; 
         }
 
-        // 2. Photo
-        if(photoInput.files.length === 0) {
-            showPhotoToastGlobal("⚠️ Upload 2x2 Photo.", "error"); return;
-        }
-        if(!isPhotoValid) {
+        // 2. Photo (optional) - validate only when a file is selected
+        if(photoInput.files.length > 0 && !isPhotoValid) {
             showPhotoToastGlobal("⚠️ Photo Invalid (Must be square + white bg).", "error"); return;
         }
 

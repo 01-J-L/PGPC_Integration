@@ -398,6 +398,25 @@ tailwind.config = {
                                 </li>
                             </ul>
                         </div>
+
+                        <!-- 2x2 Photo Card -->
+                        <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                            <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wide mb-4 pb-2 border-b border-gray-100">
+                                2x2 Photo
+                            </h3>
+                            <div class="flex flex-col items-center gap-3">
+                                <img id="accountPhotoPreview"
+                                     src="{{ url_for('auth.get_applicant_photo', applicant_id=application.applicant_id) }}?t={{ application.last_updated_at.timestamp() if application.last_updated_at else '' }}"
+                                     onerror="this.src='{{ url_for('static', filename='images/default_avatar.png') }}'"
+                                     alt="2x2 Photo" class="w-28 h-28 rounded-lg object-cover border border-gray-200">
+                                <input type="file" id="accountPhotoInput" accept="image/*" class="hidden">
+                                <button type="button" id="accountUploadPhotoBtn"
+                                        class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+                                    Upload / Change Photo
+                                </button>
+                                <p class="text-xs text-gray-500 text-center">Optional. Recent 2x2 photo with white background.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -678,6 +697,54 @@ tailwind.config = {
                 document.body.removeChild(clone); // Cleanup
             });
         });
+
+        // --- ACCOUNT 2x2 PHOTO UPLOAD (OPTIONAL) ---
+        const accountPhotoInput = document.getElementById('accountPhotoInput');
+        const accountUploadPhotoBtn = document.getElementById('accountUploadPhotoBtn');
+        const accountPhotoPreview = document.getElementById('accountPhotoPreview');
+
+        if (accountUploadPhotoBtn && accountPhotoInput) {
+            accountUploadPhotoBtn.addEventListener('click', () => accountPhotoInput.click());
+            accountPhotoInput.addEventListener('change', async () => {
+                const file = accountPhotoInput.files[0];
+                if (!file) return;
+
+                if (!file.type.startsWith('image/')) {
+                    alert('Please select an image file.');
+                    accountPhotoInput.value = '';
+                    return;
+                }
+                if (file.size > 5 * 1024 * 1024) {
+                    alert('Photo is too large (max 5MB).');
+                    accountPhotoInput.value = '';
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('photo', file);
+                accountUploadPhotoBtn.disabled = true;
+                accountUploadPhotoBtn.textContent = 'Uploading...';
+
+                try {
+                    const res = await fetch("{{ url_for('auth.update_application_photo', applicant_id=application.applicant_id) }}", {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.success) throw new Error(data.message || 'Upload failed.');
+                    if (accountPhotoPreview) {
+                        accountPhotoPreview.src = "{{ url_for('auth.get_applicant_photo', applicant_id=application.applicant_id) }}?t=" + Date.now();
+                    }
+                    alert('Photo updated successfully!');
+                } catch (err) {
+                    alert('Upload failed: ' + err.message);
+                } finally {
+                    accountUploadPhotoBtn.disabled = false;
+                    accountUploadPhotoBtn.textContent = 'Upload / Change Photo';
+                    accountPhotoInput.value = '';
+                }
+            });
+        }
     });
 </script>
 {% endblock %}

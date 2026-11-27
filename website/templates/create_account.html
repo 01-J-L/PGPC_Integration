@@ -493,6 +493,11 @@ header {
         const oldStudentIdWrapper = document.getElementById('old_student_id_wrapper');
         const oldStudentIdInput = document.getElementById('old_student_id');
         const studentIdWarning = document.getElementById('studentIdWarning');
+        if (oldStudentIdInput) {
+            oldStudentIdInput.addEventListener('input', function () {
+                this.value = this.value.toUpperCase();
+            });
+        }
         const emailInput = document.getElementById('email-address');
         const passwordInput = document.getElementById('password');
         const confirmPasswordInput = document.getElementById('confirm-password');

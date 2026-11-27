@@ -434,6 +434,11 @@
         const studentTypeRadiosAdmin = document.querySelectorAll('input[name="student_type"]');
         const oldStudentIdWrapperAdmin = document.getElementById('old_student_id_wrapper_admin');
         const oldStudentIdInputAdmin = document.getElementById('old_student_id');
+        if (oldStudentIdInputAdmin) {
+            oldStudentIdInputAdmin.addEventListener('input', function () {
+                this.value = this.value.toUpperCase();
+            });
+        }
 
         function handleAdminStudentTypeChange() {
             if (document.querySelector('input[name="student_type"]:checked').value === 'old') {

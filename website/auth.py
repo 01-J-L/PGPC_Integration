@@ -31,6 +31,7 @@ from flask import send_file, Response, current_app
 import tempfile
 import json
 import shutil
+import hashlib
 
 
 # ----------------- BLUEPRINT SETUP -----------------
@@ -2463,24 +2464,29 @@ def apply_org_discount(student_id):
             return redirect(url_for('auth.student_discount'))
 
         # 5. APPLY: Record as a "Payment" (Type: Discount) and Reduce Balance
+        # Never credit more than the remaining balance so it can't go negative
+        applied_discount = min(discount_amount, float(assessment['balance']))
+        if applied_discount <= 0:
+            flash("This assessment has no remaining balance to apply the discount to.", "warning")
+            return redirect(url_for('auth.student_discount'))
+
         # Update Assessment
-        new_balance = float(assessment['balance']) - discount_amount
+        new_balance = float(assessment['balance']) - applied_discount
         new_status = 'paid' if new_balance <= 0 else 'partial'
-        # Ensure balance doesn't go below zero for logic, though technically a refund/credit
         
         cursor.execute("""
             UPDATE assessments 
-            SET balance = balance - %s, 
+            SET balance = GREATEST(0, balance - %s), 
                 amount_paid = amount_paid + %s,
                 status = %s 
             WHERE id = %s
-        """, (discount_amount, discount_amount, new_status, assessment['id']))
+        """, (applied_discount, applied_discount, new_status, assessment['id']))
 
         # Insert Payment Record (Log as Discount)
         cursor.execute("""
             INSERT INTO payments (student_id, assessment_id, amount_paid, payment_date, payment_method, remark, cashier_username)
             VALUES (%s, %s, %s, NOW(), 'Discount', %s, %s)
-        """, (student_id, assessment['id'], discount_amount, f"Org Discount: {student['organization']}", session.get('user_name')))
+        """, (student_id, assessment['id'], applied_discount, f"Org Discount: {student['organization']}", session.get('user_name')))
 
         # Log Application
         cursor.execute("""
@@ -2489,7 +2495,7 @@ def apply_org_discount(student_id):
         """, (student_id, rule['id'], session.get('user_name')))
 
         conn.commit()
-        flash(f"Discount of ₱{discount_amount} applied successfully.", "success")
+        flash(f"Discount of ₱{applied_discount:,.2f} applied successfully.", "success")
 
     except Exception as e:
         print(f"Error applying discount: {e}")
@@ -3027,11 +3033,55 @@ def update_payment(student_id_db):
         # --- HANDLE POST (Record Payment) ---
         if request.method == 'POST':
             assessment_id = request.form.get('assessment_id')
-            amount = float(request.form.get('amount'))
             remark = request.form.get('remark')
             payment_method = request.form.get('payment_method')
             date_str = request.form.get('payment_date')
-            
+
+            # Parse and validate the amount
+            try:
+                amount = float(request.form.get('amount') or 0)
+            except (TypeError, ValueError):
+                amount = 0
+
+            if not assessment_id:
+                flash("Please select an assessment to pay.", "warning")
+                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
+
+            if amount <= 0:
+                flash("Payment amount must be greater than zero.", "warning")
+                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
+
+            # Verify the assessment belongs to this student and still has a balance.
+            # FOR UPDATE locks the row so two cashiers can't pay the same balance twice.
+            cursor.execute("""
+                SELECT id, description, total_amount, amount_paid, balance, status
+                FROM assessments
+                WHERE id = %s AND student_id = %s
+                FOR UPDATE
+            """, (assessment_id, student_id_db))
+            selected_assessment = cursor.fetchone()
+
+            if not selected_assessment:
+                flash("Invalid assessment selected for this student.", "danger")
+                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
+
+            remaining_balance = float(selected_assessment['balance'] or 0)
+            description = selected_assessment['description']
+
+            if selected_assessment['status'] == 'paid' or remaining_balance <= 0:
+                flash(f"'{description}' is already fully paid. No balance remaining.", "warning")
+                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
+
+            # LIMIT: a payment can never exceed the remaining balance (no negative balances)
+            if round(amount, 2) > round(remaining_balance, 2):
+                flash(
+                    f"Payment of ₱{amount:,.2f} exceeds the remaining balance of "
+                    f"₱{remaining_balance:,.2f} for '{description}'. "
+                    f"Please enter an amount up to the remaining balance.",
+                    "warning"
+                )
+                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
+
             # A. Insert Payment Record
             cursor.execute("""
                 INSERT INTO payments (student_id, assessment_id, amount_paid, payment_date, payment_method, remark, cashier_username)
@@ -3043,8 +3093,8 @@ def update_payment(student_id_db):
 
             # B. Update Assessment Balance (if linked to one)
             if assessment_id:
-                # Deduct amount from balance, add to amount_paid
-                cursor.execute("UPDATE assessments SET amount_paid = amount_paid + %s, balance = balance - %s WHERE id = %s", 
+                # Deduct amount from balance, add to amount_paid (balance floored at 0)
+                cursor.execute("UPDATE assessments SET amount_paid = amount_paid + %s, balance = GREATEST(0, balance - %s) WHERE id = %s", 
                                (amount, amount, assessment_id))
                 
                 # Check if fully paid to update status
@@ -3369,10 +3419,15 @@ def edit_batch_assessment(batch_id):
             UPDATE assessments 
             SET description = %s, 
                 total_amount = %s,
-                balance = %s - amount_paid
+                balance = GREATEST(0, %s - amount_paid),
+                status = CASE
+                    WHEN amount_paid >= %s THEN 'paid'
+                    WHEN amount_paid > 0 THEN 'partial'
+                    ELSE 'unpaid'
+                END
             WHERE (batch_id = %s OR (batch_id IS NULL AND description = %s)) 
             AND status != 'paid'
-        """, (new_desc, new_amount, new_amount, batch_id, old_desc))
+        """, (new_desc, new_amount, new_amount, new_amount, batch_id, old_desc))
 
         conn.commit()
         flash(f"Batch log updated and student balances adjusted.", "success")
@@ -3819,6 +3874,51 @@ def accounting_dashboard():
                            total_revenue=total_revenue, 
                            total_expenses=total_expenses,
                            net_income=total_revenue - total_expenses)
+
+
+# ----------------- LIVE DATA SYNC -----------------
+
+@auth.route('/api/live-data-version', methods=['GET'])
+def live_data_version():
+    """Returns a fingerprint of finance-related tables so open pages can
+    auto-refresh when another user adds/edits a payment or assessment."""
+    if session.get('user_role') not in ['cashier', 'accounting', 'admin', 'registrar']:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"version": "0"})
+
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM payments) AS payments_count,
+                (SELECT COALESCE(MAX(id), 0) FROM payments) AS payments_max_id,
+                (SELECT COALESCE(SUM(amount_paid), 0) FROM payments) AS payments_total,
+                (SELECT COUNT(*) FROM assessments) AS assessments_count,
+                (SELECT COALESCE(MAX(id), 0) FROM assessments) AS assessments_max_id,
+                (SELECT COALESCE(SUM(balance), 0) FROM assessments) AS assessments_balance,
+                (SELECT COALESCE(SUM(amount_paid), 0) FROM assessments) AS assessments_paid,
+                (SELECT COALESCE(MAX(last_updated_at), '1970-01-01 00:00:00') FROM applicants) AS applicants_updated,
+                (SELECT COUNT(*) FROM applicants) AS applicants_count,
+                (SELECT COUNT(*) FROM voucher_returns) AS voucher_returns_count,
+                (SELECT COUNT(*) FROM student_discounts_applied) AS discounts_count,
+                (SELECT COUNT(*) FROM batch_assessments_log) AS batches_count
+        """)
+        row = cursor.fetchone()
+        fingerprint = json.dumps(row, default=str, sort_keys=True)
+        version = hashlib.md5(fingerprint.encode()).hexdigest()
+        return jsonify({"version": version})
+
+    except Exception as e:
+        print(f"Error in live_data_version: {e}")
+        return jsonify({"version": "0"})
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
 
 # ----------------- ADMIN ROUTES -----------------
 
@@ -4717,7 +4817,7 @@ def admin_update_application_ids(applicant_id):
     if session.get('user_role') not in ['admin', 'registrar']:
         return jsonify({"success": False, "message": "Unauthorized"}), 401
     
-    old_student_id = request.form.get('old_student_id', '').strip() or None
+    old_student_id = (request.form.get('old_student_id') or '').strip().upper() or None
     control_number = request.form.get('control_number', '').strip() or None
 
     conn = None
@@ -7734,7 +7834,7 @@ def admin_add_application_by_admin_action():
         cursor = conn.cursor(dictionary=True)
 
         student_type = request.form.get('student_type', 'new')
-        old_student_id = request.form.get('old_student_id')
+        old_student_id = (request.form.get('old_student_id') or '').strip().upper() or None
 
         if student_type == 'old':
             if not old_student_id or not old_student_id.strip():
@@ -8581,7 +8681,7 @@ def admin_view_application_page(applicant_id):
 # NEW: Endpoint for checking if an old_student_id exists
 @auth.route('/check-student-id', methods=['POST'])
 def check_student_id_exists():
-    student_id = request.json.get('student_id')
+    student_id = (request.json.get('student_id') or '').strip().upper()
     if not student_id:
         return jsonify({"exists": False})
 
@@ -8641,7 +8741,7 @@ def create_student_account_page():
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
         student_type = request.form.get('student_type')
-        old_student_id = request.form.get('old_student_id')
+        old_student_id = (request.form.get('old_student_id') or '').strip().upper() or None
 
         # --- LOGIC: Block specific types if closed ---
         if not is_new_open and student_type == 'new':
@@ -9124,7 +9224,7 @@ def submit_application():
 
         # 1. Process Standard Files
         files_to_upload = {
-            'photo': ('2x2 Photo', MAX_PHOTO_SIZE_MB, True), 
+            'photo': ('2x2 Photo', MAX_PHOTO_SIZE_MB, False), 
             'shs_diploma_file_input': ('SHS Diploma', MAX_DOC_SIZE_MB, True),
             'shs_card_file_input': ('SHS Card', MAX_DOC_SIZE_MB, True),
             'birth_certificate_file_input': ('Birth Certificate', MAX_DOC_SIZE_MB, True)
@@ -9247,7 +9347,7 @@ def submit_application():
             return redirect(url_for('views.application_status_page'))
 
         student_type = request.form.get('student_type', 'new')
-        old_student_id = request.form.get('old_student_id')
+        old_student_id = (request.form.get('old_student_id') or '').strip().upper() or None
         
         # Generate Admission ID (A-series) for new students
         new_control_number = None
@@ -9372,19 +9472,9 @@ def enrollment_form_page(applicant_id):
             return redirect(url_for('views.application_status_page'))
             
         cursor = conn.cursor(dictionary=True)
-        # MODIFIED: Select original_enrollment_status to check for re-enrollment
+        # MODIFIED: Select * so every field used by enrollment_form.html is available
         cursor.execute("""
-            SELECT 
-                applicant_id, first_name, last_name, middle_name, email_address, program_choice, 
-                academic_year, application_status, date_of_birth, place_of_birth, sex, civil_status,
-                religion, mobile_number, permanent_address_street_barangay, permanent_address_city_municipality,
-                permanent_address_province, senior_high_school, senior_high_school_year_from,
-                senior_high_school_year_to, father_name, father_occupation, father_contact_number,
-                mother_maiden_name, mother_occupation, mother_contact_number,
-                guardian_name, guardian_contact_number,
-                shs_diploma_file, shs_card_file, birth_certificate_file, photo,
-                original_enrollment_status, student_user_id, old_student_id, control_number
-            FROM applicants 
+            SELECT * FROM applicants 
             WHERE applicant_id = %s AND student_user_id = %s
         """, (applicant_id, student_user_id))
         application = cursor.fetchone()
@@ -9420,7 +9510,18 @@ def enrollment_form_page(applicant_id):
             'photo': bool(application.get('photo'))
         }
 
-        return render_template('enrollment_form.html', application=application, docs_submitted=docs_submitted, student_logged_in=True)
+        all_programs = _get_program_list()
+        active_term = _get_active_term()
+
+        age_val = ''
+        if application.get('date_of_birth'):
+            today = datetime.date.today()
+            dob = application['date_of_birth']
+            age_val = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+
+        return render_template('enrollment_form.html', application=application, docs_submitted=docs_submitted,
+                               programs=all_programs, active_term=active_term, calculated_age=age_val,
+                               student_logged_in=True)
 
     except Exception as e:
         flash(f"An error occurred: {e}", "danger")
