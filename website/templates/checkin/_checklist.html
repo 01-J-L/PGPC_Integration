@@ -32,6 +32,7 @@
 {% if cl.checkin %}
 <div class="mt-3 p-3 rounded-md bg-green-50 border border-green-200 text-sm text-green-800" id="checkin-status">
     <p class="font-semibold"><i class="ri-shield-check-line"></i> Checked in by {{ cl.checkin.checked_in_by }}, {{ cl.checkin.checked_in_at.strftime('%b %d, %Y %I:%M %p') }}</p>
+    {% if cl.control_number %}<p class="mt-1">Control No. <strong class="font-mono" id="control-number">{{ cl.control_number }}</strong></p>{% endif %}
     {% if user_role in ['registrar', 'admin'] %}
     <form method="POST" action="{{ url_for('checkin.undo', applicant_id=applicant_id) }}" class="mt-2"
           onsubmit="var r = prompt('Reason for undoing this check-in (the student returns to Enrolling):'); if (!r) return false; this.reason.value = r; return true;">

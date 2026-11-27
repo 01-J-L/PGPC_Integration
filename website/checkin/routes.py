@@ -83,8 +83,8 @@ def do_check_in(applicant_id):
         _fail(e)
         return _back(_review_url(applicant_id, term_id))
     notify_enrolled(res)
-    flash('%s is checked in and officially enrolled.%s%s' % (
-        res['name'], ' New student ID: %s.' % res['new_id'] if res['new_id'] else '', res['fee_note']), 'success')
+    flash('%s is checked in and officially enrolled. Control No. %s.%s%s' % (
+        res['name'], res['control_number'], ' New student ID: %s.' % res['new_id'] if res['new_id'] else '', res['fee_note']), 'success')
     return _back(_review_url(applicant_id, term_id))
 
 
@@ -130,3 +130,54 @@ def notify_enrolled(res):
             send_application_status_email(res['email'], res['name'], 'Enrolled', res['applicant_id'])
     except Exception as err:     # noqa: BLE001 - mail problems are logged only
         print(f"[WARN] enrollment e-mail not sent for applicant {res.get('applicant_id')}: {err}")
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: control numbers
+# ---------------------------------------------------------------------------
+
+@checkin.route('/control-numbers')
+def control_numbers():
+    if session.get('user_role') not in service.CHECKIN_ROLES:
+        return redirect(url_for('auth.admin_login'))
+    from website.checkin import control
+    terms = AcademicTerm.query.order_by(AcademicTerm.year_name.desc(), AcademicTerm.semester.desc()).all()
+    term_id = request.args.get('term_id', type=int)
+    search = (request.args.get('q') or '').strip()
+    active = service.active_term()
+    missing = 0
+    if active:
+        missing = sum(1 for ci in service.EnrollmentCheckin.query.filter_by(academic_term_id=active.id, active=True).all()
+                      if control.for_student_term(ci.student_user_id, active.id) is None)
+    return render_template('checkin/control_numbers.html', sequences=control.sequences(),
+                           rows=control.issued(term_id, search), terms=terms, term_id=term_id, q=search,
+                           active=active, missing=missing, school_years=sorted({t.year_name for t in terms}, reverse=True),
+                           active_page='control_numbers')
+
+
+@checkin.route('/control-numbers/next', methods=['POST'])
+def control_next():
+    from website.checkin import control
+    try:
+        nxt = control.set_next(_actor(), request.form.get('school_year'), request.form.get('next_number'))
+        db.session.commit()
+        flash('The next control number will be %s.' % nxt, 'success')
+    except control.ControlNumberError as e:
+        _fail(e)
+    return redirect(url_for('checkin.control_numbers'))
+
+
+@checkin.route('/control-numbers/backfill', methods=['POST'])
+def control_backfill():
+    from website.checkin import control
+    term = service.active_term()
+    try:
+        if term is None:
+            raise control.ControlNumberError('There is no active academic term.')
+        done = control.backfill(_actor(), term)
+        db.session.commit()
+        flash(('Issued %d control number(s): %s.' % (len(done), ', '.join(done[:20]) + (' …' if len(done) > 20 else '')))
+              if done else 'Every checked-in student of the active term already has a control number.', 'success')
+    except control.ControlNumberError as e:
+        _fail(e)
+    return redirect(url_for('checkin.control_numbers'))

@@ -1377,6 +1377,52 @@ INSERT IGNORE INTO enrollment_checklist_requirements (code, label, description, 
   ('dean', 'Dean approval', 'Inactive by default (removed from the review screen of the uploaded system).', 'manual', 'admin', 'all', 0, 0, 40, 'migration 0006'),
   ('president', 'President approval', 'Inactive by default (removed from the review screen of the uploaded system).', 'manual', 'admin', 'all', 0, 0, 50, 'migration 0006');
 
+
+-- =====================================================================
+--  PHASE 6: ENROLLMENT CONTROL NUMBERS (generated from website/models.py)
+-- =====================================================================
+-- ---- control_number_sequences ------------------------------------
+CREATE TABLE IF NOT EXISTS control_number_sequences (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	prefix VARCHAR(10) NOT NULL DEFAULT 'PGPC', 
+	year_code VARCHAR(2) NOT NULL, 
+	school_year VARCHAR(9), 
+	last_number INTEGER NOT NULL DEFAULT 0, 
+	updated_by VARCHAR(150), 
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_control_sequence UNIQUE (prefix, year_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- control_numbers ---------------------------------------------
+CREATE TABLE IF NOT EXISTS control_numbers (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	number VARCHAR(30) NOT NULL, 
+	sequence_id INTEGER NOT NULL, 
+	seq INTEGER NOT NULL, 
+	student_user_id INTEGER NOT NULL, 
+	applicant_id INTEGER NOT NULL, 
+	academic_term_id INTEGER NOT NULL, 
+	registration_form_id INTEGER, 
+	issued_by VARCHAR(150) NOT NULL, 
+	issued_role VARCHAR(30), 
+	issued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	source VARCHAR(20) NOT NULL DEFAULT 'check_in', 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_control_number_term UNIQUE (student_user_id, academic_term_id), 
+	CONSTRAINT uq_control_number_seq UNIQUE (sequence_id, seq), 
+	UNIQUE (number), 
+	FOREIGN KEY(sequence_id) REFERENCES control_number_sequences (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(applicant_id) REFERENCES applicants (applicant_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(academic_term_id) REFERENCES academic_terms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(registration_form_id) REFERENCES registration_forms (id) ON DELETE RESTRICT,
+	INDEX ix_control_numbers_registration_form_id (registration_form_id),
+	INDEX ix_control_numbers_academic_term_id (academic_term_id),
+	INDEX ix_control_numbers_applicant_id (applicant_id),
+	INDEX ix_control_numbers_sequence_id (sequence_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------
 --  Schema migration ledger (website/schema_migrations.py).
 --  A database built from THIS file already contains every change below, so
@@ -1393,7 +1439,8 @@ INSERT IGNORE INTO schema_migrations (id, description, applied_at) VALUES
   ('0003_curriculum_management', 'built into full.sql', NOW()),
   ('0004_registration_forms', 'built into full.sql', NOW()),
   ('0005_enrollment_finance', 'built into full.sql', NOW()),
-  ('0006_enrollment_checkin', 'built into full.sql', NOW());
+  ('0006_enrollment_checkin', 'built into full.sql', NOW()),
+  ('0007_control_numbers', 'built into full.sql', NOW());
 
 SET FOREIGN_KEY_CHECKS = 1;
 

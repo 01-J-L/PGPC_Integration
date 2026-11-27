@@ -712,6 +712,51 @@ CHECKIN_TABLES = ['enrollment_checklist_requirements', 'enrollment_checklist_ite
                   'enrollment_audit_log']
 
 
+# =========================================================
+# PHASE 6: PGPC-YY-NNNN ENROLLMENT CONTROL NUMBERS
+# =========================================================
+
+class ControlNumberSequence(db.Model):
+    """One counter per prefix and school-year code (e.g. PGPC / 26). Locked with
+    SELECT ... FOR UPDATE while a number is issued, so numbers are never shared."""
+    __tablename__ = 'control_number_sequences'
+
+    id = db.Column(db.Integer, primary_key=True)
+    prefix = db.Column(db.String(10), nullable=False, default='PGPC', server_default='PGPC')
+    year_code = db.Column(db.String(2), nullable=False)            # '26' for 2026-2027
+    school_year = db.Column(db.String(9))                          # '2026-2027' (for display)
+    last_number = db.Column(db.Integer, nullable=False, default=0, server_default=_sa.text('0'))
+    updated_by = db.Column(db.String(150))
+    updated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+    __table_args__ = (db.UniqueConstraint('prefix', 'year_code', name='uq_control_sequence'), _INNODB)
+
+
+class ControlNumber(db.Model):
+    """Register of every control number issued. Rows are never deleted or reused:
+    one number per student and term, kept even if the check-in is undone."""
+    __tablename__ = 'control_numbers'
+
+    id = db.Column(db.Integer, primary_key=True)
+    number = db.Column(db.String(30), nullable=False, unique=True)
+    sequence_id = db.Column(db.Integer, db.ForeignKey('control_number_sequences.id', ondelete='RESTRICT'), nullable=False, index=True)
+    seq = db.Column(db.Integer, nullable=False)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False)
+    applicant_id = db.Column(db.Integer, db.ForeignKey('applicants.applicant_id', ondelete='RESTRICT'), nullable=False, index=True)
+    academic_term_id = db.Column(db.Integer, db.ForeignKey('academic_terms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    registration_form_id = db.Column(db.Integer, db.ForeignKey('registration_forms.id', ondelete='RESTRICT'), index=True)
+    issued_by = db.Column(db.String(150), nullable=False)
+    issued_role = db.Column(db.String(30))
+    issued_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+    source = db.Column(db.String(20), nullable=False, default='check_in', server_default='check_in')   # check_in / backfill
+
+    __table_args__ = (db.UniqueConstraint('student_user_id', 'academic_term_id', name='uq_control_number_term'),
+                      db.UniqueConstraint('sequence_id', 'seq', name='uq_control_number_seq'), _INNODB)
+
+
+CONTROL_TABLES = ['control_number_sequences', 'control_numbers']
+
+
 class ProgramObjective(db.Model):
     __tablename__ = 'program_objectives'
 

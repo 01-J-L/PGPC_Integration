@@ -27,6 +27,7 @@
                 <td class="px-3 py-2 whitespace-nowrap">
                     {% if r.state == 'checked_in' %}<span class="text-green-700 font-medium"><i class="ri-shield-check-line"></i> Checked in</span>
                     <div class="text-xs text-gray-500">{{ r.checkin.checked_in_by }}, {{ r.checkin.checked_in_at.strftime('%b %d') }}</div>
+                    {% if r.cl.control_number %}<div class="text-xs font-mono text-gray-700">{{ r.cl.control_number }}</div>{% endif %}
                     {% else %}<span class="{{ 'text-green-700 font-medium' if r.state == 'ready' else 'text-gray-700' }}">{{ r.done }} / {{ r.total }}</span>{% endif %}</td>
                 <td class="px-3 py-2 text-xs text-orange-700">{{ r.cl.blockers|join('; ') if r.state == 'pending' else '' }}</td>
                 <td class="px-3 py-2 text-right whitespace-nowrap">{{ r.cl.summary.remaining|peso }}<div class="text-xs text-gray-500">{{ r.cl.summary.payment_status }}</div></td>
