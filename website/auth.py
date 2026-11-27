@@ -4355,6 +4355,21 @@ def admin_enrollment_review_page(applicant_id):
             """, (application['student_user_id'], selected_term_id))
             enrollment_record = cursor.fetchone()
 
+        # --- Auto-check Accounting approval if student has paid sufficient amount ---
+        if enrollment_record and application.get('applicant_id'):
+            # Read minimum approval amount from system settings (default 0 = any payment)
+            cursor.execute("SELECT setting_value FROM system_settings WHERE setting_key = 'enrollment_approval_min_payment'")
+            row = cursor.fetchone()
+            min_payment = float(row['setting_value']) if row and row['setting_value'] else 0.0
+
+            # Get student's total payments
+            cursor.execute("SELECT COALESCE(SUM(amount_paid), 0) AS total FROM payments WHERE student_id = %s", (application['applicant_id'],))
+            total_row = cursor.fetchone()
+            total_paid = total_row['total'] if total_row else 0.0
+
+            if total_paid >= min_payment:
+                enrollment_record['is_approved_by_accounting'] = True
+
         student_user_id = application.get('student_user_id')
         program_id = application.get('program_id')
 

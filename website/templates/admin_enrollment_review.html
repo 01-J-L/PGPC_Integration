@@ -217,21 +217,6 @@
                     all_academic_terms | selectattr('id', 'equalto', selected_term_id) | first | attr('year_name') }}
                 </h4>
                 <div class="space-y-3" id="approval-checklist">
-                    <!-- President -->
-                    <label class="flex items-center justify-between cursor-pointer">
-                        <span class="text-sm font-medium text-gray-700">President's Office</span>
-                        <div class="flex items-center">
-                            <span class="text-xs text-gray-500 mr-2">
-                                {% if enrollment_record and enrollment_record.president_approval_date %}
-                                {{ enrollment_record.president_approval_date.strftime('%b %d, %Y') }}
-                                {% endif %}
-                            </span>
-                            <input type="checkbox" data-role="president"
-                                class="approval-checkbox h-5 w-5 text-primary rounded border-gray-300 focus:ring-primary"
-                                {% if enrollment_record and enrollment_record.is_approved_by_president %}checked{% endif
-                                %}>
-                        </div>
-                    </label>
                     <!-- Accounting -->
                     <label class="flex items-center justify-between cursor-pointer">
                         <span class="text-sm font-medium text-gray-700">Accounting</span>
@@ -243,22 +228,7 @@
                             </span>
                             <input type="checkbox" data-role="accounting"
                                 class="approval-checkbox h-5 w-5 text-primary rounded border-gray-300 focus:ring-primary"
-                                {% if enrollment_record and enrollment_record.is_approved_by_accounting %}checked{%
-                                endif %}>
-                        </div>
-                    </label>
-                    <!-- Dean -->
-                    <label class="flex items-center justify-between cursor-pointer">
-                        <span class="text-sm font-medium text-gray-700">College Dean</span>
-                        <div class="flex items-center">
-                            <span class="text-xs text-gray-500 mr-2">
-                                {% if enrollment_record and enrollment_record.dean_approval_date %}
-                                {{ enrollment_record.dean_approval_date.strftime('%b %d, %Y') }}
-                                {% endif %}
-                            </span>
-                            <input type="checkbox" data-role="dean"
-                                class="approval-checkbox h-5 w-5 text-primary rounded border-gray-300 focus:ring-primary"
-                                {% if enrollment_record and enrollment_record.is_approved_by_dean %}checked{% endif %}>
+                                {% if enrollment_record and enrollment_record.is_approved_by_accounting %}checked{% endif %}>
                         </div>
                     </label>
                 </div>
