@@ -968,6 +968,129 @@ CREATE TABLE IF NOT EXISTS payments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+
+-- =====================================================================
+--  PHASE 2: CURRICULUM MANAGEMENT (generated from website/models.py)
+-- =====================================================================
+-- ---- curriculum_versions -----------------------------------------
+CREATE TABLE IF NOT EXISTS curriculum_versions (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	program_id VARCHAR(50) NOT NULL, 
+	name VARCHAR(150) NOT NULL, 
+	effective_academic_year VARCHAR(20) NOT NULL, 
+	description TEXT, 
+	status VARCHAR(20) NOT NULL DEFAULT 'draft', 
+	is_default_for_new BOOL NOT NULL DEFAULT 0, 
+	max_year_level INTEGER NOT NULL DEFAULT 4, 
+	source_reference VARCHAR(255), 
+	created_by VARCHAR(150), 
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	activated_by VARCHAR(150), 
+	activated_at DATETIME, 
+	activation_note TEXT, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_curriculum_version_name UNIQUE (program_id, name), 
+	FOREIGN KEY(program_id) REFERENCES programs (program_id) ON DELETE RESTRICT,
+	INDEX ix_curriculum_versions_program_id (program_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- curriculum_subjects -----------------------------------------
+CREATE TABLE IF NOT EXISTS curriculum_subjects (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	curriculum_version_id INTEGER NOT NULL, 
+	year_level INTEGER NOT NULL, 
+	semester INTEGER NOT NULL, 
+	subject_code VARCHAR(30) NOT NULL, 
+	code_key VARCHAR(30) NOT NULL, 
+	description VARCHAR(500) NOT NULL, 
+	units NUMERIC(4, 1) NOT NULL, 
+	sort_order INTEGER NOT NULL DEFAULT 0, 
+	subject_id INTEGER, 
+	notes VARCHAR(255), 
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_curriculum_subject_code UNIQUE (curriculum_version_id, code_key), 
+	CONSTRAINT ck_curriculum_subject_semester CHECK (semester IN (1, 2, 3)), 
+	CONSTRAINT ck_curriculum_subject_year CHECK (year_level BETWEEN 1 AND 5), 
+	CONSTRAINT ck_curriculum_subject_units CHECK (units >= 0), 
+	FOREIGN KEY(curriculum_version_id) REFERENCES curriculum_versions (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(subject_id) REFERENCES subjects (id) ON DELETE RESTRICT,
+	INDEX ix_curriculum_subjects_curriculum_version_id (curriculum_version_id),
+	INDEX ix_curriculum_subjects_subject_id (subject_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- curriculum_prerequisites ------------------------------------
+CREATE TABLE IF NOT EXISTS curriculum_prerequisites (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	curriculum_subject_id INTEGER NOT NULL, 
+	kind VARCHAR(20) NOT NULL DEFAULT 'subject', 
+	prerequisite_subject_id INTEGER, 
+	min_year_level INTEGER, 
+	min_units NUMERIC(5, 1), 
+	requirement_text VARCHAR(255), 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_curriculum_prereq_pair UNIQUE (curriculum_subject_id, prerequisite_subject_id), 
+	FOREIGN KEY(curriculum_subject_id) REFERENCES curriculum_subjects (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(prerequisite_subject_id) REFERENCES curriculum_subjects (id) ON DELETE RESTRICT,
+	INDEX ix_curriculum_prerequisites_prerequisite_subject_id (prerequisite_subject_id),
+	INDEX ix_curriculum_prerequisites_curriculum_subject_id (curriculum_subject_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- student_curricula -------------------------------------------
+CREATE TABLE IF NOT EXISTS student_curricula (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	student_user_id INTEGER NOT NULL, 
+	curriculum_version_id INTEGER NOT NULL, 
+	assigned_by VARCHAR(150), 
+	assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	ended_at DATETIME, 
+	reason VARCHAR(255), 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(curriculum_version_id) REFERENCES curriculum_versions (id) ON DELETE RESTRICT,
+	INDEX ix_student_curricula_curriculum_version_id (curriculum_version_id),
+	INDEX ix_student_curricula_student_user_id (student_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- curriculum_import_batches -----------------------------------
+CREATE TABLE IF NOT EXISTS curriculum_import_batches (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	program_id VARCHAR(50) NOT NULL, 
+	source_filename VARCHAR(255) NOT NULL, 
+	source_kind VARCHAR(20) NOT NULL, 
+	source_sha256 VARCHAR(64) NOT NULL, 
+	status VARCHAR(20) NOT NULL DEFAULT 'pending_review', 
+	target_version_id INTEGER, 
+	payload MEDIUMTEXT NOT NULL, 
+	summary VARCHAR(500), 
+	uploaded_by VARCHAR(150), 
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	decided_by VARCHAR(150), 
+	decided_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(program_id) REFERENCES programs (program_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(target_version_id) REFERENCES curriculum_versions (id) ON DELETE RESTRICT,
+	INDEX ix_curriculum_import_batches_program_id (program_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- curriculum_audit_log ----------------------------------------
+CREATE TABLE IF NOT EXISTS curriculum_audit_log (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	curriculum_version_id INTEGER, 
+	entity VARCHAR(30) NOT NULL, 
+	entity_id INTEGER, 
+	action VARCHAR(30) NOT NULL, 
+	details TEXT, 
+	performed_by VARCHAR(150), 
+	performed_role VARCHAR(30), 
+	performed_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id),
+	INDEX ix_curriculum_audit_log_curriculum_version_id (curriculum_version_id),
+	INDEX ix_curriculum_audit_log_performed_at (performed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------
 --  Schema migration ledger (website/schema_migrations.py).
 --  A database built from THIS file already contains every change below, so
@@ -980,7 +1103,8 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 ) DEFAULT CHARSET=utf8mb4;
 INSERT IGNORE INTO schema_migrations (id, description, applied_at) VALUES
   ('0001_enrollment_shs_document_columns', 'built into full.sql', NOW()),
-  ('0002_document_columns_mediumblob', 'built into full.sql', NOW());
+  ('0002_document_columns_mediumblob', 'built into full.sql', NOW()),
+  ('0003_curriculum_management', 'built into full.sql', NOW());
 
 SET FOREIGN_KEY_CHECKS = 1;
 

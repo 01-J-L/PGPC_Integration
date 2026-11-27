@@ -2,7 +2,7 @@
 
     python scripts/migrate.py status
     python scripts/migrate.py apply --backup-done
-    python scripts/migrate.py rollback 0001_enrollment_shs_document_columns --backup-done
+    python scripts/migrate.py rollback <migration id> --backup-done [--force]
 
 `apply` and `rollback` refuse to run unless you confirm with --backup-done
 that a fresh database backup exists (see docs/PHASE1_AUDIT_REPORT.md,
@@ -60,6 +60,12 @@ def main(argv):
             print("Unknown migration id.")
             return 2
         cur = conn.cursor()
+        if mig.get('rollback_guard') and '--force' not in argv:
+            cur.execute(mig['rollback_guard'])
+            if (cur.fetchone() or [0])[0]:
+                print("Refusing: these tables contain data that a rollback would DELETE. "
+                      "Export them first, then re-run with --force.")
+                return 4
         for sql in mig['rollback']:
             print(f"  [run ] {sql}")
             cur.execute(sql)

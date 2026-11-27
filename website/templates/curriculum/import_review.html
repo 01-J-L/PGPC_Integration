@@ -1,0 +1,200 @@
+{% extends 'admin_base.html' %}
+{% from 'curriculum/_macros.html' import input_class, btn_primary, btn_secondary, btn_danger %}
+
+{% block title %}Review import #{{ batch.id }}<script>
+(function () {
+    var box = document.getElementById('attention-only');
+    if (!box) return;
+    function apply() {
+        document.querySelectorAll('.review-row').forEach(function (tr) {
+            tr.classList.toggle('hidden', box.checked && tr.dataset.attention !== '1');
+        });
+    }
+    box.addEventListener('change', apply);
+    apply();
+})();
+</script>
+{% endblock %}
+{% block breadcrumb %}
+<a href="{{ url_for('curriculum.index') }}" class="text-gray-500 hover:text-primary">Curriculum Management</a>
+<i class="ri-arrow-right-s-line mx-1 text-gray-400"></i>
+<a href="{{ url_for('curriculum.import_upload') }}" class="text-gray-500 hover:text-primary">Import</a>
+<i class="ri-arrow-right-s-line mx-1 text-gray-400"></i><span>Review #{{ batch.id }}</span>
+<script>
+(function () {
+    var box = document.getElementById('attention-only');
+    if (!box) return;
+    function apply() {
+        document.querySelectorAll('.review-row').forEach(function (tr) {
+            tr.classList.toggle('hidden', box.checked && tr.dataset.attention !== '1');
+        });
+    }
+    box.addEventListener('change', apply);
+    apply();
+})();
+</script>
+{% endblock %}
+{% block page_title %}Review import: {{ batch.source_filename }}<script>
+(function () {
+    var box = document.getElementById('attention-only');
+    if (!box) return;
+    function apply() {
+        document.querySelectorAll('.review-row').forEach(function (tr) {
+            tr.classList.toggle('hidden', box.checked && tr.dataset.attention !== '1');
+        });
+    }
+    box.addEventListener('change', apply);
+    apply();
+})();
+</script>
+{% endblock %}
+
+{% block content %}
+{% set pending = batch.status == 'pending_review' %}
+<div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6">
+    <div class="flex flex-col lg:flex-row justify-between gap-4">
+        <div class="text-sm text-gray-600 space-y-1">
+            <p><strong>{{ 'Plan of study' if parsed.kind == 'plan_of_study' else 'Registration form' }}</strong> for
+               <strong>{{ batch.program.program_code or batch.program_id|upper }}</strong> &middot; uploaded by {{ batch.uploaded_by }}</p>
+            {% if parsed.title %}<p>Document title: <em>{{ parsed.title }}</em>{% if parsed.level %} &middot; Level: <em>{{ parsed.level }}</em>{% endif %}</p>{% endif %}
+            {% if not pending %}<p class="font-medium {{ 'text-green-700' if batch.status == 'imported' else 'text-gray-500' }}">This import is {{ batch.status.replace('_', ' ') }}{% if batch.decided_by %} ({{ batch.decided_by }}){% endif %}.</p>{% endif %}
+        </div>
+        <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center text-xs">
+            <div class="px-3 py-2 bg-gray-50 rounded"><p class="text-gray-500">Rows</p><p class="text-lg font-bold">{{ summary.rows }}</p></div>
+            <div class="px-3 py-2 bg-gray-50 rounded"><p class="text-gray-500">Selected</p><p class="text-lg font-bold">{{ summary.included }}</p></div>
+            <div class="px-3 py-2 bg-green-50 rounded"><p class="text-green-700">New</p><p class="text-lg font-bold text-green-800">{{ summary.new }}</p></div>
+            <div class="px-3 py-2 bg-gray-50 rounded"><p class="text-gray-500">Same</p><p class="text-lg font-bold">{{ summary.same }}</p></div>
+            <div class="px-3 py-2 bg-orange-100 rounded"><p class="text-orange-800">Conflicts</p><p class="text-lg font-bold text-orange-800">{{ summary.conflicts }}</p></div>
+            <div class="px-3 py-2 {{ 'bg-red-100' if summary.errors else 'bg-gray-50' }} rounded"><p class="{{ 'text-red-700' if summary.errors else 'text-gray-500' }}">Errors</p><p class="text-lg font-bold {{ 'text-red-700' if summary.errors else '' }}">{{ summary.errors }}</p></div>
+        </div>
+    </div>
+</div>
+
+{% if pending %}
+<!-- Target -->
+<form method="GET" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row md:items-end gap-4">
+    <fieldset class="flex gap-4 text-sm">
+        <legend class="block text-xs font-semibold text-gray-500 uppercase mb-1">Import into</legend>
+        <label class="flex items-center gap-2"><input type="radio" name="mode" value="new" {% if mode == 'new' %}checked{% endif %} onchange="this.form.submit()">A new curriculum (draft)</label>
+        <label class="flex items-center gap-2 {{ 'opacity-50' if not editable }}"><input type="radio" name="mode" value="existing" {% if mode == 'existing' %}checked{% endif %} {% if not editable %}disabled{% endif %} onchange="this.form.submit()">An existing curriculum</label>
+    </fieldset>
+    {% if mode == 'existing' %}
+    <div><label for="tv" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Curriculum</label>
+        <select id="tv" name="target_version_id" class="{{ input_class() }} w-72" onchange="this.form.submit()">
+            {% for x in editable %}<option value="{{ x.id }}" {% if target and x.id == target.id %}selected{% endif %}>{{ x.name }} ({{ x.status }})</option>{% endfor %}
+        </select>
+        <p class="text-xs text-gray-500 mt-1">Locked curricula (in use or archived) are not listed.</p></div>
+    {% endif %}
+    <noscript><button class="{{ btn_secondary() }}">Apply</button></noscript>
+</form>
+{% endif %}
+
+{% if summary.missing_from_file %}
+<div class="mb-6 p-4 rounded-lg border border-orange-200 bg-orange-50 text-sm text-orange-900" role="status">
+    <p class="font-semibold mb-1">In "{{ target.name }}" but not in this file (same term):</p>
+    <ul class="list-disc ml-5">{% for m in summary.missing_from_file %}<li><strong>{{ m.subject_code }}</strong> {{ m.description }} &ndash; {{ m.term }}</li>{% endfor %}</ul>
+    <p class="mt-1 text-xs">The import never removes subjects. If one of these is outdated, remove it on the curriculum page after checking with the program chair.</p>
+</div>
+{% endif %}
+
+<div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+    <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" id="attention-only" {% if summary.errors or summary.conflicts %}checked{% endif %}> Show only rows that need attention ({{ rows|selectattr('issues')|list|length + rows|selectattr('status', 'equalto', 'conflict')|rejectattr('issues')|list|length }})</label>
+    {% if summary.errors %}<p class="text-sm text-red-700"><i class="ri-error-warning-line"></i> {{ summary.errors }} row(s) must be fixed or excluded before importing.</p>{% endif %}
+</div>
+<form method="POST" id="review-form">
+    <input type="hidden" name="mode" value="{{ mode }}">
+    {% if target %}<input type="hidden" name="target_version_id" value="{{ target.id }}">{% endif %}
+
+    {% if pending and mode == 'new' %}
+    <section class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="md:col-span-2"><label for="nn" class="block text-sm font-medium text-gray-700 mb-1">New curriculum name</label>
+            <input id="nn" name="new_name" maxlength="150" required class="{{ input_class() }}" value="{{ new_fields.get('new_name') or ((batch.program.program_code or batch.program_id|upper) ~ ' - ' ~ batch.source_filename.rsplit('.', 1)[0]) }}"></div>
+        <div><label for="nay" class="block text-sm font-medium text-gray-700 mb-1">Effective academic year</label>
+            <input id="nay" name="new_effective_academic_year" required pattern="\d{4}-\d{4}" placeholder="2026-2027" class="{{ input_class() }}" value="{{ new_fields.get('new_effective_academic_year', '') }}"></div>
+        <div><label for="nmy" class="block text-sm font-medium text-gray-700 mb-1">Year levels</label>
+            <select id="nmy" name="new_max_year_level" class="{{ input_class() }}">{% for y in range(1, 6) %}<option value="{{ y }}" {% if y|string == (new_fields.get('new_max_year_level') or '4')|string %}selected{% endif %}>{{ y }}</option>{% endfor %}</select></div>
+        <div class="md:col-span-4"><label for="nd" class="block text-sm font-medium text-gray-700 mb-1">Description <span class="text-gray-400">(optional)</span></label>
+            <input id="nd" name="new_description" value="{{ new_fields.get('new_description', '') }}" class="{{ input_class() }}" placeholder="e.g. Applies to the cohort that entered in A.Y. 2026-2027"></div>
+    </section>
+    {% endif %}
+
+    <div class="relative bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50 text-xs uppercase text-gray-500"><tr>
+                <th scope="col" class="px-3 py-2">Import</th>
+                <th scope="col" class="px-3 py-2 text-left min-w-[9.5rem]">Term</th>
+                <th scope="col" class="px-3 py-2 text-left min-w-[7.5rem]">Code</th>
+                <th scope="col" class="px-3 py-2 text-left min-w-[18rem]">Description</th>
+                <th scope="col" class="px-3 py-2 text-left min-w-[5rem]">Units</th>
+                <th scope="col" class="px-3 py-2 text-left min-w-[10rem]">Prerequisites (from file)</th>
+                <th scope="col" class="px-3 py-2 text-left min-w-[16rem]">Review</th></tr></thead>
+            <tbody class="divide-y divide-gray-100">
+            {% for r in rows %}
+                {% set p = 'r' ~ r.index ~ '_' %}
+                {% set has_error = r.issues|selectattr('level', 'equalto', 'error')|list %}
+                <tr data-attention="{{ '1' if (r.issues or r.status == 'conflict') else '0' }}" class="review-row align-top {{ 'bg-red-50' if r.blocking else ('bg-orange-50' if r.status == 'conflict' else ('opacity-60' if not r.include else '')) }}">
+                    <td class="px-3 py-2 text-center">
+                        <input type="hidden" name="{{ p }}present" value="1">
+                        <input type="checkbox" name="{{ p }}include" value="1" {% if r.include %}checked{% endif %} {% if not pending %}disabled{% endif %} aria-label="Import row {{ r.index + 1 }}">
+                        <div class="text-[10px] text-gray-400">{{ r.index + 1 }}</div></td>
+                    <td class="px-3 py-2">
+                        {% if pending %}
+                        <select name="{{ p }}year_level" class="{{ input_class() }} block py-1 mb-1" aria-label="Year level row {{ r.index + 1 }}">{% for y, lbl in years.items() %}<option value="{{ y }}" {% if y == r.year_level %}selected{% endif %}>{{ lbl }}</option>{% endfor %}</select>
+                        <select name="{{ p }}semester" class="{{ input_class() }} block py-1" aria-label="Semester row {{ r.index + 1 }}">{% for k, lbl in semesters.items() %}<option value="{{ k }}" {% if k == r.semester %}selected{% endif %}>{{ lbl }}</option>{% endfor %}</select>
+                        {% else %}{{ years.get(r.year_level) }}<br>{{ semesters.get(r.semester) }}{% endif %}</td>
+                    <td class="px-3 py-2">{% if pending %}<input name="{{ p }}subject_code" value="{{ r.subject_code }}" maxlength="30" class="{{ input_class() }} py-1" aria-label="Code row {{ r.index + 1 }}">{% else %}{{ r.subject_code }}{% endif %}</td>
+                    <td class="px-3 py-2">{% if pending %}<input name="{{ p }}description" value="{{ r.description }}" maxlength="500" class="{{ input_class() }} py-1" aria-label="Description row {{ r.index + 1 }}">{% else %}{{ r.description }}{% endif %}
+                        {% if r.source.description != r.description %}<div class="text-[11px] text-gray-400 mt-0.5">File: {{ r.source.description }}</div>{% endif %}</td>
+                    <td class="px-3 py-2">{% if pending %}<input name="{{ p }}units" value="{{ r.units_raw }}" inputmode="decimal" class="{{ input_class() }} py-1 {{ 'border-red-400' if r.units is none }}" aria-label="Units row {{ r.index + 1 }}">{% else %}{{ r.units_raw }}{% endif %}</td>
+                    <td class="px-3 py-2 text-xs">
+                        {% for pr in r.prerequisites %}
+                        <span class="inline-block px-1.5 py-0.5 rounded mb-0.5 {{ 'bg-blue-50 text-blue-800' if pr.kind == 'subject' else ('bg-purple-100 text-purple-800' if pr.kind in ['standing','units'] else 'bg-yellow-100 text-yellow-800') }}">{{ pr.text }}</span>
+                        {% else %}<span class="text-gray-400">None</span>{% endfor %}</td>
+                    <td class="px-3 py-2 text-xs space-y-1">
+                        {% if r.status == 'new' %}<span class="inline-block px-1.5 py-0.5 rounded bg-green-100 text-green-800">New subject</span>
+                        {% elif r.status == 'same' %}<span class="inline-block px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">Already in curriculum</span>
+                        {% else %}<span class="inline-block px-1.5 py-0.5 rounded bg-orange-100 text-orange-800">Conflict</span>
+                            <ul class="list-disc ml-4 text-orange-900">{% for d in r.diffs %}<li>{{ d }}</li>{% endfor %}</ul>
+                            {% if pending %}
+                            <label class="flex items-center gap-1"><input type="radio" name="{{ p }}resolution" value="keep" {% if r.resolution == 'keep' %}checked{% endif %}> Keep existing</label>
+                            <label class="flex items-center gap-1"><input type="radio" name="{{ p }}resolution" value="replace" {% if r.resolution == 'replace' %}checked{% endif %}> Use file values</label>
+                            {% endif %}
+                        {% endif %}
+                        {% for i in r.issues %}
+                        <p class="{{ 'text-red-700' if i.level == 'error' else 'text-yellow-800' }}"><i class="{{ 'ri-error-warning-line' if i.level == 'error' else 'ri-information-line' }}"></i> {{ i.message }}</p>
+                        {% endfor %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if pending %}
+    <div class="flex flex-col sm:flex-row justify-between gap-3 mt-6">
+        <button type="submit" name="action" value="recheck" formnovalidate class="{{ btn_secondary() }}"><i class="ri-refresh-line mr-2"></i>Save edits &amp; re-check</button>
+        <button type="submit" name="action" value="commit" class="{{ btn_primary() }}" id="commit-btn"
+                onclick="return confirm('Import the selected rows? This writes them into the curriculum.')">
+            <i class="ri-check-line mr-2"></i>{% if summary.new or summary.conflicts %}Import {{ summary.included }} selected row(s){% else %}Confirm review (no changes to write){% endif %}</button>
+    </div>
+    {% endif %}
+</form>
+{% if pending %}
+<form method="POST" action="{{ url_for('curriculum.import_discard', batch_id=batch.id) }}" class="mt-3 text-right" onsubmit="return confirm('Discard this import? Nothing will be saved.')">
+    <button class="text-sm text-red-600 hover:underline">Discard import</button>
+</form>
+{% endif %}
+<script>
+(function () {
+    var box = document.getElementById('attention-only');
+    if (!box) return;
+    function apply() {
+        document.querySelectorAll('.review-row').forEach(function (tr) {
+            tr.classList.toggle('hidden', box.checked && tr.dataset.attention !== '1');
+        });
+    }
+    box.addEventListener('change', apply);
+    apply();
+})();
+</script>
+{% endblock %}

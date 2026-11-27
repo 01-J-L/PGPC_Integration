@@ -217,6 +217,193 @@ class Prerequisite(db.Model):
     )
 
 
+# =========================================================
+# CURRICULUM MANAGEMENT (Phase 2)
+# ---------------------------------------------------------
+# A curriculum version is one plan of study of one program (e.g. "BSCS
+# Curriculum 2026" for the cohort entering AY 2026-2027). Several versions
+# of the same program can be active at once because each cohort keeps the
+# plan it entered with. Subjects inside a version are version-scoped, so the
+# same code (GE105) can appear in every program and every version without
+# touching the legacy `subjects` table (whose subject_code is globally
+# UNIQUE and is used by grading). `subject_id` links a curriculum subject to
+# the legacy subject with the same code in the same program, when one exists.
+# =========================================================
+
+CURRICULUM_STATUSES = ('draft', 'active', 'archived')
+# Same storage options as full.sql so FOREIGN KEYs to programs / student_users match.
+_INNODB = {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+SEMESTER_LABELS = {1: '1st Semester', 2: '2nd Semester', 3: 'Summer'}
+YEAR_LABELS = {1: '1st Year', 2: '2nd Year', 3: '3rd Year', 4: '4th Year', 5: '5th Year'}
+
+
+class CurriculumVersion(db.Model):
+    __tablename__ = 'curriculum_versions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    program_id = db.Column(db.String(50), db.ForeignKey('programs.program_id', ondelete='RESTRICT'), nullable=False, index=True)
+    name = db.Column(db.String(150), nullable=False)
+    # Academic year the cohort using this plan entered (e.g. '2026-2027').
+    effective_academic_year = db.Column(db.String(20), nullable=False)
+    description = db.Column(db.Text)
+    status = db.Column(db.String(20), nullable=False, default='draft', server_default='draft')
+    # The version new first-year students of the program are given automatically.
+    is_default_for_new = db.Column(db.Boolean, nullable=False, default=False, server_default=_sa.text('0'))
+    max_year_level = db.Column(db.Integer, nullable=False, default=4, server_default=_sa.text('4'))
+    source_reference = db.Column(db.String(255))
+    created_by = db.Column(db.String(150))
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+    activated_by = db.Column(db.String(150))
+    activated_at = db.Column(db.DateTime)
+    activation_note = db.Column(db.Text)
+
+    program = db.relationship('Program', backref=db.backref('curriculum_versions', lazy='dynamic', passive_deletes='all'))
+    subjects = db.relationship('CurriculumSubject', backref='version', lazy='dynamic',
+                               order_by='(CurriculumSubject.year_level, CurriculumSubject.semester, CurriculumSubject.sort_order, CurriculumSubject.id)',
+                               passive_deletes='all')
+
+    __table_args__ = (
+        db.UniqueConstraint('program_id', 'name', name='uq_curriculum_version_name'),
+        _INNODB,
+    )
+
+    def __repr__(self):
+        return f'<CurriculumVersion {self.program_id} {self.name} ({self.status})>'
+
+
+class CurriculumSubject(db.Model):
+    __tablename__ = 'curriculum_subjects'
+
+    id = db.Column(db.Integer, primary_key=True)
+    curriculum_version_id = db.Column(db.Integer, db.ForeignKey('curriculum_versions.id', ondelete='RESTRICT'), nullable=False, index=True)
+    year_level = db.Column(db.Integer, nullable=False)
+    semester = db.Column(db.Integer, nullable=False)      # 1, 2, 3 (= Summer)
+    subject_code = db.Column(db.String(30), nullable=False)  # as written officially, e.g. "GE 105"
+    code_key = db.Column(db.String(30), nullable=False)      # upper-case, no spaces, e.g. "GE105"
+    description = db.Column(db.String(500), nullable=False)
+    units = db.Column(db.Numeric(4, 1), nullable=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=0, server_default=_sa.text('0'))
+    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id', ondelete='RESTRICT'), index=True)
+    notes = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+    legacy_subject = db.relationship('Subject')
+    prerequisites = db.relationship('CurriculumPrerequisite', backref='subject', lazy='select',
+                                    foreign_keys='CurriculumPrerequisite.curriculum_subject_id',
+                                    order_by='CurriculumPrerequisite.id', passive_deletes='all')
+
+    __table_args__ = (
+        db.UniqueConstraint('curriculum_version_id', 'code_key', name='uq_curriculum_subject_code'),
+        db.CheckConstraint('semester IN (1, 2, 3)', name='ck_curriculum_subject_semester'),
+        db.CheckConstraint('year_level BETWEEN 1 AND 5', name='ck_curriculum_subject_year'),
+        db.CheckConstraint('units >= 0', name='ck_curriculum_subject_units'),
+        _INNODB,
+    )
+
+    @property
+    def term_key(self):
+        return (self.year_level, self.semester)
+
+    def __repr__(self):
+        return f'<CurriculumSubject {self.subject_code} Y{self.year_level}S{self.semester}>'
+
+
+class CurriculumPrerequisite(db.Model):
+    """One requirement of a curriculum subject.
+
+    kind = 'subject'  -> prerequisite_subject_id must be passed first
+    kind = 'standing' -> min_year_level reached (e.g. "4th Year Standing")
+    kind = 'units'    -> min_units earned (e.g. "Completed 110 Academic units")
+    kind = 'other'    -> free text kept from the plan for the registrar to apply
+    """
+    __tablename__ = 'curriculum_prerequisites'
+
+    id = db.Column(db.Integer, primary_key=True)
+    curriculum_subject_id = db.Column(db.Integer, db.ForeignKey('curriculum_subjects.id', ondelete='RESTRICT'), nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False, default='subject', server_default='subject')
+    prerequisite_subject_id = db.Column(db.Integer, db.ForeignKey('curriculum_subjects.id', ondelete='RESTRICT'), index=True)
+    min_year_level = db.Column(db.Integer)
+    min_units = db.Column(db.Numeric(5, 1))
+    requirement_text = db.Column(db.String(255))
+
+    prerequisite = db.relationship('CurriculumSubject', foreign_keys=[prerequisite_subject_id])
+
+    __table_args__ = (
+        db.UniqueConstraint('curriculum_subject_id', 'prerequisite_subject_id', name='uq_curriculum_prereq_pair'),
+        _INNODB,
+    )
+
+    def label(self):
+        if self.kind == 'subject' and self.prerequisite is not None:
+            return self.prerequisite.subject_code
+        if self.kind == 'standing' and self.min_year_level:
+            return f"{YEAR_LABELS.get(self.min_year_level, str(self.min_year_level))} standing"
+        if self.kind == 'units' and self.min_units is not None:
+            u = self.min_units
+            return f"{int(u) if u == int(u) else u} units completed"
+        return self.requirement_text or ''
+
+
+class StudentCurriculum(db.Model):
+    """Which curriculum version a student follows (history kept: ended_at)."""
+    __tablename__ = 'student_curricula'
+    __table_args__ = (_INNODB,)
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False, index=True)
+    curriculum_version_id = db.Column(db.Integer, db.ForeignKey('curriculum_versions.id', ondelete='RESTRICT'), nullable=False, index=True)
+    assigned_by = db.Column(db.String(150))
+    assigned_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+    ended_at = db.Column(db.DateTime)
+    reason = db.Column(db.String(255))
+
+    version = db.relationship('CurriculumVersion')
+
+
+class CurriculumImportBatch(db.Model):
+    """A parsed reference file waiting for (or finished with) registrar review."""
+    __tablename__ = 'curriculum_import_batches'
+    __table_args__ = (_INNODB,)
+
+    id = db.Column(db.Integer, primary_key=True)
+    program_id = db.Column(db.String(50), db.ForeignKey('programs.program_id', ondelete='RESTRICT'), nullable=False, index=True)
+    source_filename = db.Column(db.String(255), nullable=False)
+    source_kind = db.Column(db.String(20), nullable=False)        # 'plan_of_study' | 'registration_form'
+    source_sha256 = db.Column(db.String(64), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='pending_review', server_default='pending_review')
+    target_version_id = db.Column(db.Integer, db.ForeignKey('curriculum_versions.id', ondelete='RESTRICT'))
+    payload = db.Column(db.Text().with_variant(_mysql.MEDIUMTEXT(), 'mysql', 'mariadb'), nullable=False)  # JSON rows + issues
+    summary = db.Column(db.String(500))
+    uploaded_by = db.Column(db.String(150))
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+    decided_by = db.Column(db.String(150))
+    decided_at = db.Column(db.DateTime)
+
+    program = db.relationship('Program')
+    target_version = db.relationship('CurriculumVersion')
+
+
+class CurriculumAuditLog(db.Model):
+    __tablename__ = 'curriculum_audit_log'
+    __table_args__ = (_INNODB,)
+
+    id = db.Column(db.Integer, primary_key=True)
+    curriculum_version_id = db.Column(db.Integer, index=True)   # no FK: the log outlives anything
+    entity = db.Column(db.String(30), nullable=False)
+    entity_id = db.Column(db.Integer)
+    action = db.Column(db.String(30), nullable=False)
+    details = db.Column(db.Text)
+    performed_by = db.Column(db.String(150))
+    performed_role = db.Column(db.String(30))
+    performed_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), index=True)
+
+
+CURRICULUM_TABLES = ['curriculum_versions', 'curriculum_subjects', 'curriculum_prerequisites',
+                     'student_curricula', 'curriculum_import_batches', 'curriculum_audit_log']
+
+
 class ProgramObjective(db.Model):
     __tablename__ = 'program_objectives'
 
