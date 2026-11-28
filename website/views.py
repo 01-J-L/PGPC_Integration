@@ -107,6 +107,55 @@ def home():
                            admission_steps=admission_steps,
                            faqs=faqs)
 
+# ----------------- SEO -----------------
+@views.route('/robots.txt')
+def robots_txt():
+    site_base = current_app.config.get('SITE_URL') or request.url_root.rstrip('/')
+    sitemap_url = f"{site_base}/sitemap.xml"
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        "",
+        f"Sitemap: {sitemap_url}",
+        "",
+    ]
+    return current_app.response_class("\n".join(lines), mimetype='text/plain')
+
+@views.after_app_request
+def add_noindex_header(response):
+    path = request.path or ''
+    private_prefixes = ('/admin', '/cashier', '/accounting', '/student', '/faculty',
+                        '/api', '/my-statement', '/new-student', '/existing_or_not',
+                        '/application-status', '/enrollment-form', '/admin-load',
+                        '/grading-admin')
+    if path.startswith(private_prefixes):
+        response.headers['X-Robots-Tag'] = 'noindex, nofollow'
+    return response
+
+@views.route('/sitemap.xml')
+def sitemap_xml():
+    today = datetime.date.today().isoformat()
+    site_base = current_app.config.get('SITE_URL') or request.url_root.rstrip('/')
+    pages = [
+        (f"{site_base}/", '1.0'),
+        (f"{site_base}/about", '0.8'),
+        (f"{site_base}/contact", '0.7'),
+    ]
+    for program in _get_program_details_from_db().values():
+        program_id = program.get('program_id') or program.get('id')
+        if program_id:
+            pages.append((f"{site_base}/program/{program_id}", '0.6'))
+    xml = ['<?xml version="1.0" encoding="UTF-8"?>',
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for loc, priority in pages:
+        xml.append('  <url>')
+        xml.append(f'    <loc>{loc}</loc>')
+        xml.append(f'    <lastmod>{today}</lastmod>')
+        xml.append(f'    <priority>{priority}</priority>')
+        xml.append('  </url>')
+    xml.append('</urlset>')
+    return current_app.response_class("\n".join(xml), mimetype='application/xml')
+
 # ----------------- ABOUT -----------------
 @views.route('/about', methods=['GET', 'POST'])
 def about():
@@ -278,7 +327,10 @@ def inject_global_content():
         if cursor: cursor.close()
         if conn and conn.is_connected(): conn.close()
         
-    return dict(global_content=global_content, global_socials=global_socials, global_requirements=global_requirements)
+    path = request.path or '/'
+    public_paths = path == '/' or path.startswith(('/about', '/contact', '/program/'))
+    seo_noindex = not public_paths
+    return dict(global_content=global_content, global_socials=global_socials, global_requirements=global_requirements, seo_noindex=seo_noindex)
 
 # ----------------- CONTACT PAGE -----------------
 @views.route('/contact', methods=['GET'])

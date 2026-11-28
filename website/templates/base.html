@@ -3,6 +3,8 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        {% set site_base = (config.SITE_URL or request.url_root).rstrip('/') %}
+        {% set canonical_url = site_base ~ request.path %}
         <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
         <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
         <script src="{{ url_for('static', filename='css/motion.js') }}"></script>
@@ -44,7 +46,48 @@
         <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
         <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
     
-        <title>PGPC - {% block title %}{% endblock %}</title>
+        <title>{% block title %}Padre Garcia Polytechnic College | PGPC{% endblock %}</title>
+        <meta name="description" content="{% block meta_description %}Padre Garcia Polytechnic College (PGPC) is a polytechnic college in Padre Garcia, Batangas, Philippines offering quality technical and higher education programs.{% endblock %}">
+        <meta name="keywords" content="{% block meta_keywords %}Padre Garcia Polytechnic College, PGPC, polytechnic college, Padre Garcia Batangas, college in Batangas, PGPC admission, PGPC enrollment{% endblock %}">
+        <meta name="author" content="Padre Garcia Polytechnic College">
+        <meta name="robots" content="{% if seo_noindex %}noindex, nofollow{% else %}index, follow{% endif %}">
+        <link rel="canonical" href="{{ canonical_url }}">
+        <meta property="og:site_name" content="Padre Garcia Polytechnic College">
+        <meta property="og:type" content="website">
+        <meta property="og:title" content="{{ self.title()|striptags|trim }}">
+        <meta property="og:description" content="{{ self.meta_description()|striptags|trim }}">
+        <meta property="og:url" content="{{ canonical_url }}">
+        <meta property="og:image" content="{{ url_for('static', filename='logopgpc.png', _external=True) }}">
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:title" content="{{ self.title()|striptags|trim }}">
+        <meta name="twitter:description" content="{{ self.meta_description()|striptags|trim }}">
+        <meta name="twitter:image" content="{{ url_for('static', filename='logopgpc.png', _external=True) }}">
+        <meta name="geo.region" content="PH-BTG">
+        <meta name="geo.placename" content="Padre Garcia, Batangas">
+        {% if config.GOOGLE_SITE_VERIFICATION %}<meta name="google-site-verification" content="{{ config.GOOGLE_SITE_VERIFICATION }}">{% endif %}
+        {% if config.BING_SITE_VERIFICATION %}<meta name="msvalidate.01" content="{{ config.BING_SITE_VERIFICATION }}">{% endif %}
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "CollegeOrUniversity",
+          "name": "Padre Garcia Polytechnic College",
+          "alternateName": ["PGPC", "Padre Garcia Polytechnic College (PGPC)"],
+          "url": {{ (site_base ~ '/')|tojson }},
+          "logo": {{ url_for('static', filename='logopgpc.png', _external=True)|tojson }},
+          "description": {{ self.meta_description()|striptags|trim|tojson }},
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": {{ global_content.get('contact_address', 'Padre Garcia, Batangas, Philippines')|tojson }},
+            "addressLocality": "Padre Garcia",
+            "addressRegion": "Batangas",
+            "addressCountry": "PH"
+          },
+          "areaServed": "Padre Garcia, Batangas, Philippines"{% if global_content.get('contact_phone') %},
+          "telephone": {{ global_content.get('contact_phone')|tojson }}{% endif %}{% if global_content.get('contact_email') %},
+          "email": {{ global_content.get('contact_email')|tojson }}{% endif %}{% if global_content.get('footer_facebook_link') %},
+          "sameAs": [{{ global_content.get('footer_facebook_link')|tojson }}]{% endif %}
+        }
+        </script>
         <link rel="icon" href="{{ url_for('static', filename='logopgpc.png') }}" type="image/x-icon">
 
         

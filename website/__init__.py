@@ -66,6 +66,9 @@ def create_app():
     # --- 4. SERVER CONFIG ---
     app.config['SERVER_NAME'] = os.getenv('FLASK_SERVER_NAME')
     app.config['PREFERRED_URL_SCHEME'] = os.getenv('FLASK_PREFERRED_URL_SCHEME', 'http')
+    app.config['GOOGLE_SITE_VERIFICATION'] = os.getenv('GOOGLE_SITE_VERIFICATION', '')
+    app.config['BING_SITE_VERIFICATION'] = os.getenv('BING_SITE_VERIFICATION', '')
+    app.config['SITE_URL'] = os.getenv('SITE_URL', '').rstrip('/')
 
     # =========================================================
     # FACULTY SYSTEM INTEGRATION (DATABASE)

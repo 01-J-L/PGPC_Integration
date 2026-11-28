@@ -1,8 +1,10 @@
 {% extends 'base.html' %}
 
+{% block title %}{{ program.title if program else "Academic Programs" }} | Padre Garcia Polytechnic College (PGPC){% endblock %}
+{% block meta_description %}{{ program.title if program else "Academic Programs" }} offered at Padre Garcia Polytechnic College (PGPC) in Padre Garcia, Batangas. Learn about the curriculum, objectives, and career opportunities.{% endblock %}
+
 {% block head %}
 {{ super() }}
-<title>{{ program.title if program else "Program Details" }} - PGPC</title>
 <script src="https://cdn.tailwindcss.com/3.4.1"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.2.0/remixicon.min.css">
