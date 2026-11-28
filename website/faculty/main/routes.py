@@ -3,10 +3,23 @@
 from flask import Blueprint, render_template, flash, redirect, url_for, jsonify, request, session, current_app
 from flask_login import login_required, logout_user, current_user
 from website import db, mail
-from website.faculty.models import User, TeachingLoad, Program, Course, TimeSlot, SubstitutionRequest, Notification, SystemSetting, Section, Room, ProgramCourse, Subject, FacultyAssignment, Applicant, Grade
+from website.faculty.models import User, TeachingLoad, TeachingLoadTerm, SectionCurriculum, Program, Course, TimeSlot, SubstitutionRequest, Notification, SystemSetting, Section, Room, ProgramCourse, Subject, FacultyAssignment, Applicant, Grade
 from website.faculty.auth.forms import AdminAddUserForm, UserFilterForm
 
 from website.faculty.main.forms import ScheduleForm, DeleteScheduleForm, AddTimeSlotForm, SubstitutionRequestForm, SystemSettingsForm, EditProfileForm, ProgramForm, FileUploadForm, SchoolYearAnalyticsForm, SectionGridScheduleForm, EditScheduleForm, CourseForm, CreateSectionForm, DeleteSectionForm, RoomForm, UpdateRateForm, UploadProofForm, GradingSubjectForm
+
+from website.curriculum.service import normalize_code
+from website.faculty.scheduling import (
+    find_section,
+    get_section_version,
+    program_versions,
+    save_section_version,
+    subject_choices,
+    resolve_subject,
+    set_load_term,
+    load_semester,
+    load_ids_for_semester,
+)
 
 from datetime import datetime, time, timedelta
 from collections import defaultdict
@@ -783,9 +796,11 @@ def schedule_grid(faculty_id, semester):
 
             # Conflict Checking
             conflicts = []
+            semester_ids = load_ids_for_semester(semester)
             # 1. Faculty Conflict
-            f_conf = TeachingLoad.query.join(Course, TeachingLoad.course_code == Course.course_code).filter(
-                TeachingLoad.user_id == faculty_id, Course.semester == semester, 
+            f_conf = TeachingLoad.query.filter(
+                TeachingLoad.user_id == faculty_id,
+                TeachingLoad.id.in_(semester_ids),
                 TeachingLoad.day == form.day.data, TeachingLoad.time_start < time_end, TeachingLoad.time_end > time_start, 
                 TeachingLoad.school_year == active_school_year
             )
@@ -793,17 +808,17 @@ def schedule_grid(faculty_id, semester):
             if f_conf.first(): conflicts.append(f"Faculty {faculty_member.full_name} has a class.")
 
             # 2. Section Conflict
-            s_conf = db.session.query(TeachingLoad).join(Course, TeachingLoad.course_code == Course.course_code).filter(
+            s_conf = db.session.query(TeachingLoad).filter(
                 TeachingLoad.section == full_section_name, TeachingLoad.day == form.day.data,
                 TeachingLoad.time_start < time_end, TeachingLoad.time_end > time_start,
-                Course.semester == semester, TeachingLoad.school_year == active_school_year
+                TeachingLoad.id.in_(semester_ids), TeachingLoad.school_year == active_school_year
             )
             if schedule_to_edit: s_conf = s_conf.filter(TeachingLoad.id != schedule_to_edit.id)
             if s_conf.first(): conflicts.append(f"Section {full_section_name} has a class.")
 
             # 3. Room Conflict
-            r_conf = TeachingLoad.query.join(Course, TeachingLoad.course_code == Course.course_code).filter(
-                TeachingLoad.room == form.room.data, Course.semester == semester, 
+            r_conf = TeachingLoad.query.filter(
+                TeachingLoad.room == form.room.data, TeachingLoad.id.in_(semester_ids), 
                 TeachingLoad.day == form.day.data, TeachingLoad.time_start < time_end, TeachingLoad.time_end > time_start, 
                 TeachingLoad.school_year == active_school_year
             )
@@ -822,6 +837,10 @@ def schedule_grid(faculty_id, semester):
                 schedule.room = form.room.data
                 schedule.school_year = active_school_year
                 if not schedule_to_edit: db.session.add(schedule)
+                db.session.flush()
+                # Record the term so the semester filters (conflicts, grids,
+                # faculty schedule) do not depend on the legacy course row.
+                set_load_term(schedule, semester, None)
                 db.session.commit()
                 flash('Schedule saved successfully.', 'success')
                 
@@ -835,10 +854,9 @@ def schedule_grid(faculty_id, semester):
     schedules = []
     if active_school_year:
         schedules = db.session.query(TeachingLoad)\
-            .join(Course, TeachingLoad.course_code == Course.course_code)\
             .filter(
                 TeachingLoad.user_id == faculty_id, 
-                Course.semester == semester,
+                TeachingLoad.id.in_(load_ids_for_semester(semester)),
                 TeachingLoad.school_year == active_school_year
             ).all()
 
@@ -972,6 +990,24 @@ def section_schedule_grid(program_id, section_name, semester):
     school_year_setting = SystemSetting.query.filter_by(key='school_year').first()
     current_school_year = school_year_setting.value.strip() if school_year_setting and school_year_setting.value else None
 
+    # Which curriculum this section is scheduled under. A program can have
+    # several active versions (new freshmen vs. older batches), so the choice
+    # is kept per section and can be changed from the page header.
+    section_obj = find_section(program_id, section_name)
+    curriculum_versions = program_versions(program_id)
+    selected_curriculum = get_section_version(
+        section_obj, program_id, request.args.get('curriculum'))
+    if request.method == 'GET' and request.args.get('curriculum') and selected_curriculum is not None:
+        save_section_version(section_obj, selected_curriculum, current_user.full_name)
+
+    section_year = None
+    try: section_year = int(section_name[0])
+    except: pass
+    if section_year is None and section_obj is not None and section_obj.year_level:
+        year_match = re.search(r'\d+', section_obj.year_level)
+        if year_match:
+            section_year = int(year_match.group())
+
     # Forms
     add_form = SectionGridScheduleForm()
     edit_form = EditScheduleForm()
@@ -980,15 +1016,29 @@ def section_schedule_grid(program_id, section_name, semester):
     # --- 2. POPULATE DROPDOWNS ---
     relevant_faculty = User.query.filter(User.role == 'faculty', User.status == 'active').order_by(User.full_name).all()
     faculty_choices = [(str(f.id), f.full_name) for f in relevant_faculty]
-    
-    section_year = None
-    try: section_year = int(section_name[0])
-    except: pass
-    
-    courses_query = Course.query.filter_by(program_id=program_id, semester=semester)
-    if section_year: courses_query = courses_query.filter(Course.year == section_year)
-    courses_for_semester = courses_query.order_by(Course.course_code).all()
-    course_choices = [(str(c.id), f"{c.course_code} - {c.course_description}") for c in courses_for_semester]
+
+    # Subjects come from the chosen curriculum version. Loads that are already
+    # on this section but belong to another (older) curriculum are kept so they
+    # can still be edited.
+    existing_loads = []
+    if current_school_year:
+        existing_loads = TeachingLoad.query.filter(
+            TeachingLoad.section == full_section_name,
+            TeachingLoad.school_year == current_school_year,
+            TeachingLoad.id.in_(load_ids_for_semester(semester, program_id)),
+        ).all()
+
+    if selected_curriculum is not None:
+        course_choices = subject_choices(
+            selected_curriculum, section_year, semester, existing_loads)
+    else:
+        # No curriculum versions for this program: keep the legacy list.
+        courses_query = Course.query.filter_by(program_id=program_id, semester=semester)
+        if section_year: courses_query = courses_query.filter(Course.year == section_year)
+        course_choices = [
+            (normalize_code(c.course_code), f"{c.course_code} - {c.course_description}")
+            for c in courses_query.order_by(Course.course_code).all()
+        ]
     
     all_rooms = Room.query.order_by(Room.room_name).all()
     room_choices = [(r.room_name, r.room_name) for r in all_rooms] or [('', 'No Rooms Created')]
@@ -1026,18 +1076,24 @@ def section_schedule_grid(program_id, section_name, semester):
                         flash('Invalid time. Use the time pickers.', 'error')
                         raise ValueError('unparseable time')
 
-                    selected_course = Course.query.get(int(add_form.course.data))
+                    resolved = resolve_subject(
+                        selected_curriculum, add_form.course.data, program_id)
+                    if resolved is None:
+                        flash('That subject is not part of the selected curriculum.', 'error')
+                        raise ValueError('unknown subject')
                     faculty_member = User.query.get(int(add_form.faculty.data))
 
                     # Overlap checks are scoped to this semester as well as the
-                    # school year: without the Course join, a 1st-semester class
-                    # blocked the same slot in the 2nd semester.
+                    # school year so the two semesters do not block each other.
+                    # The term comes from teaching_load_terms for new loads and
+                    # from the course row for legacy ones.
+                    semester_ids = load_ids_for_semester(semester)
+
                     def _overlap(*criteria, **extra):
                         return (TeachingLoad.query
-                                .join(Course, TeachingLoad.course_code == Course.course_code)
                                 .filter(*criteria,
                                         TeachingLoad.school_year == current_school_year,
-                                        Course.semester == semester,
+                                        TeachingLoad.id.in_(semester_ids),
                                         TeachingLoad.day == add_form.day.data,
                                         TeachingLoad.time_start < time_end,
                                         TeachingLoad.time_end > time_start,
@@ -1058,8 +1114,8 @@ def section_schedule_grid(program_id, section_name, semester):
                             new_schedule = TeachingLoad(
                                 teacher=faculty_member, 
                                 section=full_section_name, 
-                                course_code=selected_course.course_code, 
-                                course_description=selected_course.course_description, 
+                                course_code=resolved['code'], 
+                                course_description=resolved['description'], 
                                 day=add_form.day.data, 
                                 time_start=time_start, 
                                 time_end=time_end, 
@@ -1068,10 +1124,12 @@ def section_schedule_grid(program_id, section_name, semester):
                                 is_published=False 
                             )
                             db.session.add(new_schedule)
+                            db.session.flush()
+                            set_load_term(new_schedule, semester, selected_curriculum)
                             db.session.commit()
                             flash('Class added as DRAFT. Click "Save & Notify Faculty" to finalize.', 'info')
                 except Exception as e:
-                    if str(e) != 'unparseable time':
+                    if str(e) not in ('unparseable time', 'unknown subject'):
                         flash(f'Error: {str(e)}', 'error')
             return redirect(url_for('faculty_main.section_schedule_grid', program_id=program_id, section_name=section_name, semester=semester))
         else:
@@ -1097,7 +1155,11 @@ def section_schedule_grid(program_id, section_name, semester):
                     flash('Invalid time. Use the time pickers.', 'error')
                     raise ValueError('unparseable time')
 
-                selected_course = Course.query.get(int(edit_form.course.data))
+                resolved = resolve_subject(
+                    selected_curriculum, edit_form.course.data, program_id)
+                if resolved is None:
+                    flash('That subject is not part of the selected curriculum.', 'error')
+                    raise ValueError('unknown subject')
                 faculty_member = User.query.get(int(edit_form.faculty.data))
                 new_room = edit_form.room.data
                 new_day = edit_form.day.data or schedule_to_edit.day
@@ -1106,13 +1168,14 @@ def section_schedule_grid(program_id, section_name, semester):
 
                 # Overlap checks (excluding this row) are scoped to the semester
                 # and the school year so the two semesters do not block each other.
+                semester_ids = load_ids_for_semester(semester)
+
                 def _overlap(*criteria, **extra):
                     return (TeachingLoad.query
-                            .join(Course, TeachingLoad.course_code == Course.course_code)
                             .filter(*criteria,
                                     TeachingLoad.id != schedule_to_edit.id,
                                     TeachingLoad.school_year == schedule_to_edit.school_year,
-                                    Course.semester == semester,
+                                    TeachingLoad.id.in_(semester_ids),
                                     TeachingLoad.day == new_day,
                                     TeachingLoad.time_start < time_end,
                                     TeachingLoad.time_end > time_start,
@@ -1131,18 +1194,19 @@ def section_schedule_grid(program_id, section_name, semester):
                     elif room_conflict: flash(f'Conflict: {new_room} is already occupied at that time.', 'error')
                     else:
                         schedule_to_edit.user_id = faculty_member.id
-                        schedule_to_edit.course_code = selected_course.course_code
-                        schedule_to_edit.course_description = selected_course.course_description
+                        schedule_to_edit.course_code = resolved['code']
+                        schedule_to_edit.course_description = resolved['description']
                         schedule_to_edit.day = new_day
                         schedule_to_edit.time_start = time_start
                         schedule_to_edit.time_end = time_end
                         schedule_to_edit.room = new_room
+                        set_load_term(schedule_to_edit, semester, selected_curriculum)
                         db.session.commit()
                         flash('Schedule updated.', 'success')
                         if schedule_to_edit.is_published:
                             send_schedule_update_email(faculty_member, {'course': f"{schedule_to_edit.course_code}", 'section': schedule_to_edit.section, 'day': schedule_to_edit.day, 'time': f"{schedule_to_edit.time_start} - {schedule_to_edit.time_end}", 'room': schedule_to_edit.room}, 'updated')
             except Exception as e:
-                if str(e) != 'unparseable time':
+                if str(e) not in ('unparseable time', 'unknown subject'):
                     flash(f'Invalid data: {str(e)}', 'error')
             return redirect(url_for('faculty_main.section_schedule_grid', program_id=program_id, section_name=section_name, semester=semester))
         else:
@@ -1151,10 +1215,13 @@ def section_schedule_grid(program_id, section_name, semester):
     # --- 6. DISPLAY LOGIC ---
     schedules = []
     if current_school_year:
-        schedules = db.session.query(TeachingLoad)\
-            .join(Course, and_(TeachingLoad.course_code == Course.course_code, Course.program_id == program_id))\
-            .filter(TeachingLoad.section == full_section_name, TeachingLoad.school_year == current_school_year, Course.semester == semester)\
-            .options(joinedload(TeachingLoad.teacher)).all()
+        schedules = (TeachingLoad.query
+            .filter(
+                TeachingLoad.section == full_section_name,
+                TeachingLoad.school_year == current_school_year,
+                TeachingLoad.id.in_(load_ids_for_semester(semester, program_id)),
+            )
+            .options(joinedload(TeachingLoad.teacher)).all())
 
     schedules_by_day = defaultdict(list)
     for s in schedules:
@@ -1291,14 +1358,13 @@ def section_schedule_grid(program_id, section_name, semester):
 
     section_info = { 'program': program.program_name or program.title or program.id, 'section': section_name, 'semester_display': '1st Semester' if semester == 1 else '2nd Semester' }
     
-    # --- 9. DRAFT CHECK (FIXED) ---
-    # We now JOIN explicitly on course_code because there is no relationship in models
-    has_drafts = db.session.query(TeachingLoad).join(
-        Course, TeachingLoad.course_code == Course.course_code
-    ).filter(
+    # --- 9. DRAFT CHECK ---
+    # Use the same semester filter as the grid so drafts from the other
+    # semester do not light up the "Save & Notify Faculty" button.
+    has_drafts = TeachingLoad.query.filter(
         TeachingLoad.section == full_section_name,
         TeachingLoad.is_published == False,
-        Course.semester == semester
+        TeachingLoad.id.in_(load_ids_for_semester(semester, program_id)),
     ).count() > 0
 
     # Options for the start/end dropdowns, every half hour across the school
@@ -1320,6 +1386,8 @@ def section_schedule_grid(program_id, section_name, semester):
                            time_options=time_options,
                            add_form=add_form, edit_form=edit_form, delete_form=delete_form,
                            section_info=section_info,
+                           curriculum_versions=curriculum_versions,
+                           selected_curriculum=selected_curriculum,
                            active_school_year=current_school_year,
                            has_drafts=has_drafts,
                            term_ended=term_ended,
@@ -1414,11 +1482,10 @@ def my_schedule():
     def get_raw_schedules(semester):
         if active_school_year and active_school_year != "N/A":
             return db.session.query(TeachingLoad)\
-                .join(Course, TeachingLoad.course_code == Course.course_code)\
                 .filter(
                     TeachingLoad.user_id == current_user.id,
                     TeachingLoad.school_year == active_school_year,
-                    Course.semester == semester,
+                    TeachingLoad.id.in_(load_ids_for_semester(semester)),
                     TeachingLoad.is_published == True
                 ).all()
         return []
@@ -1672,12 +1739,18 @@ def manage_section_schedule_hub():
     term_ended, term_ended_message = academic_term_status()
 
     from website.sections.protection import archived_ids
+    section_curriculum_names = {}
+    for section in Section.query.all():
+        link = db.session.get(SectionCurriculum, section.id)
+        if link is not None and link.version is not None:
+            section_curriculum_names[section.id] = link.version.name
     return render_template('faculty/manage_section_schedule_hub.html', 
                            title='Manage Sections', archived_ids=archived_ids(),
                            form=form,
                            delete_form=delete_form, 
                            programs_with_sections=programs_with_sections,
                            active_school_year=active_school_year,
+                           section_curriculum_names=section_curriculum_names,
                            term_ended=term_ended,
                            term_ended_message=term_ended_message)
 
@@ -1732,6 +1805,7 @@ def delete_schedule(schedule_id, semester):
         }
         # --- END: GATHER DETAILS ---
         
+        TeachingLoadTerm.query.filter_by(teaching_load_id=schedule_to_delete.id).delete()
         db.session.delete(schedule_to_delete)
         db.session.commit()
         flash('Schedule has been deleted successfully.', 'success')
@@ -1854,12 +1928,22 @@ def select_substitutes(sub_request_id):
     sub_request = SubstitutionRequest.query.get_or_404(sub_request_id)
     load = sub_request.teaching_load
     course = Course.query.filter_by(course_code=load.course_code).first()
+    description = course.course_description if course else (load.course_description or '')
+    load_sem = load_semester(load)
+    semester_ids = load_ids_for_semester(load_sem)
     all_potential_substitutes = User.query.filter(User.id != load.user_id, User.role == 'faculty', User.status == 'active').all()
     available_faculty = []
     conflicted_faculty = []
     for faculty in all_potential_substitutes:
-        is_qualified = course.course_description in (faculty.subjects_taught or "")
-        conflict = TeachingLoad.query.join(Course, TeachingLoad.course_code == Course.course_code).filter(TeachingLoad.user_id == faculty.id, Course.semester == course.semester, TeachingLoad.day == load.day, TeachingLoad.time_start < load.time_end, TeachingLoad.time_end > load.time_start).first()
+        is_qualified = description in (faculty.subjects_taught or "")
+        conflict = TeachingLoad.query.filter(
+            TeachingLoad.user_id == faculty.id,
+            TeachingLoad.id.in_(semester_ids),
+            TeachingLoad.school_year == load.school_year,
+            TeachingLoad.day == load.day,
+            TeachingLoad.time_start < load.time_end,
+            TeachingLoad.time_end > load.time_start,
+        ).first()
         if conflict:
             conflicted_faculty.append({'faculty': faculty, 'is_qualified': is_qualified})
         else:
@@ -1887,8 +1971,7 @@ def send_notifications(sub_request_id):
     sub_request.status = 'pending'
     db.session.commit()
     flash(f'Successfully notified {len(faculty_ids_to_notify)} faculty members.', 'success')
-    course = Course.query.filter_by(course_code=load.course_code).first()
-    return redirect(url_for('faculty_main.schedule_grid', faculty_id=load.user_id, semester=course.semester))
+    return redirect(url_for('faculty_main.schedule_grid', faculty_id=load.user_id, semester=load_semester(load)))
 
 @main.route('/notifications')
 @login_required
@@ -2931,9 +3014,8 @@ def delete_section_schedule(schedule_id):
         # 1. Capture the Full Section String (e.g., "BSCS 1A")
         full_section_name = schedule_to_delete.section
         
-        # 2. Capture Semester (fallback to 1 if missing)
-        course = Course.query.filter_by(course_code=schedule_to_delete.course_code).first()
-        semester = course.semester if course else 1 
+        # 2. Capture Semester (term row first, then the course row)
+        semester = load_semester(schedule_to_delete)
 
         # 3. Determine the correct Program based on the Section Name prefix
         # This ensures that deleting a GENED course still returns you to the BSCS grid.
@@ -2952,7 +3034,8 @@ def delete_section_schedule(schedule_id):
                 target_section_name = full_section_name[len(prog.program_code):].strip()
                 break
         
-        # 4. Delete the schedule
+        # 4. Delete the schedule (and its term row)
+        TeachingLoadTerm.query.filter_by(teaching_load_id=schedule_to_delete.id).delete()
         db.session.delete(schedule_to_delete)
         db.session.commit()
         flash('Schedule has been deleted successfully.', 'success')
@@ -3170,14 +3253,16 @@ def check_availability():
             TeachingLoad.room,
             TeachingLoad.section,
             TeachingLoad.user_id
-        ).join(Course, TeachingLoad.course_code == Course.course_code).filter(
+        ).filter(
             TeachingLoad.school_year == active_sy,
             TeachingLoad.day == day,
             TeachingLoad.time_start < time_end,
             TeachingLoad.time_end > time_start
         )
         if semester:
-            query = query.filter(Course.semester == int(semester))
+            # New loads record their term in teaching_load_terms; legacy loads
+            # still fall back to the semester of their course row.
+            query = query.filter(TeachingLoad.id.in_(load_ids_for_semester(semester)))
 
         # 5. EXCLUDE CURRENT SCHEDULE IF EDITING (The Fix)
         if exclude_id:
@@ -3238,11 +3323,10 @@ def room_schedule(room_id):
             # Fetch schedules for this room
             room_schedules = db.session.query(TeachingLoad)\
                 .join(TeachingLoad.teacher)\
-                .join(Course, TeachingLoad.course_code == Course.course_code)\
                 .filter(
                     TeachingLoad.room == selected_room.room_name,
                     TeachingLoad.school_year == active_school_year,
-                    Course.semester == current_semester
+                    TeachingLoad.id.in_(load_ids_for_semester(current_semester))
                 ).options(joinedload(TeachingLoad.teacher)).all()
 
     # --- 3. DYNAMIC WATERFALL GRID LOGIC ---
@@ -3340,8 +3424,8 @@ def publish_section_schedule(program_id, section_name, semester):
     drafts = TeachingLoad.query.filter_by(
         section=full_section_name,
         is_published=False 
-    ).join(Course, TeachingLoad.course_code == Course.course_code).filter(
-        Course.semester == semester
+    ).filter(
+        TeachingLoad.id.in_(load_ids_for_semester(semester, program_id))
     ).all()
 
     if not drafts:

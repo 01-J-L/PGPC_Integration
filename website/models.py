@@ -362,6 +362,26 @@ class StudentCurriculum(db.Model):
     version = db.relationship('CurriculumVersion')
 
 
+class SectionCurriculum(db.Model):
+    """Which curriculum version a section is scheduled under.
+
+    A program can have several active versions (new freshmen follow the new
+    plan, older batches keep theirs). Sections therefore record the version
+    their subjects are taken from so the scheduling screens can list the right
+    subjects. Rows are created/updated from the section schedule page.
+    """
+    __tablename__ = 'section_curricula'
+    __table_args__ = (_INNODB,)
+
+    section_id = db.Column(db.Integer, db.ForeignKey('sections.id', ondelete='CASCADE'), primary_key=True)
+    curriculum_version_id = db.Column(db.Integer, db.ForeignKey('curriculum_versions.id', ondelete='RESTRICT'), nullable=False, index=True)
+    updated_by = db.Column(db.String(150))
+    updated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+    version = db.relationship('CurriculumVersion')
+    section = db.relationship('Section')
+
+
 class CurriculumImportBatch(db.Model):
     """A parsed reference file waiting for (or finished with) registrar review."""
     __tablename__ = 'curriculum_import_batches'
@@ -1357,6 +1377,27 @@ class TeachingLoad(db.Model):
 
     def __repr__(self):
         return f'<TeachingLoad {self.course_code} - {self.section}>'
+
+
+class TeachingLoadTerm(db.Model):
+    """Term (and curriculum) a teaching load was scheduled for.
+
+    `teaching_loads` predates versioned curricula and has no semester column;
+    its semester used to be inferred from the `courses` row of the subject.
+    New-curriculum subjects do not always exist in `courses` (or are placed in
+    a different term there), so each load scheduled through the section
+    schedule page records its term here. Legacy loads have no row and keep
+    falling back to their course row.
+    """
+    __tablename__ = 'teaching_load_terms'
+    __table_args__ = (_INNODB,)
+
+    teaching_load_id = db.Column(db.Integer, db.ForeignKey('teaching_loads.id', ondelete='CASCADE'), primary_key=True)
+    semester = db.Column(db.Integer, nullable=False, index=True)
+    curriculum_version_id = db.Column(db.Integer, db.ForeignKey('curriculum_versions.id', ondelete='SET NULL'), index=True)
+
+    version = db.relationship('CurriculumVersion')
+    load = db.relationship('TeachingLoad')
 
 
 class Announcement(db.Model):

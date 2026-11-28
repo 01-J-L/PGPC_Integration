@@ -74,7 +74,7 @@
                                     <ul class="space-y-2">
                                     {% for section, section_display in sections_in_year %}
                                         <li class="flex justify-between items-center p-2 bg-black/5 dark:bg-white/5 rounded-lg">
-                                            <span class="font-medium text-slate-700 dark:text-slate-200">{{ section.program.program_code }} {{ section_display }}{% if section.id in archived_ids %} <span class="ml-1 px-2 py-0.5 text-xs rounded-full bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300">Archived</span>{% endif %}</span>
+                                            <span class="font-medium text-slate-700 dark:text-slate-200">{{ section.program.program_code }} {{ section_display }}{% if section.id in archived_ids %} <span class="ml-1 px-2 py-0.5 text-xs rounded-full bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300">Archived</span>{% endif %}{% if section.id in section_curriculum_names %} <span class="ml-1 px-2 py-0.5 text-[10px] rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300" title="Curriculum used for this section">{{ section_curriculum_names[section.id] }}</span>{% endif %}</span>
                                             <div class="flex items-center space-x-3">
                                                 <a href="{{ url_for('faculty_main.section_schedule_grid', program_id=section.program.id, section_name=section.name, semester=1) }}" class="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline">Manage Schedule</a>
                                                 {% if section.id in archived_ids %}
@@ -117,7 +117,7 @@
                                     <ul class="space-y-2">
                                     {% for section, section_display in sections_in_year %}
                                         <li class="flex justify-between items-center p-2 bg-black/5 dark:bg-white/5 rounded-lg">
-                                            <span class="font-medium text-slate-700 dark:text-slate-200">{{ section.program.program_code }} {{ section_display }}{% if section.id in archived_ids %} <span class="ml-1 px-2 py-0.5 text-xs rounded-full bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300">Archived</span>{% endif %}</span>
+                                            <span class="font-medium text-slate-700 dark:text-slate-200">{{ section.program.program_code }} {{ section_display }}{% if section.id in archived_ids %} <span class="ml-1 px-2 py-0.5 text-xs rounded-full bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300">Archived</span>{% endif %}{% if section.id in section_curriculum_names %} <span class="ml-1 px-2 py-0.5 text-[10px] rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300" title="Curriculum used for this section">{{ section_curriculum_names[section.id] }}</span>{% endif %}</span>
                                             <div class="flex items-center space-x-3">
                                                 <a href="{{ url_for('faculty_main.section_schedule_grid', program_id=section.program.id, section_name=section.name, semester=2) }}" class="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline">Manage Schedule</a>
                                                 {% if section.id in archived_ids %}

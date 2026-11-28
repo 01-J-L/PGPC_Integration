@@ -14,6 +14,7 @@ from website.models import (
     JournalLine, StudentAssessment, StudentPayment, FacultyAssignment, Grade,
     PageContent, HeroSlide, NewsArticle, FacultyMember, FAQ, StatusRequirement,
     StatusUpload, SocialMediaLink, StudentDownload, ReceiptLayoutSetting,
+    CurriculumVersion, CurriculumSubject, SectionCurriculum, TeachingLoadTerm,
 )
 
 __all__ = [
@@ -28,5 +29,6 @@ __all__ = [
     'StudentAssessment', 'StudentPayment', 'FacultyAssignment', 'Grade',
     'PageContent', 'HeroSlide', 'NewsArticle', 'FacultyMember', 'FAQ',
     'StatusRequirement', 'StatusUpload', 'SocialMediaLink', 'StudentDownload',
-    'ReceiptLayoutSetting',
+    'ReceiptLayoutSetting', 'CurriculumVersion', 'CurriculumSubject',
+    'SectionCurriculum', 'TeachingLoadTerm',
 ]
