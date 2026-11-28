@@ -3183,6 +3183,7 @@ def cashier_view_history(student_id):
 
 @auth.route('/cashier/batch-assessment', methods=['GET', 'POST'])
 def create_batch_assessment():
+    from website.finance import service as finance
     # 1. Security Check: Allow Cashier and Accounting roles
     if session.get('user_role') not in ['cashier', 'accounting']: 
         return redirect(url_for('auth.admin_login'))
@@ -3193,7 +3194,13 @@ def create_batch_assessment():
     
     # 2. Handle POST Request (Creating a new Batch Assessment)
     if request.method == 'POST':
-        desc = request.form.get('description')
+        # the description comes from Accounting's list (dropdown), checked here too
+        try:
+            desc = finance.check_fee_description(request.form.get('description'))
+        except finance.FinanceError as e:
+            cursor.close(); conn.close()
+            flash(' '.join(e.messages), "danger")
+            return redirect(url_for('auth.create_batch_assessment'))
         amount = request.form.get('total_amount')
         target_sem = request.form.get('semester')
         target_scope = request.form.get('scope')
@@ -3261,11 +3268,14 @@ def create_batch_assessment():
     
     return render_template('create_batch_assessment.html', 
                            history=history, 
+                           fee_descriptions=finance.fee_descriptions(),
+                           all_fee_descriptions=finance.fee_descriptions(include_hidden=True),
                            active_semester=active_sem,
                            base_template=base_template)
 
 @auth.route('/cashier/batch-assessment/edit/<int:batch_id>', methods=['POST'])
 def edit_batch_assessment(batch_id):
+    from website.finance import service as finance
     if session.get('user_role') not in ['cashier', 'accounting']:
         return redirect(url_for('auth.admin_login'))
 
@@ -3288,6 +3298,11 @@ def edit_batch_assessment(batch_id):
             return redirect(url_for('auth.create_batch_assessment'))
 
         old_desc = old_batch['description']
+        try:
+            new_desc = finance.check_fee_description(new_desc, current=old_desc)
+        except finance.FinanceError as e:
+            flash(' '.join(e.messages), "danger")
+            return redirect(url_for('auth.create_batch_assessment'))
 
         # REMOVED: updated_at = NOW() from the query below
         cursor.execute("""

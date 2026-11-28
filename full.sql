@@ -1514,6 +1514,23 @@ CREATE TABLE IF NOT EXISTS down_payments (
 	INDEX ix_down_payments_academic_term_id (academic_term_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- =====================================================================
+--  FEE DESCRIPTIONS (generated from website/models.py)
+-- =====================================================================
+-- ---- fee_descriptions --------------------------------------------
+CREATE TABLE IF NOT EXISTS fee_descriptions (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	name VARCHAR(150) NOT NULL, 
+	is_active BOOL NOT NULL DEFAULT 1, 
+	created_by VARCHAR(150) NOT NULL, 
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	updated_by VARCHAR(150), 
+	updated_at DATETIME, 
+	PRIMARY KEY (id), 
+	UNIQUE (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------
 --  Schema migration ledger (website/schema_migrations.py).
 --  A database built from THIS file already contains every change below, so
@@ -1534,7 +1551,8 @@ INSERT IGNORE INTO schema_migrations (id, description, applied_at) VALUES
   ('0007_control_numbers', 'built into full.sql', NOW()),
   ('0008_grade_visibility', 'built into full.sql', NOW()),
   ('0009_section_archives', 'built into full.sql', NOW()),
-  ('0010_down_payments', 'built into full.sql', NOW());
+  ('0010_down_payments', 'built into full.sql', NOW()),
+  ('0011_fee_descriptions', 'built into full.sql', NOW());
 
 SET FOREIGN_KEY_CHECKS = 1;
 

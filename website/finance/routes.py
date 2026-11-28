@@ -124,3 +124,35 @@ def regenerate(form_id):
         db.session.rollback()
         flash(' '.join(e.messages), 'danger')
     return _back(url_for('finance.index'))
+
+
+# ---------------------------------------------------------------------------
+# fee descriptions (the dropdown of the batch assessment form)
+# ---------------------------------------------------------------------------
+
+@finance.route('/fee-descriptions', methods=['POST'])
+def add_fee_description():
+    if session.get('user_role') not in VIEW_ROLES:
+        return redirect(url_for('auth.admin_login'))
+    try:
+        fd, created = service.add_fee_description(_actor(), request.form.get('name'))
+        db.session.commit()
+        flash(f'"{fd.name}" {"added to" if created else "is back in"} the fee descriptions.', 'success')
+    except FinanceError as e:
+        db.session.rollback()
+        flash(' '.join(e.messages), 'danger')
+    return redirect(url_for('auth.create_batch_assessment') + '#fee-descriptions')
+
+
+@finance.route('/fee-descriptions/<int:fd_id>/<action>', methods=['POST'])
+def toggle_fee_description(fd_id, action):
+    if session.get('user_role') not in VIEW_ROLES:
+        return redirect(url_for('auth.admin_login'))
+    try:
+        fd = service.set_fee_description_active(_actor(), fd_id, action == 'show')
+        db.session.commit()
+        flash(f'"{fd.name}" is {"shown in" if fd.is_active else "hidden from"} the dropdown.', 'success')
+    except FinanceError as e:
+        db.session.rollback()
+        flash(' '.join(e.messages), 'danger')
+    return redirect(url_for('auth.create_batch_assessment') + '#fee-descriptions')
