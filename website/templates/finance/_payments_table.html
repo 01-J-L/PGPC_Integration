@@ -12,7 +12,8 @@
             <td class="px-3 py-2">{{ p.id }}</td>
             <td class="px-3 py-2 whitespace-nowrap">{{ p.payment_date }}</td>
             <td class="px-3 py-2">{{ p.receipt_number or '—' }}</td>
-            <td class="px-3 py-2">{{ p.payment_method }}{% if p.remark %}<div class="text-xs text-gray-500">{{ p.remark }}</div>{% endif %}</td>
+            <td class="px-3 py-2">{{ p.payment_method }}{% if p.remark %}<div class="text-xs text-gray-500">{{ p.remark }}</div>{% endif %}
+                {% if p.dp_status and not p.is_reversal %}<div class="text-xs {{ 'text-green-700' if p.dp_status == 'applied' else 'text-indigo-700' }}">{% if p.dp_status == 'applied' %}Down payment &rarr; deducted from {{ p.dp_applied_to }}{% elif p.dp_status == 'held' %}Down payment &middot; waiting for the Tuition Fee{% endif %}</div>{% endif %}</td>
             <td class="px-3 py-2 text-right whitespace-nowrap {{ 'line-through' if p.is_reversed }}">{{ p.amount_paid|peso }}</td>
             <td class="px-3 py-2">{{ p.cashier_username or '—' }}</td>
             <td class="px-3 py-2 text-xs">

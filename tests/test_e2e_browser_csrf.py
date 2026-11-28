@@ -166,3 +166,30 @@ def test_forged_cross_site_post_is_blocked(server, browser, dbx, program):
     page.wait_for_load_state()
     assert dbx.one("SELECT applicant_id FROM applicants WHERE applicant_id=%s", (s['applicant_id'],)) is not None
     ctx.close()
+
+
+def test_cashier_down_payment_in_the_browser(server, browser, dbx, program, active_term):
+    """The page script capped every amount at the selected item's balance; the down payment
+    option has none, so the browser refused every down payment before it reached the server."""
+    s = make_student(dbx, program)
+    dbx.x("INSERT INTO system_settings (setting_key, setting_value) VALUES ('issuance_of_receipt','false') "
+          "ON DUPLICATE KEY UPDATE setting_value='false'")
+    _staff(dbx, 'e2e_cashier_dp', 'cashier')
+    page = _new_page(browser)
+    alerts = []
+    page.on('dialog', lambda d: alerts.append(d.message))
+    page.goto(server + '/admin')
+    page.fill('input[name="username"]', 'e2e_cashier_dp')
+    page.fill('input[name="password"]', PASSWORD)
+    with page.expect_navigation():
+        page.click('form[action$="/admin_login"] [type="submit"]')
+    page.goto(server + '/cashier/payment/%d' % s['applicant_id'])
+    page.select_option('#assessment_id', 'down')
+    page.fill('#amount', '1500')
+    with page.expect_navigation():
+        page.click('#paymentForm [type="submit"]')
+    assert not any('exceeds' in m for m in alerts), alerts
+    dp = dbx.one("SELECT d.status, d.amount, p.assessment_id FROM down_payments d JOIN payments p ON p.id = d.payment_id "
+                 "WHERE d.student_user_id=%s", (s['student_user_id'],))
+    assert dp and dp['status'] == 'held' and float(dp['amount']) == 1500.0 and dp['assessment_id'] is None
+    page.close()

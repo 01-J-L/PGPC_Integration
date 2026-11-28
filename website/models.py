@@ -834,6 +834,38 @@ class SectionArchive(db.Model):
 SECTION_TABLES = ['section_archives']
 
 
+# =========================================================
+# ENROLLMENT DOWN PAYMENTS (paid before the term's fees exist)
+# =========================================================
+
+class DownPayment(db.Model):
+    """A payment taken before enrollment, not yet on a charge (payments.assessment_id NULL).
+
+    It counts toward the enrollment payment policy and the term balance at once, and is
+    applied to the student's Tuition Fee charge as soon as that charge exists (form
+    finalized) and at the latest at check-in: the payment row then points to the charge
+    (same amount, same receipt, verification kept). status: held / applied / reversed."""
+    __tablename__ = 'down_payments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    payment_id = db.Column(db.Integer, db.ForeignKey('payments.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False, index=True)
+    applicant_id = db.Column(db.Integer, db.ForeignKey('applicants.applicant_id', ondelete='RESTRICT'), nullable=False, index=True)
+    academic_term_id = db.Column(db.Integer, db.ForeignKey('academic_terms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='held', server_default='held')
+    applied_assessment_id = db.Column(db.Integer, db.ForeignKey('assessments.id', ondelete='RESTRICT'))
+    applied_by = db.Column(db.String(150))
+    applied_at = db.Column(db.DateTime)
+    created_by = db.Column(db.String(150), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+
+    __table_args__ = (_INNODB,)
+
+
+DOWN_PAYMENT_TABLES = ['down_payments']
+
+
 class ProgramObjective(db.Model):
     __tablename__ = 'program_objectives'
 

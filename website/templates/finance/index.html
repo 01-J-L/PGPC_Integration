@@ -43,6 +43,33 @@
                     {% for st in ['Unpaid', 'Partially Paid', 'Fully Paid', 'No Fees Assessed', 'For Verification', 'Payment Verified'] %}<option value="{{ st }}" {% if st == status %}selected{% endif %}>{{ st }}</option>{% endfor %}</select></div>
             <button class="px-4 py-2 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50">Filter</button>
         </form>
+        {% if down %}
+        <div class="bg-white rounded-xl shadow-sm border border-indigo-200 relative overflow-x-auto" id="down-payments">
+            <h2 class="px-4 py-2 text-sm font-semibold text-indigo-800 bg-indigo-50">Down payments waiting for the Tuition Fee ({{ down|length }})</h2>
+            <table class="min-w-full text-sm">
+                <thead class="text-xs uppercase text-gray-500"><tr>
+                    <th scope="col" class="px-4 py-2 text-left">Student</th><th scope="col" class="px-3 py-2 text-left">Paid</th>
+                    <th scope="col" class="px-3 py-2 text-right">Amount</th><th scope="col" class="px-3 py-2 text-left">Verification</th>
+                    <th scope="col" class="px-4 py-2"><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody class="divide-y divide-gray-100">
+                {% for d in down %}
+                    <tr>
+                        <td class="px-4 py-2 font-medium text-gray-900">{{ d.applicant.last_name }}, {{ d.applicant.first_name }}<div class="text-xs text-gray-500 font-normal">{{ d.applicant.old_student_id or d.applicant.control_number or '' }}</div></td>
+                        <td class="px-3 py-2 text-xs">{{ d.p.payment_date }}{% if d.p.receipt_number %} &middot; O.R. {{ d.p.receipt_number }}{% endif %}<div class="text-gray-500">{{ d.p.cashier_username }}</div></td>
+                        <td class="px-3 py-2 text-right">{{ d.p.amount_paid|peso }}</td>
+                        <td class="px-3 py-2 text-xs">{% if d.p.verified_by %}<span class="text-green-700">Verified ({{ d.p.verified_by }})</span>{% else %}<span class="text-yellow-700">For verification</span>{% endif %}</td>
+                        <td class="px-4 py-2 text-right whitespace-nowrap">
+                            {% if not d.p.verified_by and session.user_role == 'accounting' and d.p.cashier_username != session.user_name %}
+                            <form method="POST" action="{{ url_for('finance.verify', payment_id=d.p.id) }}" class="inline"><button class="text-green-700 text-xs font-medium hover:underline">Verify</button></form>
+                            {% endif %}
+                            <a class="text-blue-600 text-xs font-medium hover:underline ml-2" href="{{ url_for('auth.update_payment', student_id_db=d.dp.applicant_id) }}#payments">Payments</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 relative overflow-x-auto">
             <table class="min-w-full text-sm">
                 <thead class="bg-gray-50 text-xs uppercase text-gray-500"><tr>

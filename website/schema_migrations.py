@@ -292,6 +292,14 @@ MIGRATIONS = [
         'rollback_guard': "SELECT COUNT(*) FROM section_archives",
         'rollback': ["DROP TABLE IF EXISTS `section_archives`"],
     },
+    {
+        'id': '0010_down_payments',
+        'description': ("Enrollment down payments: payments taken before the term's fees exist, applied to the "
+                        "Tuition Fee charge when it exists (and at the latest at check-in). New table only."),
+        'build': _create_model_tables(['down_payments']),
+        'rollback_guard': "SELECT COUNT(*) FROM down_payments",
+        'rollback': ["DROP TABLE IF EXISTS `down_payments`"],
+    },
 ]
 
 _LEDGER_DDL = """

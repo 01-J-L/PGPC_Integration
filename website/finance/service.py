@@ -30,7 +30,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.exc import IntegrityError
 
 from website import db
-from website.models import (AcademicTerm, EnrollmentAssessment, EnrollmentAssessmentItem, FinanceAuditLog,
+from website.models import (AcademicTerm, DownPayment, EnrollmentAssessment, EnrollmentAssessmentItem, FinanceAuditLog,
                             PaymentReversal, PaymentSubmission, PaymentVerification, RegistrationForm, YEAR_LABELS)
 
 CENT = Decimal('0.01')
@@ -221,6 +221,8 @@ def generate_for_form(form, actor):
               'total_assessment': ea.total_assessment, 'first_generation': created_ea}
     _audit('generate_assessment' if created_ea else 'regenerate_assessment', actor, applicant_id=form.applicant_id,
            ea_id=ea.id, details=report)
+    db.session.flush()
+    report['down_payments_applied'] = apply_down_payments(actor, form.student_user_id, form.academic_term_id)
     return ea, report
 
 
@@ -250,12 +252,15 @@ def payment_rows(applicant_ids):
                COALESCE(orig.payment_method, p.payment_method) AS category_method,
                (pr_in.id IS NOT NULL) AS is_reversal, (pr_out.id IS NOT NULL) AS is_reversed,
                pr_out.reason AS reversal_reason, pr_out.reversed_by AS reversed_by,
-               pv.status AS verification, pv.verified_by, pv.verified_at
+               pv.status AS verification, pv.verified_by, pv.verified_at,
+               dp.academic_term_id AS dp_term_id, dp.status AS dp_status, dpa.description AS dp_applied_to
         FROM payments p
         LEFT JOIN payment_reversals pr_in ON pr_in.reversal_payment_id = p.id
         LEFT JOIN payments orig ON orig.id = pr_in.payment_id
         LEFT JOIN payment_reversals pr_out ON pr_out.payment_id = p.id
         LEFT JOIN payment_verifications pv ON pv.payment_id = p.id
+        LEFT JOIN down_payments dp ON dp.payment_id = COALESCE(pr_in.payment_id, p.id)
+        LEFT JOIN assessments dpa ON dpa.id = dp.applied_assessment_id
         WHERE p.student_id IN :aids
         ORDER BY p.payment_date, p.id
     """, aids=applicant_ids).mappings()]
@@ -281,12 +286,18 @@ def summary(student_user_id, term_id):
     unverified = verified = 0
     latest = None
     rows = payment_rows(aids)
+    held = Decimal('0.00')
     for p in rows:
         amt = money(p['amount_paid'])
         aid = p['assessment_id']
         if aid in later:
             continue
-        if aid in current:
+        down_payment_here = aid is None and p['dp_term_id'] is not None
+        if down_payment_here and p['dp_term_id'] != term_id:
+            continue                      # a down payment of another term, not yet applied
+        if down_payment_here:
+            held += amt
+        if aid in current or down_payment_here:
             if p['category_method'] in CREDIT_METHODS:
                 discounts += amt
             else:
@@ -319,6 +330,7 @@ def summary(student_user_id, term_id):
         'payments': payments, 'remaining': remaining, 'payment_status': pay_status,
         'verification_status': ver_status, 'unverified_count': unverified, 'verified_count': verified,
         'verified_payments': verified_paid, 'latest_payment': latest, 'term': term,
+        'held_down_payments': held,
     }
 
 
@@ -333,7 +345,7 @@ def check_policy(student_user_id, term_id, s=None):
                  s=student_user_id, t=term_id).fetchone()
         ok = bool(row and row[0])
         return ok, ('Accounting has cleared the student.' if ok else 'Waiting for accounting clearance.')
-    if s['assessment'] is None:
+    if s['assessment'] is None and pol['mode'] == 'full':
         return False, 'No assessment has been generated for this term (finalize the registration form).'
     counted = s['verified_payments'] if pol['require_verification'] else s['payments']
     note = ' (verified payments only)' if pol['require_verification'] else ''
@@ -404,8 +416,8 @@ def resync_assessment(assessment_id):
     _q("UPDATE assessments SET amount_paid = :p, balance = :b, status = :s WHERE id = :a", p=paid, b=balance, s=status, a=assessment_id)
 
 
-def record_payment(actor, applicant_id, assessment_id, amount, payment_date, method, remark=None, receipt_number=None, token=None):
-    """Returns (payment_id, duplicate: bool)."""
+def _payment_input(actor, amount, payment_date, method, receipt_number, token):
+    """Checks shared by every way of taking money. Returns (duplicate_payment_id or None, amt, date, receipt)."""
     if not token or not re.fullmatch(r'[0-9a-f]{32}', str(token)):
         raise FinanceError('This payment form has expired. Reload the page and enter the payment again.')
     try:
@@ -414,7 +426,7 @@ def record_payment(actor, applicant_id, assessment_id, amount, payment_date, met
             db.session.flush()
     except IntegrityError:
         prior = db.session.get(PaymentSubmission, token)
-        return (prior.payment_id if prior else None), True
+        return ('dup', prior.payment_id if prior else None), None, None, None
     amt = money(amount)
     if amt <= 0:
         raise FinanceError('Payment amount must be greater than zero.')
@@ -433,6 +445,14 @@ def record_payment(actor, applicant_id, assessment_id, amount, payment_date, met
         dup = _q("SELECT id FROM payments WHERE receipt_number = :r", r=receipt_number).fetchone()
         if dup:
             raise FinanceError(f'Official receipt no. {receipt_number} is already used by payment #{dup[0]}.')
+    return None, amt, pdate, receipt_number
+
+
+def record_payment(actor, applicant_id, assessment_id, amount, payment_date, method, remark=None, receipt_number=None, token=None):
+    """Returns (payment_id, duplicate: bool)."""
+    dup, amt, pdate, receipt_number = _payment_input(actor, amount, payment_date, method, receipt_number, token)
+    if dup:
+        return dup[1], True
     a = _q("SELECT id, description, total_amount FROM assessments WHERE id = :a AND student_id = :s FOR UPDATE",
            a=assessment_id, s=applicant_id).mappings().first()
     if not a:
@@ -510,9 +530,102 @@ def reverse_payment(actor, payment_id, reason):
                                    reversed_role=actor.role, reversed_at=datetime.now()))
     if p['assessment_id']:
         resync_assessment(p['assessment_id'])
+    dp = DownPayment.query.filter_by(payment_id=payment_id).first()
+    if dp is not None and dp.status == 'held':
+        dp.status = 'reversed'
     _audit('reverse_payment', actor, applicant_id=p['student_id'], payment_id=payment_id,
            details={'amount': amt, 'reversal_payment_id': rid, 'reason': reason, 'was_verified': bool(verified)})
     return rid
+
+
+# ---------------------------------------------------------------------------
+# enrollment down payments
+# ---------------------------------------------------------------------------
+
+DOWN_PAYMENT_REMARK = 'Enrollment down payment'
+
+
+def record_down_payment(actor, applicant_id, term_id, amount, payment_date, method, remark=None, receipt_number=None, token=None):
+    """Money taken before enrollment, before the term's fees exist. Counts toward the
+    payment policy at once; applied to the Tuition Fee when that charge exists.
+    Returns (payment_id, duplicate: bool)."""
+    if actor.role not in ('cashier', 'accounting'):
+        raise FinanceError('Only cashier or accounting personnel can take payments.')
+    dup, amt, pdate, receipt_number = _payment_input(actor, amount, payment_date, method, receipt_number, token)
+    if dup:
+        return dup[1], True
+    term = db.session.get(AcademicTerm, int(term_id)) if term_id else None
+    if term is None:
+        raise FinanceError('There is no active academic term for a down payment.')
+    app = _q("SELECT applicant_id, student_user_id FROM applicants WHERE applicant_id = :a FOR UPDATE", a=applicant_id).mappings().first()
+    if not app or not app['student_user_id']:
+        raise FinanceError('This student has no student account; a down payment cannot be linked to them.')
+    from website.checkin.service import is_checked_in
+    if is_checked_in(app['student_user_id'], term.id):
+        raise FinanceError('The student is already enrolled for this term: pay against the fees instead.')
+    note = (remark or '').strip()
+    res = _q("INSERT INTO payments (student_id, assessment_id, amount_paid, payment_date, payment_method, remark, receipt_number, cashier_username) "
+             "VALUES (:s, NULL, :amt, :d, :m, :r, :o, :c)", s=applicant_id, amt=amt, d=pdate, m=method,
+             r=(DOWN_PAYMENT_REMARK + (' - ' + note if note else ''))[:100], o=receipt_number, c=actor.name)
+    pid = res.lastrowid
+    db.session.get(PaymentSubmission, token).payment_id = pid
+    db.session.add(DownPayment(payment_id=pid, student_user_id=app['student_user_id'], applicant_id=applicant_id,
+                               academic_term_id=term.id, amount=amt, status='held', created_by=actor.name,
+                               created_at=datetime.now()))
+    db.session.flush()
+    _audit('record_down_payment', actor, applicant_id=applicant_id, payment_id=pid,
+           details={'term': '%s %s' % (term.year_name, term.semester), 'amount': amt, 'method': method,
+                    'receipt_number': receipt_number})
+    apply_down_payments(actor, app['student_user_id'], term.id)       # at once if the tuition fee already exists
+    return pid, False
+
+
+def held_down_payments(student_user_id, term_id):
+    """Down payments of the term still waiting for the tuition fee (reversed ones excluded)."""
+    rows = DownPayment.query.filter_by(student_user_id=student_user_id, academic_term_id=term_id, status='held') \
+        .order_by(DownPayment.id).all()
+    return [d for d in rows if not _q("SELECT 1 FROM payment_reversals WHERE payment_id = :p", p=d.payment_id).fetchone()]
+
+
+def _tuition_targets(ea):
+    """Charges of the term assessment in the order a down payment goes to them:
+    the Tuition Fee first, then the other charges, largest first."""
+    out = []
+    for item in ea.items:
+        row = _q("SELECT a.id, a.description, a.total_amount, COALESCE(SUM(p.amount_paid), 0) AS paid FROM assessments a "
+                 "LEFT JOIN payments p ON p.assessment_id = a.id WHERE a.id = :a GROUP BY a.id, a.description, a.total_amount FOR UPDATE",
+                 a=item.assessment_id).mappings().first()
+        if row:
+            out.append({'id': row['id'], 'description': row['description'],
+                        'remaining': money(row['total_amount']) - money(row['paid'])})
+    return sorted(out, key=lambda c: ('tuition' not in (c['description'] or '').lower(), -c['remaining']))
+
+
+def apply_down_payments(actor, student_user_id, term_id):
+    """Put every held down payment of the term on the Tuition Fee (or, if it does not fit
+    there, on another charge of the term that can take it whole). The payment keeps its
+    amount, receipt and verification; only the charge it belongs to is filled in.
+    Returns [(amount, charge description)] applied; a payment that fits nowhere stays held
+    (it still counts as a credit in the term balance)."""
+    ea = EnrollmentAssessment.query.filter_by(student_user_id=student_user_id, academic_term_id=term_id).first()
+    if ea is None:
+        return []
+    applied = []
+    for dp in held_down_payments(student_user_id, term_id):
+        amt = money(dp.amount)
+        target = next((c for c in _tuition_targets(ea) if c['remaining'] >= amt), None)
+        if target is None:
+            continue
+        n = _q("UPDATE payments SET assessment_id = :a WHERE id = :p AND assessment_id IS NULL", a=target['id'], p=dp.payment_id).rowcount
+        if not n:
+            continue
+        dp.status, dp.applied_assessment_id, dp.applied_by, dp.applied_at = 'applied', target['id'], actor.name, datetime.now()
+        resync_assessment(target['id'])
+        _audit('apply_down_payment', actor, applicant_id=dp.applicant_id, payment_id=dp.payment_id,
+               details={'amount': amt, 'charge': target['description'], 'assessment_id': target['id']})
+        applied.append((amt, target['description']))
+    db.session.flush()
+    return applied
 
 
 def last_reversible_payment(applicant_id):
