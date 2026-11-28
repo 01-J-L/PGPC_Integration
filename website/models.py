@@ -866,6 +866,29 @@ class DownPayment(db.Model):
 DOWN_PAYMENT_TABLES = ['down_payments']
 
 
+# =========================================================
+# FEE DESCRIPTIONS (the dropdown of the batch assessment form)
+# =========================================================
+
+class FeeDescription(db.Model):
+    """Names Accounting allows for fee rules ("Tuition Fee", "Laboratory Fee", ...).
+    Hidden names stay for history; existing rules and charges are never renamed."""
+    __tablename__ = 'fee_descriptions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False, unique=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=_sa.text('1'))
+    created_by = db.Column(db.String(150), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+    updated_by = db.Column(db.String(150))
+    updated_at = db.Column(db.DateTime)
+
+    __table_args__ = (_INNODB,)
+
+
+FEE_DESCRIPTION_TABLES = ['fee_descriptions']
+
+
 class ProgramObjective(db.Model):
     __tablename__ = 'program_objectives'
 

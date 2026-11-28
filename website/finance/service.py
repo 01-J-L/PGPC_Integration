@@ -30,7 +30,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.exc import IntegrityError
 
 from website import db
-from website.models import (AcademicTerm, DownPayment, EnrollmentAssessment, EnrollmentAssessmentItem, FinanceAuditLog,
+from website.models import (AcademicTerm, DownPayment, EnrollmentAssessment, FeeDescription, EnrollmentAssessmentItem, FinanceAuditLog,
                             PaymentReversal, PaymentSubmission, PaymentVerification, RegistrationForm, YEAR_LABELS)
 
 CENT = Decimal('0.01')
@@ -626,6 +626,64 @@ def apply_down_payments(actor, student_user_id, term_id):
         applied.append((amt, target['description']))
     db.session.flush()
     return applied
+
+
+# ---------------------------------------------------------------------------
+# fee descriptions (dropdown of the batch assessment form)
+# ---------------------------------------------------------------------------
+
+def fee_descriptions(include_hidden=False):
+    q = FeeDescription.query
+    if not include_hidden:
+        q = q.filter_by(is_active=True)
+    return q.order_by(FeeDescription.name).all()
+
+
+def add_fee_description(actor, name):
+    """Accounting adds a name to the dropdown. A hidden name with the same spelling is shown again."""
+    if actor.role != 'accounting':
+        raise FinanceError('Only accounting can add fee descriptions.')
+    name = ' '.join((name or '').split())
+    if not name:
+        raise FinanceError('Enter the fee description.')
+    if len(name) > 150:
+        raise FinanceError('The fee description is too long (150 characters at most).')
+    existing = FeeDescription.query.filter(db.func.lower(FeeDescription.name) == name.lower()).first()
+    if existing is not None:
+        if existing.is_active:
+            raise FinanceError(f'"{existing.name}" is already in the list.')
+        existing.is_active, existing.updated_by, existing.updated_at = True, actor.name, datetime.now()
+        _audit('fee_description_show', actor, details={'name': existing.name})
+        return existing, False
+    fd = FeeDescription(name=name, is_active=True, created_by=actor.name, created_at=datetime.now())
+    db.session.add(fd)
+    db.session.flush()
+    _audit('fee_description_add', actor, details={'name': name})
+    return fd, True
+
+
+def set_fee_description_active(actor, fee_description_id, active):
+    if actor.role != 'accounting':
+        raise FinanceError('Only accounting can change fee descriptions.')
+    fd = db.session.get(FeeDescription, int(fee_description_id))
+    if fd is None:
+        raise FinanceError('Fee description not found.')
+    fd.is_active, fd.updated_by, fd.updated_at = bool(active), actor.name, datetime.now()
+    _audit('fee_description_show' if active else 'fee_description_hide', actor, details={'name': fd.name})
+    return fd
+
+
+def check_fee_description(name, current=None):
+    """The description chosen on the batch form must come from the list (or stay the
+    rule's current one when editing). Returns the stored spelling."""
+    name = ' '.join((name or '').split())
+    if current is not None and name == ' '.join(current.split()):
+        return current
+    fd = FeeDescription.query.filter(db.func.lower(FeeDescription.name) == name.lower(),
+                                     FeeDescription.is_active.is_(True)).first()
+    if fd is None:
+        raise FinanceError('Choose the fee description from the list. Accounting can add new descriptions.')
+    return fd.name
 
 
 def last_reversible_payment(applicant_id):

@@ -156,6 +156,16 @@ def _create_and_seed_grade_releases(cur):
     return _create_model_tables(['grade_releases', 'grade_holds'])(cur) + [GRADE_RELEASE_SEED_SQL]
 
 
+FEE_DESCRIPTION_SEED_SQL = (
+    "INSERT IGNORE INTO fee_descriptions (name, is_active, created_by) "
+    "SELECT DISTINCT TRIM(description), 1, 'migration 0011' FROM batch_assessments_log "
+    "WHERE description IS NOT NULL AND TRIM(description) <> ''")
+
+
+def _create_and_seed_fee_descriptions(cur):
+    return _create_model_tables(['fee_descriptions'])(cur) + [FEE_DESCRIPTION_SEED_SQL]
+
+
 MIGRATIONS = [
     {
         'id': '0001_enrollment_shs_document_columns',
@@ -299,6 +309,14 @@ MIGRATIONS = [
         'build': _create_model_tables(['down_payments']),
         'rollback_guard': "SELECT COUNT(*) FROM down_payments",
         'rollback': ["DROP TABLE IF EXISTS `down_payments`"],
+    },
+    {
+        'id': '0011_fee_descriptions',
+        'description': ("Fee descriptions for the batch assessment dropdown, maintained by Accounting. "
+                        "Seeded with every description the fee rules already use. New table only."),
+        'build': _create_and_seed_fee_descriptions,
+        'rollback_guard': "SELECT COUNT(*) FROM fee_descriptions WHERE created_by <> 'migration 0011'",
+        'rollback': ["DROP TABLE IF EXISTS `fee_descriptions`"],
     },
 ]
 
