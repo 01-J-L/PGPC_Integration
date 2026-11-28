@@ -2,9 +2,9 @@
 
 {% extends "admin_base.html" %}
 
-{% block title %}Manage Grades for {{ student.first_name }} {{ student.last_name }}{% endblock %}
+{% block title %}{{ 'Student Grades' if not can_edit_grades else 'Manage Grades' }} for {{ student.first_name }} {{ student.last_name }}{% endblock %}
 
-{% block page_title %}Manage Student Grades{% endblock %}
+{% block page_title %}{{ 'Student Grades (View Only)' if not can_edit_grades else 'Manage Student Grades' }}{% endblock %}
 
 {% block breadcrumb %}
     {% if student.application_status == 'Enrolling' %}
@@ -95,10 +95,16 @@
         
         <div class="flex-grow"></div>
 
+        {% if can_edit_grades %}
         <input type="file" id="importExcelInput" accept=".xlsx, .xls" class="hidden">
         <button type="button" id="importExcelBtn" class="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-green-700 flex items-center">
             <i class="ri-file-upload-line mr-2"></i> Import
         </button>
+        {% else %}
+        <span class="px-3 py-1.5 bg-amber-100 text-amber-800 text-xs font-semibold rounded-full flex items-center">
+            <i class="ri-eye-line mr-1"></i> View only — grades cannot be edited
+        </span>
+        {% endif %}
 
         <a href="{{ url_for('auth.admin_export_grades', student_user_id=student.student_user_id) }}" id="exportExcelBtn"
            class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-indigo-700 flex items-center">
@@ -174,7 +180,7 @@
                                         value="{{ grade_info.percentage if grade_info and grade_info.percentage else '' }}"
                                         placeholder="e.g. 95"
                                         class="w-20 border-gray-300 rounded-md shadow-sm sm:text-sm percentage-input text-center"
-                                        data-subject-id="{{ subject.id }}" {{ 'disabled' if is_disabled }}>
+                                        data-subject-id="{{ subject.id }}" {{ 'disabled' if is_disabled or not can_edit_grades }}>
                                 </td>
 
                                 <!-- Grade Input -->
@@ -183,14 +189,14 @@
                                         value="{{ grade_info.grade if grade_info else '' }}"
                                         class="w-24 border-gray-300 rounded-md shadow-sm sm:text-sm grade-input text-center"
                                         placeholder="e.g. 1.25"
-                                        data-subject-id="{{ subject.id }}" {{ 'disabled' if is_disabled }}>
+                                        data-subject-id="{{ subject.id }}" {{ 'disabled' if is_disabled or not can_edit_grades }}>
                                 </td>
                                 
                                 <!-- Remarks Dropdown -->
                                 <td class="px-4 py-2">
                                     <select name="remarks_{{ subject.id }}"
                                         class="border-gray-300 rounded-md shadow-sm sm:text-sm w-full" {{ 'disabled'
-                                        if is_disabled }}>
+                                        if is_disabled or not can_edit_grades }}>
                                         <option value="" {% if not grade_info %}selected{% endif %}>-</option>
                                         <option value="Passed" {% if grade_info and grade_info.remarks=='Passed'
                                             %}selected{% endif %}>Passed</option>
@@ -235,12 +241,14 @@
         </div>
         {% endfor %}
 
+        {% if can_edit_grades %}
         <div class="mt-8 pt-6 border-t flex justify-end no-print">
             <button type="submit"
                 class="px-6 py-2 bg-primary text-white text-sm font-medium rounded-md shadow-sm hover:bg-primary/90 transition-colors">
                 <i class="ri-save-line mr-2"></i> Save Grades
             </button>
         </div>
+        {% endif %}
     </form>
 </div>
 
@@ -250,6 +258,7 @@
         const gradesForm = document.getElementById('gradesForm');
         const gradeInputs = document.querySelectorAll('.grade-input');
         const studentName = "{{ student.first_name }} {{ student.last_name }}";
+        const canEditGrades = {{ 'true' if can_edit_grades else 'false' }};
 
         function updateRemarks(gradeInput) {
             const grade = parseFloat(gradeInput.value);
@@ -283,6 +292,7 @@
 
         gradesForm.addEventListener('submit', async function (e) {
             e.preventDefault();
+            if (!canEditGrades) return;
             const gradesData = [];
             // We iterate over grade inputs to identify rows (subjects)
             const allGradeInputsOnSubmit = document.querySelectorAll('.grade-input');

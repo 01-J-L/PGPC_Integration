@@ -720,10 +720,21 @@ def admin_messenger_list():
         ORDER BY unread_count DESC
     """, (role, role, role))
     chat_list = cursor.fetchall()
+
+    # Students available for a new (specific or bulk) message.
+    cursor.execute("""
+        SELECT applicant_id, first_name, last_name, old_student_id, control_number,
+               program_choice, enrollment_year_level, section_id
+        FROM applicants
+        WHERE application_status = 'Enrolled'
+        ORDER BY last_name ASC, first_name ASC
+    """)
+    students = cursor.fetchall()
     
     cursor.close()
     conn.close()
-    return render_template('admin_messenger.html', chat_list=chat_list, active_page='messenger')
+    return render_template('admin_messenger.html', chat_list=chat_list, students=students,
+                           active_page='messenger')
 
 @auth.route('/admin/messenger/chat/<int:applicant_id>', methods=['GET', 'POST'])
 def admin_chat_view(applicant_id):
@@ -747,16 +758,81 @@ def admin_chat_view(applicant_id):
     cursor.execute("SELECT first_name, last_name FROM applicants WHERE applicant_id = %s", (applicant_id,))
     student = cursor.fetchone()
     
-    cursor.execute("SELECT * FROM application_messages WHERE applicant_id = %s ORDER BY created_at ASC", (applicant_id,))
+    # Each office has its own private thread with the student.
+    cursor.execute("SELECT * FROM application_messages WHERE applicant_id = %s AND admin_role = %s ORDER BY created_at ASC",
+                   (applicant_id, role))
     messages = cursor.fetchall()
     
     # Mark student messages as read
-    cursor.execute("UPDATE application_messages SET is_read = TRUE WHERE applicant_id = %s AND sender_type = 'student'", (applicant_id,))
+    cursor.execute("UPDATE application_messages SET is_read = TRUE WHERE applicant_id = %s AND admin_role = %s AND sender_type = 'student'",
+                   (applicant_id, role))
     conn.commit()
     
     cursor.close()
     conn.close()
     return render_template('admin_chat_window.html', messages=messages, student=student, applicant_id=applicant_id)
+
+
+@auth.route('/admin/messenger/bulk', methods=['POST'])
+def admin_bulk_message():
+    """Send one message to several students (or to one, for a specific message)."""
+    if not _can_view_messages():
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    raw_ids = data.get('ids') or []
+    message = (data.get('message') or '').strip()
+
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return jsonify({"success": False, "message": "Select at least one student."}), 400
+    if not message:
+        return jsonify({"success": False, "message": "Please type a message."}), 400
+
+    try:
+        ids = sorted({int(i) for i in raw_ids})
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "Invalid student selection."}), 400
+
+    role = session.get('user_role')
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        placeholders = ', '.join(['%s'] * len(ids))
+        # OSA only messages students who are actually enrolled.
+        if role == 'osa':
+            cursor.execute(
+                f"SELECT applicant_id FROM applicants WHERE applicant_id IN ({placeholders}) "
+                "AND application_status = 'Enrolled'", tuple(ids))
+        else:
+            cursor.execute(
+                f"SELECT applicant_id FROM applicants WHERE applicant_id IN ({placeholders})", tuple(ids))
+        valid_ids = [row['applicant_id'] for row in cursor.fetchall()]
+
+        if not valid_ids:
+            return jsonify({"success": False, "message": "No valid enrolled students selected."}), 400
+
+        cursor.executemany("""
+            INSERT INTO application_messages (applicant_id, sender_type, sender_name, admin_role, message_text)
+            VALUES (%s, 'admin', %s, %s, %s)
+        """, [(aid, session.get('user_name'), role, message) for aid in valid_ids])
+        conn.commit()
+
+        skipped = len(ids) - len(valid_ids)
+        msg = f"Message sent to {len(valid_ids)} student(s)."
+        if skipped:
+            msg += f" {skipped} selection(s) skipped (not enrolled)."
+        return jsonify({"success": True, "message": msg, "sent": len(valid_ids)})
+    except Exception as e:
+        if conn: conn.rollback()
+        print(f"Error sending bulk message: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "message": "Could not send the message."}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
 
 # --- NEW/MODIFIED ACADEMIC TERM & SETTINGS MANAGEMENT ---
 @auth.route('/admin/manage-academic-term', methods=['GET', 'POST'])
@@ -3963,6 +4039,56 @@ def admin_enrolling_applications():
                            all_school_years=all_sy, selected_school_year=selected_sy, 
                            page_title="Enrolling Applications", active_page='enrolling')
 
+def _attach_voucher_status(applications, school_year=None):
+    """Flag students who already have a Garciano voucher return recorded.
+
+    A student counts as 'Voucher Passed' when any voucher return exists. When a
+    school year is selected on the page, only returns for that year are used.
+    """
+    if not applications:
+        return applications
+
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        if school_year:
+            cursor.execute("""
+                SELECT student_id, school_year, semester, amount, returned_at
+                FROM voucher_returns
+                WHERE school_year = %s
+                ORDER BY returned_at DESC
+            """, (school_year,))
+        else:
+            cursor.execute("""
+                SELECT student_id, school_year, semester, amount, returned_at
+                FROM voucher_returns
+                ORDER BY returned_at DESC
+            """)
+
+        vouchers = {}
+        for row in cursor.fetchall():
+            # Keep the newest return when a student has more than one.
+            vouchers.setdefault(row['student_id'], row)
+
+        for app in applications:
+            info = vouchers.get(app.get('applicant_id'))
+            app['voucher_passed'] = bool(info)
+            app['voucher_info'] = info
+    except Exception as e:
+        print(f"Error loading voucher status: {e}")
+        for app in applications:
+            app.setdefault('voucher_passed', False)
+            app.setdefault('voucher_info', None)
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+    return applications
+
+
 @auth.route('/admin/applications/enrolled')
 def admin_enrolled_applications():
     allowed_roles = ['admin', 'registrar', 'guidance', 'osa', 'president']
@@ -3970,10 +4096,12 @@ def admin_enrolled_applications():
     selected_sy = request.args.get('sy')
     all_sy = _get_all_school_years()
     applications, stats = _get_all_applications_and_stats(school_year=selected_sy)
+    enrolled = [app for app in applications if app.get('application_status') == 'Enrolled']
+    _attach_voucher_status(enrolled, selected_sy)
     programs = _get_program_list()
     sections = _get_all_sections() # <-- NEW
     return render_template('admin_enrolled.html', 
-                           applications=[app for app in applications if app.get('application_status') == 'Enrolled'],
+                           applications=enrolled,
                            stats=stats, programs=programs, sections=sections, # <-- Pass sections
                            all_school_years=all_sy, selected_school_year=selected_sy, 
                            page_title="Enrolled Students", active_page='enrolled')
@@ -4933,6 +5061,9 @@ def admin_manage_grades_page(student_user_id):
                                disabled_subjects_info=disabled_subjects_info,
                                active_school_year=student.get('academic_year'),
                                max_units_allowed=max_units_allowed, 
+                               # OSA (and any future read-only staff role) can view
+                               # grades and export/print, but never edit them.
+                               can_edit_grades=session.get('user_role') in ['admin', 'registrar'],
                                active_page='enrolling')
     except Exception as e:
         flash(f"Error loading grades page: {e}", "danger")
@@ -8243,13 +8374,13 @@ def admin_manage_users():
 def admin_add_user():
     if session.get('user_role') != 'admin': return redirect(url_for('auth.admin'))
     
-    username = request.form.get('username')
+    username = (request.form.get('username') or '').strip()
     password = request.form.get('password')
     full_name = request.form.get('full_name')
     role = request.form.get('role')
     system = request.form.get('system', 'admission')
     department = request.form.get('department') or None
-    email = request.form.get('email') or None
+    email = (request.form.get('email') or '').strip() or None
 
     # --- PREDEFINED ADMIN ACCOUNT ROLES: route to the correct system/table ---
     # The deans administer both the faculty system and the grading screens;
@@ -8294,6 +8425,12 @@ def admin_add_user():
         # ---------------------------------
 
         hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+
+        # users.email is NOT NULL UNIQUE, but Admission staff accounts are created
+        # without an e-mail address (the form hides that field). Fall back to a
+        # local placeholder, exactly like the first-deployment admin account.
+        if not email:
+            email = f'{username}@pgpc.local'
 
         # One namespace: a username/email can only be used once across all systems.
         cursor.execute(
@@ -8360,10 +8497,10 @@ def admin_edit_user():
     
     user_id = request.form.get('user_id')
     full_name = request.form.get('full_name')
-    username = request.form.get('username')
+    username = (request.form.get('username') or '').strip()
     role = request.form.get('role')
     department = request.form.get('department') or None
-    email = request.form.get('email') or None
+    email = (request.form.get('email') or '').strip() or None
 
     if not all([user_id, full_name, username, role]):
         flash("Missing required fields.", "danger")
@@ -8375,7 +8512,7 @@ def admin_edit_user():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        cursor.execute("SELECT role, `system` FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT role, `system`, email FROM users WHERE id = %s", (user_id,))
         current_user_data = cursor.fetchone()
 
         if not current_user_data:
@@ -8385,6 +8522,11 @@ def admin_edit_user():
         # Prevent demoting/renaming the main Admin account (Self-lockout protection)
         if current_user_data['role'] == 'admin':
             role = 'admin'
+
+        # users.email is NOT NULL: keep the stored address when the field is left
+        # blank, or fall back to a local placeholder for accounts without one.
+        if not email:
+            email = current_user_data.get('email') or f'{username}@pgpc.local'
 
         # One namespace: username/email must stay unique across all systems.
         cursor.execute(

@@ -99,6 +99,14 @@
                     <option value="Summer">Summer</option>
                 </select></div>
 
+            <div class="col-span-1"><label for="voucherFilter"
+                    class="text-sm font-medium text-gray-700">Voucher Status:</label><select id="voucherFilter"
+                    class="w-full mt-1 px-3 py-1.5 border border-gray-300 text-gray-700 rounded text-sm !rounded-button focus:ring-primary focus:border-primary">
+                    <option value="all">All Voucher Statuses</option>
+                    <option value="passed">Voucher Passed</option>
+                    <option value="not_passed">No Voucher Passed</option>
+                </select></div>
+
             <div class="col-span-1 flex items-end"><button id="clearFiltersBtn"
                     class="w-full px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-sm font-medium !rounded-button hover:bg-gray-300 flex items-center justify-center"><i
                         class="ri-filter-off-line mr-1"></i> Clear All Filters</button></div>
@@ -132,6 +140,7 @@
         class="bulk-actions bg-blue-50 p-3 rounded-md border border-blue-200 mb-6 flex-wrap items-center gap-y-2">
         <span id="selectedCount" class="text-sm font-medium text-blue-700 mr-4">0 items selected</span>
         <div class="flex flex-wrap gap-2">
+            {% if session.user_role in ['admin', 'registrar'] or session.get('is_superadmin') %}
             <button id="bulkEnrolledBtn"
                 class="px-3 py-1.5 bg-green-100 text-green-700 rounded text-sm font-medium !rounded-button flex items-center hover:bg-green-200"><i
                     class="ri-checkbox-circle-line mr-1"></i> Set Enrolled</button>
@@ -141,6 +150,12 @@
             <button id="bulkNotEnrolledBtn"
                 class="px-3 py-1.5 bg-orange-100 text-orange-700 rounded text-sm font-medium !rounded-button flex items-center hover:bg-orange-200"><i
                     class="ri-error-warning-line mr-1"></i> Set Not Enrolled</button>
+            {% endif %}
+            {% if session.user_role in ['admin', 'registrar', 'guidance', 'osa'] or session.get('is_superadmin') %}
+            <button id="bulkMessageBtn" type="button"
+                class="px-3 py-1.5 bg-blue-100 text-blue-700 rounded text-sm font-medium !rounded-button flex items-center hover:bg-blue-200"><i
+                    class="ri-message-3-line mr-1"></i> Message Selected</button>
+            {% endif %}
         </div>
         <button id="closeBulkActions" class="ml-auto text-gray-500 hover:text-gray-700 p-1"><i
                 class="ri-close-line ri-lg"></i></button>
@@ -191,6 +206,7 @@
                     data-address="{{ app.permanent_address_city_municipality | lower | e if app.permanent_address_city_municipality else '' }}"
                     data-year-level="{{ app.enrollment_year_level }}" data-semester="{{ app.enrollment_semester }}"
                     data-student-type="{{ app.enrollment_student_type }}"
+                    data-voucher="{{ 'passed' if app.voucher_passed else 'not_passed' }}"
                     data-old-student-id="{{ app.old_student_id or '' }}"
                     data-control-number="{{ app.control_number or '' }}" data-display-id="{{ display_id }}"
                     data-search-string="{{ [
@@ -250,14 +266,26 @@
                     <td class="px-3 py-2 md:px-6 md:py-4 whitespace-nowrap status-cell">
                         <span
                             class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full status-badge bg-green-100 text-green-800">Enrolled</span>
+                        {% if app.voucher_passed %}
+                        <span class="ml-1 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-indigo-100 text-indigo-800"
+                            title="Voucher already returned{% if app.voucher_info %} ({{ app.voucher_info.school_year }} {{ app.voucher_info.semester }}, ₱{{ '{:,.2f}'.format(app.voucher_info.amount or 0) }}){% endif %}">
+                            Voucher Passed
+                        </span>
+                        {% endif %}
                     </td>
                     <td class="px-3 py-2 md:px-6 md:py-4 whitespace-nowrap text-sm text-gray-500 text-right">
                         <div class="flex space-x-1 justify-end items-center">
                             {% if app.student_user_id %}
                             <a href="{{ url_for('auth.admin_manage_grades_page', student_user_id=app.student_user_id) }}"
                                 class="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-md hover:bg-blue-200"
-                                title="Manage Grades">
-                                <i class="ri-graduation-cap-line mr-1"></i> Grades
+                                title="{% if session.user_role in ['admin', 'registrar'] %}Manage Grades{% else %}View Grades{% endif %}">
+                                <i class="ri-graduation-cap-line mr-1"></i> {% if session.user_role in ['admin', 'registrar'] %}Grades{% else %}View Grades{% endif %}
+                            </a>
+                            {% endif %}
+                            {% if session.user_role in ['admin', 'registrar', 'guidance', 'osa'] or session.get('is_superadmin') %}
+                            <a href="{{ url_for('auth.admin_chat_view', applicant_id=app.applicant_id) }}"
+                                class="text-gray-500 hover:text-blue-600 p-0.5 sm:p-1" title="Message Student">
+                                <i class="ri-message-3-line ri-lg"></i>
                             </a>
                             {% endif %}
                             <a href="{{ url_for('auth.admin_view_student_statement', applicant_id=app.applicant_id) }}"
@@ -273,6 +301,7 @@
                             {% if session.user_role in ['admin', 'registrar'] or session.get('is_superadmin') %}<button class="text-gray-500 hover:text-yellow-600 p-0.5 sm:p-1 action-admin-notes"
                                 title="Admin Notes" data-id="{{ app.applicant_id }}"><i
                                     class="ri-sticky-note-line ri-lg"></i></button>{% endif %}
+                            {% if session.user_role in ['admin', 'registrar'] or session.get('is_superadmin') %}
                             <div class="dropdown relative action-status-dropdown">
                                 <button class="text-gray-500 hover:text-primary p-0.5 sm:p-1" title="Change Status"><i
                                         class="ri-arrow-down-s-fill ri-lg"></i></button>
@@ -285,6 +314,7 @@
                                         data-id="{{ app.applicant_id }}" data-status="Dropped">Drop Student</a>
                                 </div>
                             </div>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
@@ -300,6 +330,32 @@
     </div>
 </div>
 
+<!-- Bulk Message Modal -->
+<div id="bulkMessageModal"
+    class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-24 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
+        <div class="flex justify-between items-center pb-3 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">Message Selected Students</h3>
+            <button type="button" id="closeBulkMessageIcon" class="text-gray-400 hover:text-gray-600">
+                <i class="ri-close-line ri-lg"></i>
+            </button>
+        </div>
+        <p class="mt-3 text-sm text-gray-500">
+            This message will be sent to <strong id="bulkMessageCount">0</strong> selected student(s) through your office's message thread.
+        </p>
+        <textarea id="bulkMessageText" rows="5" placeholder="Type your message..."
+            class="mt-3 w-full border-gray-300 rounded-md shadow-sm sm:text-sm focus:ring-primary focus:border-primary"></textarea>
+        <div class="mt-4 flex justify-end gap-2">
+            <button type="button" id="cancelBulkMessageBtn"
+                class="px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300">Cancel</button>
+            <button type="button" id="sendBulkMessageBtn"
+                class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary/90">
+                <i class="ri-send-plane-2-line mr-1"></i> Send Message
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const searchInput = document.getElementById('searchInput');
@@ -309,6 +365,7 @@
         const sectionFilter = document.getElementById('sectionFilter'); // NEW
         const yearLevelFilter = document.getElementById('yearLevelFilter');
         const semesterFilter = document.getElementById('semesterFilter');
+        const voucherFilter = document.getElementById('voucherFilter');
         const genderFilters = document.querySelectorAll('input[name="genderFilter"]');
         const locationFilters = document.querySelectorAll('input[name="locationFilter"]');
         const clearFiltersBtn = document.getElementById('clearFiltersBtn');
@@ -358,6 +415,7 @@
             const section = sectionFilter?.value; // NEW
             const yearLevel = yearLevelFilter?.value;
             const semester = semesterFilter?.value;
+            const voucher = voucherFilter?.value;
             const gender = document.querySelector('input[name="genderFilter"]:checked')?.value;
             const location = document.querySelector('input[name="locationFilter"]:checked')?.value;
 
@@ -400,6 +458,11 @@
                     if (row.dataset.semester !== semester) semesterMatch = false;
                 }
 
+                let voucherMatch = true;
+                if (voucher && voucher !== 'all') {
+                    if (row.dataset.voucher !== voucher) voucherMatch = false;
+                }
+
                 let genderMatch = true;
                 if (gender && gender !== 'All') {
                     if ((row.dataset.gender || '').toLowerCase() !== gender.toLowerCase()) genderMatch = false;
@@ -413,7 +476,7 @@
                     else if (location === 'Non-Garciano' && isGarciano) locationMatch = false;
                 }
 
-                if (searchMatch && dateMatch && programMatch && sectionMatch && yearLevelMatch && semesterMatch && genderMatch && locationMatch) {
+                if (searchMatch && dateMatch && programMatch && sectionMatch && yearLevelMatch && semesterMatch && voucherMatch && genderMatch && locationMatch) {
                     row.style.display = '';
                     visibleCount++;
                 } else {
@@ -438,6 +501,7 @@
         if (sectionFilter) sectionFilter.addEventListener('change', applyAllFilters); // NEW
         if (yearLevelFilter) yearLevelFilter.addEventListener('change', applyAllFilters);
         if (semesterFilter) semesterFilter.addEventListener('change', applyAllFilters);
+        if (voucherFilter) voucherFilter.addEventListener('change', applyAllFilters);
         genderFilters.forEach(r => r.addEventListener('change', applyAllFilters));
         locationFilters.forEach(r => r.addEventListener('change', applyAllFilters));
 
@@ -450,6 +514,7 @@
                 if (sectionFilter) sectionFilter.value = 'all'; // NEW
                 if (yearLevelFilter) yearLevelFilter.value = 'all';
                 if (semesterFilter) semesterFilter.value = 'all';
+                if (voucherFilter) voucherFilter.value = 'all';
                 document.getElementById('genderFilterAll').checked = true;
                 document.getElementById('locationFilterAll').checked = true;
                 if (sortSelect) sortSelect.value = 'name_asc'; // Reset sort
@@ -458,6 +523,80 @@
                 sortApplications('name_asc');
             });
         }
+
+        // --- Bulk message to the selected students ---
+        const bulkMessageModal = document.getElementById('bulkMessageModal');
+        const bulkMessageBtn = document.getElementById('bulkMessageBtn');
+        const bulkMessageText = document.getElementById('bulkMessageText');
+        const bulkMessageCount = document.getElementById('bulkMessageCount');
+        const sendBulkMessageBtn = document.getElementById('sendBulkMessageBtn');
+
+        function selectedApplicantIds() {
+            return Array.from(document.querySelectorAll('.row-checkbox:checked')).map(cb => cb.dataset.id);
+        }
+
+        function showPageToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            if (!container) { alert(message); return; }
+            const toast = document.createElement('div');
+            toast.className = `toast-notification ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
+        function closeBulkMessageModal() {
+            if (bulkMessageModal) bulkMessageModal.classList.add('hidden');
+        }
+
+        if (bulkMessageBtn) {
+            bulkMessageBtn.addEventListener('click', () => {
+                const ids = selectedApplicantIds();
+                if (!ids.length) { showPageToast('Select at least one student first.', 'info'); return; }
+                bulkMessageCount.textContent = ids.length;
+                bulkMessageText.value = '';
+                bulkMessageModal.classList.remove('hidden');
+                bulkMessageText.focus();
+            });
+        }
+
+        document.getElementById('closeBulkMessageIcon')?.addEventListener('click', closeBulkMessageModal);
+        document.getElementById('cancelBulkMessageBtn')?.addEventListener('click', closeBulkMessageModal);
+        bulkMessageModal?.addEventListener('click', (e) => {
+            if (e.target === bulkMessageModal) closeBulkMessageModal();
+        });
+
+        sendBulkMessageBtn?.addEventListener('click', async () => {
+            const ids = selectedApplicantIds();
+            const message = bulkMessageText.value.trim();
+            if (!ids.length || !message) {
+                showPageToast('Select a student and type a message.', 'info');
+                return;
+            }
+            sendBulkMessageBtn.disabled = true;
+            try {
+                const response = await fetch('/admin/messenger/bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: ids, message: message })
+                });
+                const data = await response.json();
+                showPageToast(data.message || 'Message sent.', data.success ? 'success' : 'error');
+                if (data.success) {
+                    closeBulkMessageModal();
+                    document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+                    const selectAll = document.getElementById('selectAll');
+                    if (selectAll) selectAll.checked = false;
+                    const bar = document.getElementById('bulkActions');
+                    if (bar) bar.style.display = 'none';
+                    document.querySelectorAll('tr.selected').forEach(tr => tr.classList.remove('selected'));
+                }
+            } catch (err) {
+                showPageToast('Could not send the message.', 'error');
+            } finally {
+                sendBulkMessageBtn.disabled = false;
+            }
+        });
 
         // Initial sort
         sortApplications('name_asc');

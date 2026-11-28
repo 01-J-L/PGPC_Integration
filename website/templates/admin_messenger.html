@@ -1,7 +1,17 @@
 {% extends 'admin_base.html' %}
 {% block content %}
 <div class="bg-white rounded-lg shadow p-6">
-    <h2 class="text-xl font-bold mb-6">Messenger Inbox</h2>
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div>
+            <h2 class="text-xl font-bold">Messenger Inbox</h2>
+            <p class="text-sm text-gray-500 mt-1">Reply to students or start a new conversation.</p>
+        </div>
+        <button type="button" id="newMessageBtn"
+            class="inline-flex items-center justify-center px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary/90">
+            <i class="ri-add-line mr-1"></i> New Message
+        </button>
+    </div>
+
     <div class="divide-y">
         {% for chat in chat_list %}
         <a href="{{ url_for('auth.admin_chat_view', applicant_id=chat.applicant_id) }}" class="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
@@ -22,8 +32,152 @@
             </div>
         </a>
         {% else %}
-        <p class="text-center py-10 text-gray-400">No active conversations found.</p>
+        <p class="text-center py-10 text-gray-400">No active conversations found. Click "New Message" to start one.</p>
         {% endfor %}
     </div>
 </div>
+
+<!-- New / Bulk Message Modal -->
+<div id="newMessageModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-16 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+        <div class="flex justify-between items-center pb-3 border-b">
+            <div>
+                <h3 class="text-lg font-semibold text-gray-900">New Message</h3>
+                <p class="text-xs text-gray-500">Select one student for a specific message, or several for a bulk message.</p>
+            </div>
+            <button type="button" id="closeNewMessageIcon" class="text-gray-400 hover:text-gray-600">
+                <i class="ri-close-line ri-lg"></i>
+            </button>
+        </div>
+
+        <div class="mt-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Students</label>
+            <input type="text" id="studentSearch" placeholder="Search by name or student ID..."
+                class="w-full border-gray-300 rounded-md shadow-sm sm:text-sm focus:ring-primary focus:border-primary">
+            <div id="studentList"
+                class="mt-2 max-h-64 overflow-y-auto border border-gray-200 rounded-md divide-y divide-gray-100">
+                {% for student in students %}
+                <label class="student-option flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                    data-search="{{ (student.first_name ~ ' ' ~ student.last_name ~ ' ' ~ (student.old_student_id or '') ~ ' ' ~ (student.control_number or '')) | lower }}">
+                    <input type="checkbox" class="student-checkbox" value="{{ student.applicant_id }}">
+                    <span class="flex-1 min-w-0">
+                        <span class="block text-sm font-medium text-gray-900">{{ student.last_name }}, {{ student.first_name }}</span>
+                        <span class="block text-xs text-gray-500">
+                            {{ student.old_student_id or student.control_number or ('App #' ~ student.applicant_id) }}
+                            {% if student.program_choice %} &middot; {{ student.program_choice }}{% endif %}
+                        </span>
+                    </span>
+                </label>
+                {% else %}
+                <p class="px-3 py-6 text-sm text-gray-400 text-center">No enrolled students found.</p>
+                {% endfor %}
+            </div>
+            <div class="flex items-center justify-between mt-2 text-xs text-gray-500">
+                <span><strong id="studentSelectedCount">0</strong> selected</span>
+                <button type="button" id="selectAllStudents" class="text-primary hover:underline">Select all shown</button>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <label for="newMessageText" class="block text-sm font-medium text-gray-700 mb-1">Message</label>
+            <textarea id="newMessageText" rows="4" placeholder="Type your message..."
+                class="w-full border-gray-300 rounded-md shadow-sm sm:text-sm focus:ring-primary focus:border-primary"></textarea>
+        </div>
+
+        <div class="mt-4 flex justify-end gap-2">
+            <button type="button" id="cancelNewMessageBtn"
+                class="px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300">Cancel</button>
+            <button type="button" id="sendNewMessageBtn"
+                class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary/90">
+                <i class="ri-send-plane-2-line mr-1"></i> Send Message
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const modal = document.getElementById('newMessageModal');
+        const searchInput = document.getElementById('studentSearch');
+        const options = document.querySelectorAll('.student-option');
+        const checkboxes = document.querySelectorAll('.student-checkbox');
+        const selectedCount = document.getElementById('studentSelectedCount');
+
+        function showMsgToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            if (!container) { alert(message); return; }
+            const toast = document.createElement('div');
+            toast.className = `toast-notification ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
+        function updateSelectedCount() {
+            const count = Array.from(checkboxes).filter(cb => cb.checked).length;
+            selectedCount.textContent = count;
+        }
+
+        function openModal() {
+            modal.classList.remove('hidden');
+            searchInput.value = '';
+            options.forEach(o => o.style.display = '');
+            checkboxes.forEach(cb => cb.checked = false);
+            document.getElementById('newMessageText').value = '';
+            updateSelectedCount();
+            searchInput.focus();
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+        }
+
+        document.getElementById('newMessageBtn')?.addEventListener('click', openModal);
+        document.getElementById('closeNewMessageIcon')?.addEventListener('click', closeModal);
+        document.getElementById('cancelNewMessageBtn')?.addEventListener('click', closeModal);
+        modal?.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+        checkboxes.forEach(cb => cb.addEventListener('change', updateSelectedCount));
+
+        searchInput?.addEventListener('input', function () {
+            const term = this.value.toLowerCase().trim();
+            options.forEach(option => {
+                option.style.display = (option.dataset.search || '').includes(term) ? '' : 'none';
+            });
+        });
+
+        document.getElementById('selectAllStudents')?.addEventListener('click', function () {
+            const visible = Array.from(options).filter(o => o.style.display !== 'none');
+            const allChecked = visible.every(o => o.querySelector('.student-checkbox').checked);
+            visible.forEach(o => { o.querySelector('.student-checkbox').checked = !allChecked; });
+            updateSelectedCount();
+        });
+
+        document.getElementById('sendNewMessageBtn')?.addEventListener('click', async function () {
+            const ids = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+            const message = document.getElementById('newMessageText').value.trim();
+            if (!ids.length) { showMsgToast('Select at least one student.', 'info'); return; }
+            if (!message) { showMsgToast('Please type a message.', 'info'); return; }
+
+            this.disabled = true;
+            try {
+                const response = await fetch('/admin/messenger/bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: ids, message: message })
+                });
+                const data = await response.json();
+                showMsgToast(data.message || 'Message sent.', data.success ? 'success' : 'error');
+                if (data.success) {
+                    closeModal();
+                    setTimeout(() => window.location.reload(), 900);
+                }
+            } catch (err) {
+                showMsgToast('Could not send the message.', 'error');
+            } finally {
+                this.disabled = false;
+            }
+        });
+    });
+</script>
 {% endblock %}
