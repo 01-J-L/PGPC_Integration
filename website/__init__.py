@@ -220,4 +220,4 @@ def create_app():
     except Exception as e:
         print(f"[WARN] Could not check schema migrations: {e}")
 
-    return app
+    return app

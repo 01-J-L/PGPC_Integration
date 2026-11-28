@@ -780,4 +780,4 @@ def redirect_to_faculty_login():
 @views.route('/grading-admin')
 def shortcut_to_grading_admin():
     # Instantly redirects the user to the Grading System's admin page!
-    return redirect('/grading-system/admin')
+    return redirect('/grading-system/admin')

@@ -347,7 +347,7 @@
             <p style="font-size: 8pt; margin: 0;">Republic of the Philippines</p>
             <p style="font-weight: bold; font-size: 13pt; margin: 2px 0;">PADRE GARCIA POLYTECHNIC COLLEGE</p>
             <p style="font-size: 8pt; margin: 0;">Brgy. Castillo, Padre Garcia, Batangas 4224</p>
-            <p style="font-weight: bold; font-size: 11pt; margin-top: 8px;">{{ section_info['program'].upper() }}</p>
+            <p style="font-weight: bold; font-size: 11pt; margin-top: 8px;">{{ (section_info['program'] or '')|upper }}</p>
         </div>
     </div>
     

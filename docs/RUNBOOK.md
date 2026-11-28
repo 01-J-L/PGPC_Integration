@@ -42,6 +42,8 @@ The application never migrates by itself. At start-up it only prints `[WARN] …
 
 ## 3. Deployment (maintenance window)
 
+> On a Linux VPS the steps below are automated by `scripts/deploy_vps.sh` (backups, rehearsal, migrate, restart, automatic code rollback): see `docs/DEPLOY_VPS.md`.
+
 1. Announce the window and stop the application (all workers).
 2. **Back up** the database and keep the file off the server:
    ```
