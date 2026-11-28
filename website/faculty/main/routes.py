@@ -6,7 +6,7 @@ from website import db, mail
 from website.faculty.models import User, TeachingLoad, Program, Course, TimeSlot, SubstitutionRequest, Notification, SystemSetting, Section, Room, ProgramCourse, Subject, FacultyAssignment, Applicant, Grade
 from website.faculty.auth.forms import AdminAddUserForm, UserFilterForm
 
-from website.faculty.main.forms import ScheduleForm, DeleteScheduleForm, AddTimeSlotForm, SubstitutionRequestForm, SystemSettingsForm, EditProfileForm, ProgramForm, FileUploadForm, SchoolYearAnalyticsForm, SectionGridScheduleForm, EditScheduleForm, CourseForm, CreateSectionForm, DeleteSectionForm, RoomForm, UpdateRateForm, UploadProofForm
+from website.faculty.main.forms import ScheduleForm, DeleteScheduleForm, AddTimeSlotForm, SubstitutionRequestForm, SystemSettingsForm, EditProfileForm, ProgramForm, FileUploadForm, SchoolYearAnalyticsForm, SectionGridScheduleForm, EditScheduleForm, CourseForm, CreateSectionForm, DeleteSectionForm, RoomForm, UpdateRateForm, UploadProofForm, GradingSubjectForm
 
 from datetime import datetime, time, timedelta
 from collections import defaultdict
@@ -1289,7 +1289,7 @@ def section_schedule_grid(program_id, section_name, semester):
     edit_form.faculty.choices = faculty_choices
     edit_form.room.choices = room_choices
 
-    section_info = { 'program': program.program_name, 'section': section_name, 'semester_display': '1st Semester' if semester == 1 else '2nd Semester' }
+    section_info = { 'program': program.program_name or program.title or program.id, 'section': section_name, 'semester_display': '1st Semester' if semester == 1 else '2nd Semester' }
     
     # --- 9. DRAFT CHECK (FIXED) ---
     # We now JOIN explicitly on course_code because there is no relationship in models
@@ -1671,8 +1671,9 @@ def manage_section_schedule_hub():
 
     term_ended, term_ended_message = academic_term_status()
 
+    from website.sections.protection import archived_ids
     return render_template('faculty/manage_section_schedule_hub.html', 
-                           title='Manage Sections', 
+                           title='Manage Sections', archived_ids=archived_ids(),
                            form=form,
                            delete_form=delete_form, 
                            programs_with_sections=programs_with_sections,
@@ -2652,9 +2653,16 @@ def delete_program(program_id):
     program = Program.query.get_or_404(program_id)
     
     # Safety check: Do not allow deletion if courses are associated with this program
+    from website.sections import protection
+    in_use = protection.program_section_blockers(program_id)
     if program.courses.first():
         flash('Cannot delete this program because it has courses associated with it. Please remove the courses first.', 'error')
+    elif in_use:
+        # Phase 8: the ORM cascade would otherwise try to delete sections that still have history
+        flash('Cannot delete this program: section(s) still in use (%s). Archive the sections instead.'
+              % '; '.join('%s: %s' % (name, protection.describe(b)) for name, b in in_use), 'error')
     else:
+        db.session.execute(text("DELETE FROM section_archives WHERE section_id IN (SELECT id FROM sections WHERE program_id = :p)"), {'p': program_id})
         db.session.delete(program)
         db.session.commit()
         flash('Program has been deleted successfully.', 'success')
@@ -2967,40 +2975,45 @@ def delete_section_schedule(schedule_id):
 @main.route('/section/delete/<int:section_id>', methods=['POST'])
 @login_required
 def delete_section(section_id):
+    """Phase 8: delete only an unused section. A section with schedules, students,
+    class records or registration forms is refused (archive it instead). The class
+    records (faculty_assignments) used to be deleted silently here."""
+    return _section_action(section_id, 'delete')
+
+
+@main.route('/section/archive/<int:section_id>', methods=['POST'])
+@login_required
+def archive_section(section_id):
+    return _section_action(section_id, 'archive')
+
+
+@main.route('/section/restore/<int:section_id>', methods=['POST'])
+@login_required
+def restore_section(section_id):
+    return _section_action(section_id, 'restore')
+
+
+def _section_action(section_id, action):
     if current_user.role not in ('dean', 'admin', 'superadmin'):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('faculty_main.dashboard'))
-    
-    section_to_delete = Section.query.get_or_404(section_id)
-    
-    # SAFETY CHECK: Do not allow deletion if the section has classes scheduled.
-    full_section_name = f"{section_to_delete.program.program_code} {section_to_delete.name}"
-    has_loads = TeachingLoad.query.filter_by(
-        section=full_section_name,
-        school_year=section_to_delete.school_year,
-    ).join(Course, TeachingLoad.course_code == Course.course_code)\
-     .filter(Course.semester == section_to_delete.semester)\
-     .first()
-
-    if has_loads:
-        flash(f'Cannot delete section "{full_section_name}" because it has classes scheduled. Please remove them from the schedule grid first.', 'error')
-    elif Applicant.query.filter_by(section_id=section_to_delete.id).count() > 0:
-        flash(f'Cannot delete section "{full_section_name}" because it still has students assigned. Move them to another section first.', 'error')
-    else:
-        try:
-            # faculty_assignments.section_id is NOT NULL, so the assignments cannot
-            # simply be detached. Deleting them explicitly avoids the IntegrityError
-            # ("Column 'section_id' cannot be null") that SQLAlchemy throws when it
-            # tries to NULL the FK while flushing the section delete.
-            FacultyAssignment.query.filter_by(section_id=section_to_delete.id).delete(synchronize_session=False)
-            db.session.delete(section_to_delete)
-            db.session.commit()
-            flash(f'Section "{full_section_name}" has been deleted successfully.', 'success')
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.exception('Failed to delete section %s', section_id)
-            flash(f'Could not delete section "{full_section_name}": {e}', 'error')
-
+    from website.curriculum.service import Actor
+    from website.sections import protection
+    actor = Actor(current_user.full_name, current_user.role)
+    try:
+        if action == 'delete':
+            msg = 'Section "%s" has been deleted.' % protection.delete(actor, section_id)
+        elif action == 'archive':
+            sec = protection.archive(actor, section_id, request.form.get('reason'))
+            msg = 'Section "%s" archived: its schedules and records are kept, it takes no new students.' % protection.display_name(sec)
+        else:
+            sec = protection.restore(actor, section_id, request.form.get('reason'))
+            msg = 'Section "%s" restored.' % protection.display_name(sec)
+        db.session.commit()
+        flash(msg, 'success')
+    except protection.SectionError as e:
+        db.session.rollback()
+        flash(' '.join(e.messages), 'error')
     return redirect(url_for('faculty_main.manage_section_schedule_hub'))
 
 @main.route('/download-curriculum-template')
@@ -3942,6 +3955,23 @@ def grading_student_records():
     )
 
 
+def grading_student_program_id(student):
+    """Program of a student for the grading screens (P1-15).
+
+    Students without a section (irregular, not yet sectioned, or moved out of a
+    deleted section) used to crash the grade view with
+    AttributeError: 'NoneType' object has no attribute 'program_id'.
+    Fall back to the program the student applied/enrolled for.
+    """
+    if student.section is not None:
+        return student.section.program_id
+    if student.program_choice:
+        prog = Program.query.filter(func.trim(Program.title) == student.program_choice.strip()).first()
+        if prog:
+            return prog.id
+    return None
+
+
 @main.route("/grading-admin/student/<int:student_id>/grades")
 @login_required
 @grading_admin_required
@@ -3955,7 +3985,7 @@ def grading_view_student_grades(student_id):
     selected_semester = request.args.get('semester', 1, type=int)
 
     all_subjects = Subject.query.filter_by(
-        program_id=student.section.program_id,
+        program_id=grading_student_program_id(student),
         year_level=selected_year, semester=selected_semester
     ).order_by(Subject.subject_title).all()
 
@@ -4009,7 +4039,7 @@ def grading_print_student_grades(student_id):
     selected_semester = request.args.get('semester', 1, type=int)
 
     all_subjects = Subject.query.filter_by(
-        program_id=student.section.program_id,
+        program_id=grading_student_program_id(student),
         year_level=selected_year, semester=selected_semester
     ).order_by(Subject.subject_title).all()
 
@@ -4132,24 +4162,25 @@ def grading_view_program_subjects(program_id):
 @grading_admin_required
 def grading_add_subject(program_id):
     program = Program.query.get_or_404(program_id)
-    if request.method == 'POST':
-        code = request.form.get('code', '').strip().upper()
-        description = request.form.get('description', '').strip()
-        units = request.form.get('units', 3, type=int)
-        year = request.form.get('year', 1, type=int)
-        semester = request.form.get('semester', 1, type=int)
-        subject = Subject(
-            subject_code=code, subject_title=description,
-            units=units, year_level=year, semester=semester,
-            program_id=program.id
-        )
-        db.session.add(subject)
-        db.session.commit()
-        flash(f'Subject {subject.subject_code} added to {program.program_code}.', 'success')
-        return redirect(url_for('faculty_main.grading_view_program_subjects', program_id=program.id))
+    form = GradingSubjectForm()
+    if form.validate_on_submit():
+        code = form.code.data.strip().upper()
+        # subjects.subject_code is UNIQUE; refuse duplicates instead of a 500.
+        if Subject.query.filter_by(subject_code=code).first():
+            flash(f'Subject code {code} already exists. Use a different code.', 'danger')
+        else:
+            subject = Subject(
+                subject_code=code, subject_title=form.description.data.strip(),
+                units=form.units.data, year_level=int(form.year.data), semester=int(form.semester.data),
+                program_id=program.id
+            )
+            db.session.add(subject)
+            db.session.commit()
+            flash(f'Subject {subject.subject_code} added to {program.program_code}.', 'success')
+            return redirect(url_for('faculty_main.grading_view_program_subjects', program_id=program.id))
     return render_template(
         'grading/admin/add_subject.html',
-        title="Add Subject", active_nav='programs', program=program
+        title="Add Subject", active_nav='programs', program=program, form=form
     )
 
 
@@ -4165,6 +4196,19 @@ def grading_delete_program(program_id):
         return redirect(url_for('faculty_main.manage_programs'))
 
     program = Program.query.get_or_404(program_id)
+    # Phase 8: even the force delete may not destroy academic or enrollment history
+    # (grades, students, class records, schedules, registration forms). It now removes
+    # configuration only; archive the sections / hide the program instead.
+    from website.auth import _program_delete_blockers
+    raw = db.session.connection().connection.cursor(dictionary=True)
+    try:
+        history = _program_delete_blockers(raw, program_id, program.title)
+    finally:
+        raw.close()
+    if history:
+        flash('Cannot delete program "%s": it has %s. Academic and enrollment history is never deleted; '
+              'archive its sections and hide the program instead.' % (program.program_code, ', '.join(history)), 'danger')
+        return redirect(url_for('faculty_main.manage_programs'))
     try:
         db.session.execute(text("""
             DELETE FROM subject_prerequisites
@@ -4192,6 +4236,7 @@ def grading_delete_program(program_id):
         db.session.execute(text("UPDATE subjects SET prerequisite_subject_id = NULL WHERE program_id = :pid"), {'pid': program_id})
         db.session.execute(text("DELETE FROM subjects WHERE program_id = :pid"), {'pid': program_id})
         db.session.execute(text("UPDATE applicants SET section_id = NULL WHERE section_id IN (SELECT id FROM sections WHERE program_id = :pid)"), {'pid': program_id})
+        db.session.execute(text("DELETE FROM section_archives WHERE section_id IN (SELECT id FROM sections WHERE program_id = :pid)"), {'pid': program_id})
         db.session.execute(text("DELETE FROM sections WHERE program_id = :pid"), {'pid': program_id})
         db.session.execute(text("DELETE FROM program_courses WHERE program_id = :pid"), {'pid': program_id})
         db.session.execute(text("DELETE FROM program_careers WHERE program_id = :pid"), {'pid': program_id})

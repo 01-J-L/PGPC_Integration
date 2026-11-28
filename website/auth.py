@@ -37,8 +37,6 @@ import hashlib
 # ----------------- BLUEPRINT SETUP -----------------
 auth = Blueprint('auth', __name__)
 
-auth = Blueprint('auth', __name__)
-
 # Register the filter
 @auth.app_template_filter('to_words')
 def to_words_filter(amount):
@@ -166,27 +164,7 @@ def delete_image_from_uploads(filename):
         print(f"Error deleting file {filename}: {e}")
         traceback.print_exc()
 
-def save_file_to_uploads(file_storage, prefix='doc'):
-    """Saves a file (PDF/Image) to UPLOAD_FOLDER."""
-    if not file_storage or not file_storage.filename:
-        return None, "No file provided."
-
-    allowed_extensions = {'.png', '.jpg', '.jpeg', '.webp', '.pdf'}
-    file_ext = os.path.splitext(file_storage.filename)[1].lower()
-
-    if file_ext not in allowed_extensions:
-        return None, f"Invalid file type. Allowed: PDF, JPG, PNG."
-    
-    timestamp = int(time.time())
-    secure_name = secure_filename(os.path.splitext(file_storage.filename)[0])
-    new_filename = f"{prefix}_{secure_name}_{timestamp}{file_ext}"
-    
-    try:
-        save_path = os.path.join(current_app.config['UPLOAD_FOLDER'], new_filename)
-        file_storage.save(save_path)
-        return new_filename, None
-    except Exception as e:
-        return None, str(e)
+# (P1-11: removed an earlier, never-used duplicate of save_file_to_uploads(); the definition below is the one in effect)
     
 # --- Helper: Amount to Words ---
 def amount_to_words(n):
@@ -242,33 +220,7 @@ def amount_to_words(n):
 
 # ----------------- EMAIL otp -----------------
 
-def send_otp_email(user_email, otp_code):
-    # !!! THERE ARE NO CHECKS HERE !!! 
-    # It goes straight to defining sender and subject.
-
-    sender_name_from_config = current_app.config.get('MAIL_SENDER_NAME', 'Padre Garcia Polytechnic College')
-    subject = f"Verify Your PGPC Account - OTP: {otp_code} - {sender_name_from_config}"
-    
-    try:
-        verify_url = url_for('auth.verify_otp_page', _external=True) 
-    except RuntimeError:
-        verify_url = f"{current_app.config.get('PREFERRED_URL_SCHEME', 'http')}://{current_app.config.get('SERVER_NAME', 'your-domain.com')}/verify-otp"
-
-    try:
-        html_body = render_template(
-            'email/otp_verification_email.html',
-            user_email=user_email,
-            otp_code=otp_code,
-            verify_url=verify_url,
-            sender_name=sender_name_from_config,
-            now=datetime.datetime.now()
-        )
-    except Exception as e_template:
-        print(f"CRITICAL: Email template 'email/otp_verification_email.html' not found or error rendering. Error: {e_template}")
-        html_body = f"<p>Dear User,</p><p>Your One-Time Password (OTP) for account verification is: <strong>{otp_code}</strong>. Please enter this OTP on the verification page. This OTP is valid for 10 minutes.</p><p>If you didn't request this, please ignore this email.</p>"
-        
-    # It goes straight to sending.
-    return _send_email(subject, [user_email], html_body, sender_name_override=sender_name_from_config)
+# (P1-11: removed an earlier, never-used duplicate of send_otp_email(); the definition below is the one in effect)
 
 
 @auth.route('/admin/student/statement/<int:applicant_id>')
@@ -1358,7 +1310,7 @@ def send_admin_created_account_email(user_email, user_full_name, temporary_passw
         
     return _send_email(subject, [user_email], html_body, sender_name_override=sender_name_from_config)
 
-def _prepare_print_transcript(student_user_id):
+def _prepare_print_transcript(student_user_id, for_student=False):
     """
     Helper to fetch and organize grades for printing Class Cards.
     Returns: student_info, transcript_data (dict grouped by Term)
@@ -1398,6 +1350,12 @@ def _prepare_print_transcript(student_user_id):
     
     all_grades = cursor.fetchall()
     conn.close()
+
+    # Phase 7: a student's own class card shows only the terms they may see.
+    if for_student:
+        from website.grades import visibility
+        allowed = {(t['academic_year'], t['semester']) for t in visibility.student_terms(student_user_id) if t['visible']}
+        all_grades = [g for g in all_grades if (visibility.norm(g['academic_year']), visibility.norm(g['semester'])) in allowed]
 
     # 3. Group by Term (Year + Sem) and Calculate GWA
     transcript = {}
@@ -1708,8 +1666,10 @@ def _auto_assign_fees(cursor, applicant_id, student_data):
         
         return assigned_count
     except Exception as e:
+        # P1-07: re-raise so the caller rolls the whole enrollment back instead of
+        # committing a student as Enrolling/Enrolled with a missing fee ledger.
         print(f"Error in _auto_assign_fees: {e}")
-        return 0
+        raise
 
 def _ensure_enrolled_balance(cursor, applicant_id):
     """
@@ -1727,7 +1687,7 @@ def _ensure_enrolled_balance(cursor, applicant_id):
         return _auto_assign_fees(cursor, applicant_id, student)
     except Exception as e:
         print(f"Error in _ensure_enrolled_balance for {applicant_id}: {e}")
-        return 0
+        raise  # P1-07
 
 def _assign_permanent_student_id(cursor, applicant_id, student_type_val=None):
     """
@@ -1772,8 +1732,9 @@ def _assign_permanent_student_id(cursor, applicant_id, student_type_val=None):
                            (new_permanent_id, stu['student_user_id']))
         return new_permanent_id
     except Exception as e:
+        # P1-07: never leave a student Enrolled without a permanent ID.
         print(f"Error assigning permanent student ID for {applicant_id}: {e}")
-        return ''
+        raise
 
 # ----------------- HELPER: AUTO PROGRESSION LOGIC -----------------
 def _calculate_next_term(current_year_str, current_sem_str):
@@ -2024,18 +1985,7 @@ def _render_applications_page(template_name, active_page, applications, stats, p
             
     return render_template(template_name, applications=filtered_apps, stats=stats, active_page=active_page, page_title=page_title, programs=programs, all_school_years=all_school_years, selected_school_year=selected_school_year)
 
-def admin_print_grade_card(student_user_id):
-    # Check permissions
-    if session.get('user_role') not in ['admin', 'registrar', 'guidance', 'osa']:
-        return redirect(url_for('auth.admin'))
-        
-    student, transcript = _prepare_print_transcript(student_user_id)
-    
-    if not student:
-        flash("Student not found.", "danger")
-        return redirect(request.referrer)
-        
-    return render_template('printable_class_card.html', student=student, transcript=transcript)
+# (P1-11: removed an earlier, never-used duplicate of admin_print_grade_card(); the definition below is the one in effect)
 
 
 @auth.route('/admin/grades/<int:student_user_id>/print-card')
@@ -2060,7 +2010,7 @@ def student_print_grade_card():
         return redirect(url_for('auth.student_login_page'))
         
     student_user_id = session['student_id']
-    student, transcript = _prepare_print_transcript(student_user_id)
+    student, transcript = _prepare_print_transcript(student_user_id, for_student=True)
     
     if not student:
         flash("Record not found.", "danger")
@@ -2105,7 +2055,7 @@ def add_account():
     finally:
         cursor.close()
         conn.close()
-    return redirect(url_for('chart_of_accounts'))
+    return redirect(url_for('auth.chart_of_accounts'))
 
 @auth.route('/accounting/delete-account/<int:id>', methods=['POST'])
 def delete_account(id):
@@ -2122,7 +2072,7 @@ def delete_account(id):
     finally:
         cursor.close()
         conn.close()
-    return redirect(url_for('chart_of_accounts'))
+    return redirect(url_for('auth.chart_of_accounts'))
 
 @auth.route('/accounting/journal', methods=['GET'])
 def journal_entries():
@@ -2216,6 +2166,28 @@ def upload_receipt_bg():
             flash(error, "danger")
     return redirect(url_for('auth.receipt_layout_tool'))
 
+# Receipt fields placed by the layout tool. Until a cashier saves a layout the
+# table is empty, and the templates read layout.<field>.top_pos directly, so
+# printing a receipt raised UndefinedError right after every payment (P1-13).
+_RECEIPT_FIELD_DEFAULTS = [
+    ('dragDate', '12%', '70%'), ('dragName', '24%', '15%'), ('dragDesc', '36%', '15%'),
+    ('dragAmount', '36%', '70%'), ('dragTotal', '60%', '70%'), ('dragWords', '70%', '15%'),
+    ('dragOfficer', '85%', '60%'),
+]
+
+
+def _receipt_layout(cursor):
+    cursor.execute("SELECT * FROM receipt_layout_settings")
+    saved = {item['field_id']: item for item in cursor.fetchall()}
+    layout = {}
+    for field_id, top, left in _RECEIPT_FIELD_DEFAULTS:
+        layout[field_id] = saved.get(field_id) or {
+            'field_id': field_id, 'top_pos': top, 'left_pos': left, 'font_size': '14px', 'is_visible': True}
+    for field_id, item in saved.items():
+        layout.setdefault(field_id, item)
+    return layout
+
+
 # --- MODIFIED: Print Receipt Route to fetch saved positions ---
 @auth.route('/cashier/print-receipt/<int:payment_id>')
 def print_receipt(payment_id):
@@ -2227,14 +2199,15 @@ def print_receipt(payment_id):
 
     try:
         # 1. Fetch Payment Data (your existing query)
-        cursor.execute("SELECT p.*, a.first_name, a.last_name, asm.description as fee_description FROM payments p JOIN applicants a ON p.student_id = a.applicant_id LEFT JOIN assessments asm ON p.assessment_id = asm.id WHERE p.id = %s", (payment_id,))
+        cursor.execute("SELECT p.*, a.first_name, a.last_name, COALESCE(asm.description, p.remark) as fee_description FROM payments p JOIN applicants a ON p.student_id = a.applicant_id LEFT JOIN assessments asm ON p.assessment_id = asm.id WHERE p.id = %s", (payment_id,))
         payment = cursor.fetchone()
 
-        # 2. Fetch Layout Settings
-        cursor.execute("SELECT * FROM receipt_layout_settings")
-        layout_list = cursor.fetchall()
-        # Convert list to dictionary for easy access: {'dragDate': {'top_pos': '10px', ...}}
-        layout = {item['field_id']: item for item in layout_list}
+        if not payment:
+            flash("Payment record not found.", "warning")
+            return redirect(url_for('auth.cashier_dashboard'))
+
+        # 2. Fetch Layout Settings (defaults for fields never positioned)
+        layout = _receipt_layout(cursor)
 
         # 3. Fetch Background filename
         cursor.execute("SELECT setting_value FROM system_settings WHERE setting_key = 'receipt_background_file'")
@@ -2257,12 +2230,8 @@ def receipt_layout_tool():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 1. Fetch Layout Settings (Positions and Font Sizes)
-        cursor.execute("SELECT * FROM receipt_layout_settings")
-        layout_list = cursor.fetchall()
-        
-        # Convert list to dictionary: {'dragDate': {'top_pos': '15%', ...}, ...}
-        layout = {item['field_id']: item for item in layout_list}
+        # 1. Fetch Layout Settings (Positions and Font Sizes; defaults if unsaved)
+        layout = _receipt_layout(cursor)
         
         # 2. Fetch Background filename from system_settings
         cursor.execute("SELECT setting_value FROM system_settings WHERE setting_key = 'receipt_background_file'")
@@ -3023,112 +2992,67 @@ def update_payment(student_id_db):
     # 1. Security Check
     if session.get('user_role') not in ['cashier', 'accounting']:
         return redirect(url_for('auth.admin_login'))
-    
+
+    from website import db as _db
+    from website.finance import service as finance
+    from website.curriculum.service import Actor
+    actor = Actor(session.get('user_name'), session.get('user_role'))
     base_template = 'accounting_base.html'
-    
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    try:
-        # --- HANDLE POST (Record Payment) ---
-        if request.method == 'POST':
-            assessment_id = request.form.get('assessment_id')
-            remark = request.form.get('remark')
-            payment_method = request.form.get('payment_method')
-            date_str = request.form.get('payment_date')
 
-            # Parse and validate the amount
-            try:
-                amount = float(request.form.get('amount') or 0)
-            except (TypeError, ValueError):
-                amount = 0
+    # --- HANDLE POST (Record Payment) ---
+    # Phase 4: Decimal amounts, balance recomputed from the payment rows, a
+    # one-time form token (no double recording), optional unique O.R. number.
+    if request.method == 'POST':
+        try:
+            if request.form.get('assessment_id') == 'down':
+                # enrollment down payment: before the fees exist; applied to the Tuition Fee later
+                _term = _get_active_term()
+                payment_id, duplicate = finance.record_down_payment(
+                    actor, student_id_db, _term['id'] if _term else None, request.form.get('amount'),
+                    request.form.get('payment_date'), request.form.get('payment_method'), request.form.get('remark'),
+                    request.form.get('receipt_number'), request.form.get('submission_token'))
+            else:
+                payment_id, duplicate = finance.record_payment(
+                    actor, student_id_db, request.form.get('assessment_id', type=int), request.form.get('amount'),
+                    request.form.get('payment_date'), request.form.get('payment_method'), request.form.get('remark'),
+                    request.form.get('receipt_number'), request.form.get('submission_token'))
+            _db.session.commit()
+        except finance.FinanceError as e:
+            _db.session.rollback()
+            flash(' '.join(e.messages), "warning")
+            return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
+        except Exception as e:
+            _db.session.rollback()
+            print(f"Error recording payment: {e}")
+            traceback.print_exc()
+            flash("An error occurred while recording the payment. Nothing was saved.", "danger")
+            return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
+        if duplicate:
+            flash("This payment form was already submitted; the payment was recorded only once.", "info")
+            return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
 
-            if not assessment_id:
-                flash("Please select an assessment to pay.", "warning")
-                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-            if amount <= 0:
-                flash("Payment amount must be greater than zero.", "warning")
-                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-            # Verify the assessment belongs to this student and still has a balance.
-            # FOR UPDATE locks the row so two cashiers can't pay the same balance twice.
-            cursor.execute("""
-                SELECT id, description, total_amount, amount_paid, balance, status
-                FROM assessments
-                WHERE id = %s AND student_id = %s
-                FOR UPDATE
-            """, (assessment_id, student_id_db))
-            selected_assessment = cursor.fetchone()
-
-            if not selected_assessment:
-                flash("Invalid assessment selected for this student.", "danger")
-                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-            remaining_balance = float(selected_assessment['balance'] or 0)
-            description = selected_assessment['description']
-
-            if selected_assessment['status'] == 'paid' or remaining_balance <= 0:
-                flash(f"'{description}' is already fully paid. No balance remaining.", "warning")
-                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-            # LIMIT: a payment can never exceed the remaining balance (no negative balances)
-            if round(amount, 2) > round(remaining_balance, 2):
-                flash(
-                    f"Payment of ₱{amount:,.2f} exceeds the remaining balance of "
-                    f"₱{remaining_balance:,.2f} for '{description}'. "
-                    f"Please enter an amount up to the remaining balance.",
-                    "warning"
-                )
-                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-            # A. Insert Payment Record
-            cursor.execute("""
-                INSERT INTO payments (student_id, assessment_id, amount_paid, payment_date, payment_method, remark, cashier_username)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (student_id_db, assessment_id, amount, date_str, payment_method, remark, session.get('user_name')))
-            
-            # Capture the new payment ID for the receipt
-            new_payment_id = cursor.lastrowid
-
-            # B. Update Assessment Balance (if linked to one)
-            if assessment_id:
-                # Deduct amount from balance, add to amount_paid (balance floored at 0)
-                cursor.execute("UPDATE assessments SET amount_paid = amount_paid + %s, balance = GREATEST(0, balance - %s) WHERE id = %s", 
-                               (amount, amount, assessment_id))
-                
-                # Check if fully paid to update status
-                cursor.execute("SELECT total_amount, amount_paid FROM assessments WHERE id = %s", (assessment_id,))
-                ass_data = cursor.fetchone()
-                if ass_data:
-                    new_status = 'paid' if ass_data['amount_paid'] >= ass_data['total_amount'] else 'partial'
-                    cursor.execute("UPDATE assessments SET status = %s WHERE id = %s", (new_status, assessment_id))
-
-            conn.commit()
-            
-            # C. Check System Setting for Receipt Issuance
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
             cursor.execute("SELECT setting_value FROM system_settings WHERE setting_key = 'issuance_of_receipt'")
             setting_row = cursor.fetchone()
-            
-            # Default to True (Print) if setting doesn't exist, otherwise check value
-            should_print = True
-            if setting_row and setting_row['setting_value'] == 'false':
-                should_print = False
+        finally:
+            cursor.close()
+            conn.close()
+        should_print = not (setting_row and setting_row['setting_value'] == 'false')
+        if should_print:
+            flash("Payment recorded successfully! Preparing receipt...", "success")
+            return redirect(url_for('auth.print_receipt', payment_id=payment_id))
+        flash("Payment recorded successfully. (Receipt printing is disabled)", "success")
+        return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
 
-            # D. Redirect Logic
-            if should_print:
-                flash("Payment recorded successfully! Preparing receipt...", "success")
-                return redirect(url_for('auth.print_receipt', payment_id=new_payment_id))
-            else:
-                flash("Payment recorded successfully. (Receipt printing is disabled)", "success")
-                # Reload the same page to show updated balance and history
-                return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-        # --- HANDLE GET (View Page) ---
-        
-        # 1. Fetch Student Details
+    # --- HANDLE GET (View Page) ---
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    student, assessments, payment_history = None, [], []
+    try:
         cursor.execute("""
-            SELECT a.applicant_id, a.old_student_id, a.control_number, 
+            SELECT a.applicant_id, a.student_user_id, a.old_student_id, a.control_number,
                    a.first_name, a.last_name, a.program_choice as course,
                    a.enrollment_year_level as year_level, s.section_name as section, a.email_address as email
             FROM applicants a
@@ -3136,107 +3060,71 @@ def update_payment(student_id_db):
             WHERE a.applicant_id = %s
         """, (student_id_db,))
         student = cursor.fetchone()
-        
         if student:
-            # Set display ID for UI
             student['display_id'] = student['old_student_id'] or student['control_number'] or 'N/A'
-
-        # 2. Fetch Assessments (Fees)
         cursor.execute("SELECT * FROM assessments WHERE student_id = %s ORDER BY created_at DESC", (student_id_db,))
         assessments = cursor.fetchall()
-
-        # 3. Fetch Payment History
-        cursor.execute("""
-            SELECT p.*, a.description as assessment_description
-            FROM payments p
-            LEFT JOIN assessments a ON p.assessment_id = a.id
-            WHERE p.student_id = %s
-            ORDER BY p.payment_date DESC, p.id DESC
-        """, (student_id_db,))
-        payment_history = cursor.fetchall()
-        
     except Exception as e:
         print(f"Error in update_payment: {e}")
         traceback.print_exc()
         flash("An error occurred loading the payment page.", "danger")
-        student = None
-        assessments = []
-        payment_history = []
     finally:
         if cursor: cursor.close()
         if conn: conn.close()
-    
-    return render_template('update_payment.html', 
-                           student=student, 
-                           assessments=assessments, 
+
+    term_summary = None
+    if student:
+        payment_history = list(reversed(finance.payment_rows([student_id_db])))
+        active = _get_active_term()
+        if active and student.get('student_user_id'):
+            term_summary = finance.summary(student['student_user_id'], active['id'])
+            term_summary['term_label'] = f"{active['year_name']} {active['semester']}"
+            term_summary['requirement'] = finance.enrollment_requirement(student['student_user_id'], active['id'], term_summary)
+            from website.checkin.service import is_checked_in as _checked_in
+            term_summary['down_payment_allowed'] = not _checked_in(student['student_user_id'], active['id'])
+
+    return render_template('update_payment.html',
+                           student=student,
+                           assessments=assessments,
                            payment_history=payment_history,
-                           today_date=datetime.date.today().strftime('%Y-%m-%d'), 
+                           term_summary=term_summary,
+                           submission_token=finance.new_submission_token(),
+                           user_role=session.get('user_role'),
+                           user_name=session.get('user_name'),
+                           today_date=datetime.date.today().strftime('%Y-%m-%d'),
                            base_template=base_template)
 
 
 @auth.route('/cashier/payment/<int:student_id_db>/undo', methods=['POST'])
 def undo_last_payment(student_id_db):
-    # 1. Security Check
+    """Phase 4: "Undo" no longer deletes the payment. It REVERSES the latest
+    payment (a contra entry is added and both rows are kept), with a reason."""
     if session.get('user_role') not in ['cashier', 'accounting']:
         return redirect(url_for('auth.admin_login'))
-
-    conn = None
-    cursor = None
+    from website import db as _db
+    from website.finance import service as finance
+    from website.curriculum.service import Actor
+    actor = Actor(session.get('user_name'), session.get('user_role'))
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # Find the most recent payment for this student
-        cursor.execute(
-            "SELECT * FROM payments WHERE student_id = %s ORDER BY id DESC LIMIT 1",
-            (student_id_db,))
-        payment = cursor.fetchone()
-
-        if not payment:
-            flash("No payment to undo for this student.", "warning")
+        payment_id = request.form.get('payment_id', type=int) or finance.last_reversible_payment(student_id_db)
+        if not payment_id:
+            flash("No payment to reverse for this student.", "warning")
             return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-        # Refuse to undo discount-applied payments (they also touch student_discounts_applied)
-        if payment.get('payment_method') == 'Discount':
-            flash("Cannot undo a discount-applied payment here. Remove the discount from Discount Management instead.", "warning")
+        p = finance._payment(payment_id, lock=False)
+        if p['student_id'] != student_id_db:
+            flash("That payment does not belong to this student.", "danger")
             return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
-
-        # Restore the assessment balance
-        if payment.get('assessment_id'):
-            cursor.execute("""
-                UPDATE assessments 
-                SET amount_paid = amount_paid - %s, 
-                    balance = balance + %s 
-                WHERE id = %s
-            """, (payment['amount_paid'], payment['amount_paid'], payment['assessment_id']))
-
-            # Recalculate status
-            cursor.execute("SELECT total_amount, amount_paid FROM assessments WHERE id = %s", (payment['assessment_id'],))
-            ass = cursor.fetchone()
-            if ass:
-                if ass['amount_paid'] <= 0:
-                    new_status = 'unpaid'
-                elif ass['amount_paid'] >= ass['total_amount']:
-                    new_status = 'paid'
-                else:
-                    new_status = 'partial'
-                cursor.execute("UPDATE assessments SET status = %s WHERE id = %s", (new_status, payment['assessment_id']))
-
-        # Delete the payment record
-        cursor.execute("DELETE FROM payments WHERE id = %s", (payment['id'],))
-        conn.commit()
-        flash(f"Undid payment of ₱{float(payment['amount_paid']):,.2f} ({payment['remark'] or 'Payment'}) for {student_id_db}.", "success")
+        finance.reverse_payment(actor, payment_id, request.form.get('reason'))
+        _db.session.commit()
+        flash(f"Payment #{payment_id} of {finance.peso(p['amount_paid'])} was reversed. Both entries are kept in the history.", "success")
+    except finance.FinanceError as e:
+        _db.session.rollback()
+        flash(' '.join(e.messages), "warning")
     except Exception as e:
-        print(f"Error undoing payment: {e}")
+        _db.session.rollback()
+        print(f"Error reversing payment: {e}")
         traceback.print_exc()
-        if conn:
-            conn.rollback()
-        flash("Error undoing payment.", "danger")
-    finally:
-        if cursor: cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
-
+        flash("Error reversing payment. Nothing was changed.", "danger")
     return redirect(url_for('auth.update_payment', student_id_db=student_id_db))
 
 # --- IN auth.py ---
@@ -3295,6 +3183,7 @@ def cashier_view_history(student_id):
 
 @auth.route('/cashier/batch-assessment', methods=['GET', 'POST'])
 def create_batch_assessment():
+    from website.finance import service as finance
     # 1. Security Check: Allow Cashier and Accounting roles
     if session.get('user_role') not in ['cashier', 'accounting']: 
         return redirect(url_for('auth.admin_login'))
@@ -3305,7 +3194,13 @@ def create_batch_assessment():
     
     # 2. Handle POST Request (Creating a new Batch Assessment)
     if request.method == 'POST':
-        desc = request.form.get('description')
+        # the description comes from Accounting's list (dropdown), checked here too
+        try:
+            desc = finance.check_fee_description(request.form.get('description'))
+        except finance.FinanceError as e:
+            cursor.close(); conn.close()
+            flash(' '.join(e.messages), "danger")
+            return redirect(url_for('auth.create_batch_assessment'))
         amount = request.form.get('total_amount')
         target_sem = request.form.get('semester')
         target_scope = request.form.get('scope')
@@ -3373,11 +3268,14 @@ def create_batch_assessment():
     
     return render_template('create_batch_assessment.html', 
                            history=history, 
+                           fee_descriptions=finance.fee_descriptions(),
+                           all_fee_descriptions=finance.fee_descriptions(include_hidden=True),
                            active_semester=active_sem,
                            base_template=base_template)
 
 @auth.route('/cashier/batch-assessment/edit/<int:batch_id>', methods=['POST'])
 def edit_batch_assessment(batch_id):
+    from website.finance import service as finance
     if session.get('user_role') not in ['cashier', 'accounting']:
         return redirect(url_for('auth.admin_login'))
 
@@ -3400,6 +3298,11 @@ def edit_batch_assessment(batch_id):
             return redirect(url_for('auth.create_batch_assessment'))
 
         old_desc = old_batch['description']
+        try:
+            new_desc = finance.check_fee_description(new_desc, current=old_desc)
+        except finance.FinanceError as e:
+            flash(' '.join(e.messages), "danger")
+            return redirect(url_for('auth.create_batch_assessment'))
 
         # REMOVED: updated_at = NOW() from the query below
         cursor.execute("""
@@ -4355,6 +4258,62 @@ def admin_enrollment_review_page(applicant_id):
             """, (application['student_user_id'], selected_term_id))
             enrollment_record = cursor.fetchone()
 
+        # --- Accounting payment hint (P1-05) ---
+        # The checkbox shows ONLY what is stored in student_enrollment_records.
+        # The old code ticked it on screen (never saved) whenever total paid >=
+        # 'enrollment_approval_min_payment', which defaulted to 0, so students who
+        # had paid nothing looked accounting-approved. The computed figure is now
+        # shown as a hint next to the checkbox instead.
+        accounting_hint = None
+        if application.get('applicant_id'):
+            from decimal import Decimal, InvalidOperation
+            cursor.execute("SELECT setting_value FROM system_settings WHERE setting_key = 'enrollment_approval_min_payment'")
+            row = cursor.fetchone()
+            try:
+                min_payment = Decimal(str(row['setting_value'])) if row and row['setting_value'] not in (None, '') else None
+            except InvalidOperation:
+                min_payment = None
+            cursor.execute("SELECT COALESCE(SUM(amount_paid), 0) AS total FROM payments WHERE student_id = %s", (application['applicant_id'],))
+            total_row = cursor.fetchone()
+            total_paid = Decimal(str(total_row['total'])) if total_row else Decimal('0')
+            accounting_hint = {
+                'total_paid': total_paid,
+                'min_payment': min_payment,
+                # A requirement is only "met" when one is configured and something was paid.
+                'requirement_met': bool(min_payment is not None and total_paid > 0 and total_paid >= min_payment),
+            }
+
+        # Phase 3: this term's registration form (REGFORM), if any
+        regform = None
+        if selected_term_id and application.get('student_user_id'):
+            cursor.execute("""
+                SELECT id, status, classification, total_units, max_units,
+                       (SELECT COUNT(*) FROM registration_form_subjects WHERE registration_form_id = registration_forms.id) AS subjects
+                FROM registration_forms WHERE student_user_id = %s AND academic_term_id = %s
+            """, (application['student_user_id'], selected_term_id))
+            regform = cursor.fetchone()
+
+        # Phase 4: term balance and payment-policy status for the registrar
+        term_summary, policy_ok, policy_why = None, None, None
+        if selected_term_id and application.get('student_user_id'):
+            try:
+                from website.finance import service as finance
+                term_summary = finance.summary(application['student_user_id'], selected_term_id)
+                policy_ok, policy_why = finance.check_policy(application['student_user_id'], selected_term_id, term_summary)
+            except Exception as fin_err:
+                print(f"[WARN] finance summary unavailable: {fin_err}")
+
+        # Phase 5: approval checklist and check-in state for the selected term
+        checklist_state, is_active_term = None, False
+        if selected_term_id and application.get('student_user_id'):
+            from website.checkin import service as checkin_service
+            from website.models import Applicant as _Applicant
+            from website import db as _db
+            checklist_state = checkin_service.checklist(_db.session.get(_Applicant, application['applicant_id']),
+                                                        selected_term_id, session.get('user_role'))
+            _active = checkin_service.active_term()
+            is_active_term = bool(_active and _active.id == selected_term_id)
+
         student_user_id = application.get('student_user_id')
         program_id = application.get('program_id')
 
@@ -4464,6 +4423,10 @@ def admin_enrollment_review_page(applicant_id):
                                all_academic_terms=all_academic_terms,
                                selected_term_id=selected_term_id,
                                enrollment_record=enrollment_record,
+                               accounting_hint=accounting_hint,
+                               regform=regform,
+                               term_summary=term_summary, policy_ok=policy_ok, policy_why=policy_why,
+                               cl=checklist_state, is_active_term=is_active_term, user_role=session.get('user_role'),
                                active_page='enrolling')
 
     except Exception as e:
@@ -4478,74 +4441,55 @@ def admin_enrollment_review_page(applicant_id):
 # --- NEW ROUTE FOR HANDLING APPROVAL CHECKBOXES ---
 @auth.route('/admin/enrollment/<int:applicant_id>/toggle-approval', methods=['POST'])
 def admin_toggle_enrollment_approval(applicant_id):
-    if session.get('user_role') not in ['admin', 'registrar']:
+    """Old checkbox endpoint, kept for compatibility. Phase 5: it records the
+    matching checklist line through the checklist service, which enforces who may
+    approve it (Accounting clearance: accounting/admin; Dean/President: as configured)."""
+    if session.get('user_role') not in ['admin', 'registrar', 'accounting']:
         return jsonify({"success": False, "message": "Unauthorized"}), 401
-    
-    data = request.get_json()
-    role = data.get('role')
-    status = data.get('status', False)
-    academic_term_id = data.get('term_id')
-
-    if not all([role, academic_term_id]):
-         return jsonify({"success": False, "message": "Missing role or term ID."}), 400
-
-    valid_roles = ['president', 'accounting', 'dean']
-    if role not in valid_roles:
-        return jsonify({"success": False, "message": "Invalid role specified."}), 400
-
-    conn = None
-    cursor = None
+    data = request.get_json(silent=True) or {}
+    code = {'accounting': 'payment', 'dean': 'dean', 'president': 'president'}.get(data.get('role'))
+    if not code or not data.get('term_id'):
+        return jsonify({"success": False, "message": "Missing or invalid role or term ID."}), 400
+    from website import db as _db
+    from website.checkin import service as checkin_service
     try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"success": False, "message": "Database connection error."}), 500
-        
-        cursor = conn.cursor(dictionary=True)
-        
-        # Get student_user_id from applicant_id
-        cursor.execute("SELECT student_user_id FROM applicants WHERE applicant_id = %s", (applicant_id,))
-        applicant = cursor.fetchone()
-        if not applicant or not applicant.get('student_user_id'):
-            return jsonify({"success": False, "message": "Applicant not found or not linked to a student account."}), 404
-        
-        student_user_id = applicant['student_user_id']
-
-        # Build query dynamically but safely
-        flag_column = f"is_approved_by_{role}"
-        date_column = f"{role}_approval_date"
-        approval_date = datetime.datetime.now() if status else None
-
-        # Use INSERT ... ON DUPLICATE KEY UPDATE to handle both new and existing records
-        update_sql = f"""
-            INSERT INTO student_enrollment_records (student_user_id, academic_term_id, {flag_column}, {date_column})
-            VALUES (%s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE
-                {flag_column} = VALUES({flag_column}),
-                {date_column} = VALUES({date_column})
-        """
-        
-        insert_cursor = conn.cursor()
-        insert_cursor.execute(update_sql, (student_user_id, academic_term_id, status, approval_date))
-        conn.commit()
-        insert_cursor.close()
-
-        message = f"{role.title()} approval has been {'recorded' if status else 'revoked'} for this term."
-        return jsonify({"success": True, "message": message})
-
-    except mysql.connector.Error as err:
-        if conn: conn.rollback()
-        print(f"DB Error toggling approval for applicant {applicant_id}: {err}")
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"Database error: {err.msg}"}), 500
-    except Exception as e:
-        if conn: conn.rollback()
-        print(f"Error toggling approval for applicant {applicant_id}: {e}")
-        traceback.print_exc()
-        return jsonify({"success": False, "message": "A server error occurred."}), 500
-    finally:
-        if cursor: cursor.close()
-        if conn and conn.is_connected(): conn.close()
+        if data.get('status'):
+            checkin_service.approve_item(_checkin_actor(), applicant_id, data['term_id'], code, data.get('notes'))
+        else:
+            checkin_service.revoke_item(_checkin_actor(), applicant_id, data['term_id'], code, data.get('reason'))
+        _db.session.commit()
+    except checkin_service.CheckinError as e:
+        _db.session.rollback()
+        return jsonify({"success": False, "message": ' '.join(e.messages)}), 400
+    return jsonify({"success": True, "message": "Approval %s for this term." % ('recorded' if data.get('status') else 'revoked')})
 # --- END NEW ROUTE ---
+
+def _checkin_actor():
+    from website.curriculum.service import Actor
+    return Actor(session.get('user_name'), session.get('user_role'))
+
+
+def _check_in_json(applicant_id, term_id, manual_section_id=None):
+    """Phase 5: run one registrar check-in and answer the review page / status menus in JSON."""
+    from website import db as _db
+    from website.checkin import service as checkin_service
+    from website.checkin.routes import notify_enrolled
+    try:
+        res = checkin_service.check_in(_checkin_actor(), applicant_id, term_id, manual_section_id)
+        _db.session.commit()
+    except checkin_service.CheckinError as e:
+        _db.session.rollback()
+        return jsonify({"success": False, "message": ' '.join(e.messages)}), 400
+    except Exception as e:
+        _db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"Server error: {e}"}), 500
+    notify_enrolled(res)
+    msg = f"{res['name']} is checked in and officially enrolled. Control No. {res['control_number']}."
+    if res['new_id']:
+        msg += f" New ID: {res['new_id']} assigned."
+    return jsonify({"success": True, "message": msg + res['fee_note'], "reload": True})
+
 
 @auth.route('/admin/enrollment/<int:applicant_id>/action', methods=['POST'])
 def admin_enrollment_action(applicant_id):
@@ -4563,15 +4507,30 @@ def admin_enrollment_action(applicant_id):
     if manual_section_id == "" or manual_section_id == "None" or manual_section_id is None:
         manual_section_id = None
 
-    if not action or not academic_term_id:
+    if action not in ('approve', 'reject', 'drop') or not academic_term_id:
         return jsonify({"success": False, "message": "Invalid action or missing term ID."}), 400
+
+    # Phase 5: 'approve' is the registrar check-in. It enforces the approval
+    # checklist on the server and runs the enrollment steps in one transaction.
+    if action == 'approve':
+        return _check_in_json(applicant_id, academic_term_id, manual_section_id)
+    if action == 'reject':
+        from website.checkin import service as checkin_service
+        from website.models import Applicant as _Applicant
+        _a = checkin_service.db.session.get(_Applicant, applicant_id)
+        if _a and _a.student_user_id and checkin_service.is_checked_in(_a.student_user_id, int(academic_term_id)):
+            return jsonify({"success": False, "message": "The student is checked in for this term. Undo the check-in first."}), 400
 
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        
+
+        cursor.execute("SELECT id FROM academic_terms WHERE id = %s", (academic_term_id,))
+        if not cursor.fetchone():
+            return jsonify({"success": False, "message": "Academic term not found."}), 400
+
         # 2. Fetch the student's CURRENT data (Includes levels set by student during re-enrollment)
         cursor.execute("""
             SELECT student_user_id, first_name, last_name, email_address, 
@@ -4590,50 +4549,10 @@ def admin_enrollment_action(applicant_id):
         generated_id_msg = "" 
         fee_msg = ""
 
-        # ==========================================================
-        # ACTION: APPROVE (Finalize Enrollment & Balance)
-        # ==========================================================
-        if action == 'approve':
-            new_status_record = 'Enrolled'
-            
-            # A. SECTION FINALIZATION
-            if manual_section_id:
-                # Use Admin override
-                cursor.execute("UPDATE applicants SET section_id = %s, is_section_permanent = TRUE WHERE applicant_id = %s", 
-                               (manual_section_id, applicant_id))
-            elif not app_data['section_id']:
-                # Attempt auto-assign if no section exists (New students or shifters)
-                cursor.execute("SELECT program_id FROM programs WHERE title = %s", (app_data['program_choice'],))
-                prog_res = cursor.fetchone()
-                if prog_res:
-                    _assign_section_automatically(cursor, applicant_id, prog_res['program_id'], app_data['enrollment_year_level'])
-            
-            # B. PERMANENT STUDENT ID GENERATION
-            # If New Student and ID still starts with 'A' (Temporary), generate a permanent 'P' ID.
-            new_permanent_id = _assign_permanent_student_id(cursor, applicant_id)
-            if new_permanent_id:
-                generated_id_msg = f" New ID: {new_permanent_id} assigned."
-
-            # C. CUMULATIVE FINANCIAL TRIGGER
-            # Assigns batch fees matching the student's CURRENT level.
-            # Adds rows to the ledger even if an old balance exists.
-            fees_added = _auto_assign_fees(cursor, applicant_id, app_data)
-            if fees_added > 0:
-                fee_msg = f" {fees_added} new assessments added to ledger."
-
-            # D. Finalize Applicant Status
-            cursor.execute("""
-                UPDATE applicants 
-                SET application_status = 'Enrolled', 
-                    original_enrollment_status = NULL, 
-                    last_updated_at = NOW() 
-                WHERE applicant_id = %s
-            """, (applicant_id,))
-
         # ==========================================
         # ACTION: DROP
         # ==========================================
-        elif action == 'drop':
+        if action == 'drop':
             new_status_record = 'Dropped'
             cursor.execute("UPDATE applicants SET application_status = 'Dropped', last_updated_at = NOW() WHERE applicant_id = %s", (applicant_id,))
         
@@ -4649,11 +4568,19 @@ def admin_enrollment_action(applicant_id):
                 cursor.execute("UPDATE applicants SET admin_notes = %s WHERE applicant_id = %s", (current_notes + new_note, applicant_id))
 
         # 3. Update the Official Term Record (History)
+        # P1-06: upsert, so a term record always exists after a registrar decision.
+        # (The plain UPDATE silently did nothing when no checklist box had been
+        # ticked for the term, leaving no per-term enrollment history.)
         cursor.execute("""
-            UPDATE student_enrollment_records 
-            SET enrollment_status = %s 
-            WHERE student_user_id = %s AND academic_term_id = %s
-        """, (new_status_record, student_user_id, academic_term_id))
+            INSERT INTO student_enrollment_records
+                (student_user_id, academic_term_id, year_level, enrollment_semester, enrollment_status)
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                enrollment_status = VALUES(enrollment_status),
+                year_level = COALESCE(VALUES(year_level), year_level),
+                enrollment_semester = COALESCE(VALUES(enrollment_semester), enrollment_semester)
+        """, (student_user_id, academic_term_id, app_data.get('enrollment_year_level'),
+              app_data.get('enrollment_semester'), new_status_record))
 
         conn.commit()
         
@@ -6194,27 +6121,7 @@ def admin_program_form(program_id):
         if conn and conn.is_connected(): conn.close()
 
 # --- HELPER: Save Generic File (PDF/Image) ---
-def save_file_to_uploads(file_storage, prefix='doc'):
-    """Saves a file (PDF/Image) to UPLOAD_FOLDER."""
-    if not file_storage or not file_storage.filename:
-        return None, "No file provided."
-
-    allowed_extensions = {'.png', '.jpg', '.jpeg', '.webp', '.pdf'}
-    file_ext = os.path.splitext(file_storage.filename)[1].lower()
-
-    if file_ext not in allowed_extensions:
-        return None, f"Invalid file type. Allowed: PDF, JPG, PNG."
-    
-    timestamp = int(time.time())
-    secure_name = secure_filename(os.path.splitext(file_storage.filename)[0])
-    new_filename = f"{prefix}_{secure_name}_{timestamp}{file_ext}"
-    
-    try:
-        save_path = os.path.join(current_app.config['UPLOAD_FOLDER'], new_filename)
-        file_storage.save(save_path)
-        return new_filename, None
-    except Exception as e:
-        return None, str(e)
+# (P1-11: removed an earlier, never-used duplicate of save_file_to_uploads(); the definition below is the one in effect)
 
 def save_file_to_uploads(file_storage, prefix='hero'):
     if not file_storage or not file_storage.filename:
@@ -6438,6 +6345,37 @@ def admin_delete_requirement(req_id):
 
 
 
+def _program_delete_blockers(cursor, program_id, program_title):
+    """Return human-readable reasons why a program must not be hard-deleted.
+
+    Anything that is academic or enrollment history blocks the delete; pure
+    configuration (subjects, empty sections, website text) does not.
+    """
+    checks = [
+        ("grade record(s)", "SELECT COUNT(*) AS n FROM student_grades WHERE subject_id IN (SELECT id FROM subjects WHERE program_id = %s)", (program_id,)),
+        ("class record grade(s)", "SELECT COUNT(*) AS n FROM grades WHERE subject_id IN (SELECT id FROM subjects WHERE program_id = %s)", (program_id,)),
+        ("student application(s)", "SELECT COUNT(*) AS n FROM applicants WHERE TRIM(program_choice) = TRIM(%s) OR section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_title or '', program_id)),
+        ("faculty class assignment(s)", "SELECT COUNT(*) AS n FROM faculty_assignments WHERE subject_id IN (SELECT id FROM subjects WHERE program_id = %s) OR section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_id, program_id)),
+        ("curriculum version(s)", "SELECT COUNT(*) AS n FROM curriculum_versions WHERE program_id = %s", (program_id,)),
+        # Phase 8: registration forms / lines pointing at the program's sections
+        ("registration form(s)", "SELECT COUNT(*) AS n FROM registration_forms WHERE program_id = %s OR section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_id, program_id)),
+        ("registration-form subject line(s)", "SELECT COUNT(*) AS n FROM registration_form_subjects WHERE section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_id,)),
+        # teaching_loads.section stores the label "<PROGRAM_CODE> <SECTION>" (no FK).
+        ("scheduled class(es)", """SELECT COUNT(*) AS n FROM sections s
+                                   JOIN programs p ON p.program_id = s.program_id
+                                   JOIN teaching_loads tl ON tl.section = CONCAT(p.program_code, ' ', s.section_name)
+                                   WHERE s.program_id = %s""", (program_id,)),
+    ]
+    reasons = []
+    for label, sql, params in checks:
+        cursor.execute(sql, params)
+        row = cursor.fetchone()
+        n = row['n'] if isinstance(row, dict) else row[0]
+        if n:
+            reasons.append(f"{n} {label}")
+    return reasons
+
+
 @auth.route('/admin/program/delete/<program_id>', methods=['POST'])
 def admin_delete_program(program_id):
     if session.get('user_role') not in ['admin', 'registrar', 'secretary']: return redirect(url_for('auth.admin'))
@@ -6449,11 +6387,11 @@ def admin_delete_program(program_id):
             return redirect(url_for('auth.admin_manage_programs'))
         
         cursor = conn.cursor(dictionary=True)
-        # First, get the image filename to delete it from the filesystem
-        cursor.execute("SELECT hero_image_filename FROM programs WHERE program_id = %s", (program_id,))
+        cursor.execute("SELECT title, hero_image_filename FROM programs WHERE program_id = %s", (program_id,))
         program = cursor.fetchone()
-        if program and program['hero_image_filename']:
-            delete_image_from_uploads(program['hero_image_filename'])
+        if not program:
+            flash("Program not found.", "warning")
+            return redirect(url_for('auth.admin_manage_programs'))
 
         # Block deletion if user accounts still reference this program
         cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE program_id = %s", (program_id,))
@@ -6462,8 +6400,18 @@ def admin_delete_program(program_id):
             flash(f"Cannot delete program '{program_id.upper()}'. It is still assigned to user account(s). Reassign or remove those accounts first.", "danger")
             return redirect(url_for('auth.admin_manage_programs'))
 
+        # P1-02: never destroy historical academic records. A program that has
+        # grades, students, faculty assignments or scheduled classes cannot be
+        # deleted here (it used to DELETE every student_grades/grades row).
+        blockers = _program_delete_blockers(cursor, program_id, program['title'])
+        if blockers:
+            conn.rollback()
+            flash(f"Cannot delete program '{program_id.upper()}' because it has historical records: "
+                  f"{', '.join(blockers)}. Remove it from the website listing instead of deleting it.", "danger")
+            return redirect(url_for('auth.admin_manage_programs'))
+
         # Delete from all related tables in dependency order to satisfy foreign key constraints.
-        # The DB should have cascading deletes, but doing it manually is safer.
+        # Only configuration rows remain at this point (no grades / students / loads).
         cursor.execute("""
             DELETE FROM subject_prerequisites
             WHERE subject_id IN (SELECT id FROM subjects WHERE program_id = %s)
@@ -6474,8 +6422,6 @@ def admin_delete_program(program_id):
             WHERE subject_id IN (SELECT id FROM subjects WHERE program_id = %s)
                OR prerequisite_subject_id IN (SELECT id FROM subjects WHERE program_id = %s)
         """, (program_id, program_id))
-        cursor.execute("DELETE FROM student_grades WHERE subject_id IN (SELECT id FROM subjects WHERE program_id = %s)", (program_id,))
-        cursor.execute("DELETE FROM grades WHERE subject_id IN (SELECT id FROM subjects WHERE program_id = %s)", (program_id,))
         cursor.execute("""
             DELETE FROM faculty_assignments
             WHERE subject_id IN (SELECT id FROM subjects WHERE program_id = %s)
@@ -6484,15 +6430,19 @@ def admin_delete_program(program_id):
         cursor.execute("UPDATE subjects SET prerequisite_subject_id = NULL WHERE program_id = %s", (program_id,))
         cursor.execute("DELETE FROM subjects WHERE program_id = %s", (program_id,))
         cursor.execute("UPDATE applicants SET section_id = NULL WHERE section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_id,))
+        cursor.execute("DELETE FROM section_archives WHERE section_id IN (SELECT id FROM sections WHERE program_id = %s)", (program_id,))
         cursor.execute("DELETE FROM sections WHERE program_id = %s", (program_id,))
         cursor.execute("DELETE FROM program_courses WHERE program_id = %s", (program_id,))
         cursor.execute("DELETE FROM program_careers WHERE program_id = %s", (program_id,))
         cursor.execute("DELETE FROM program_objectives WHERE program_id = %s", (program_id,))
         cursor.execute("DELETE FROM courses WHERE program_id = %s", (program_id,))
         cursor.execute("DELETE FROM programs WHERE program_id = %s", (program_id,))
-        
+
         conn.commit()
-        flash(f"Program '{program_id.upper()}' and all its data have been deleted.", "success")
+        # Remove the hero image only after the delete really happened.
+        if program.get('hero_image_filename'):
+            delete_image_from_uploads(program['hero_image_filename'])
+        flash(f"Program '{program_id.upper()}' and its curriculum setup have been deleted.", "success")
     except Exception as e:
         flash(f"Error deleting program: {e}", "danger")
         traceback.print_exc()
@@ -8038,6 +7988,26 @@ def logout():
 
 # --- IN auth.py ---
 
+def _staff_password_ok(user_row, password):
+    """Null-safe password check for rows from `users` (P1-08).
+
+    Mirrors User.check_password(): accepts the current hash and the legacy
+    `password_hash_alt` kept by the users/system_users merge, and never raises
+    when a hash is NULL or malformed.
+    """
+    if not user_row or not password:
+        return False
+    for stored in (user_row.get('password_hash'), user_row.get('password_hash_alt')):
+        if not stored:
+            continue
+        try:
+            if check_password_hash(stored, password):
+                return True
+        except (ValueError, TypeError):
+            continue
+    return False
+
+
 @auth.route('/admin_login', methods=['GET', 'POST'])
 def admin_login():
     # --- Handle GET requests ---
@@ -8065,8 +8035,10 @@ def admin_login():
              hashed = generate_password_hash(initial_admin_password, method='pbkdf2:sha256')
              cursor.execute(
                  "INSERT INTO users (username, email, password_hash, role, status, full_name, `system`, can_edit) "
-                 "VALUES (%s, NULL, %s, 'admin', 'active', %s, 'admission', 1)",
-                 ('admin', hashed, 'System Administrator'))
+                 "VALUES (%s, %s, %s, 'admin', 'active', %s, 'admission', 1)",
+                 # P1-08: users.email is NOT NULL UNIQUE, so the old NULL made the
+                 # first-deployment bootstrap fail. Use a local placeholder address.
+                 ('admin', 'admin@pgpc.local', hashed, 'System Administrator'))
              conn.commit()
 
              session['user_role'] = 'admin'
@@ -8078,7 +8050,7 @@ def admin_login():
              return redirect(url_for('auth.admin_dashboard'))
 
         # 3. STANDARD LOGIN
-        if user and user['role'] == 'superadmin' and not check_password_hash(user['password_hash'], password or ''):
+        if user and user['role'] == 'superadmin' and not _staff_password_ok(user, password):
             # Do not reveal that this is a superadmin account on bad credentials
             flash('Invalid credentials', "danger")
             return redirect(url_for('auth.admin'))
@@ -8093,7 +8065,7 @@ def admin_login():
             flash('That account belongs to the Faculty system. Please log in at /admin-load/login.', "danger")
             return redirect(url_for('auth.admin'))
 
-        if user and check_password_hash(user['password_hash'], password):
+        if user and _staff_password_ok(user, password):
             session['user_id'] = user['id']
             session['user_name'] = user['full_name']
 
@@ -8168,7 +8140,7 @@ def superadmin_login():
         cursor.execute("SELECT * FROM users WHERE username = %s AND role = 'superadmin'", (username,))
         user = cursor.fetchone()
 
-        if user and check_password_hash(user['password_hash'], password):
+        if user and _staff_password_ok(user, password):
             session.clear()
             session['user_id'] = user['id']
             session['user_name'] = user['full_name']
@@ -9441,7 +9413,7 @@ def submit_application():
         
         if application_status == 'Passed':
             flash("✅ Application submitted! Please complete the enrollment & inventory form to proceed.", "success")
-            return redirect(url_for('auth.enrollment_form_page', applicant_id=new_applicant_id))
+            return redirect(url_for('views.enrollment_form_page', applicant_id=new_applicant_id))
         else: 
             flash("✅ Application submitted! Check status now.", "success")
             return redirect(url_for('views.application_status_page'))
@@ -9456,80 +9428,9 @@ def submit_application():
 
 
 # ----------------- STUDENT ENROLLMENT ROUTES -----------------
-@auth.route('/enrollment-form/<int:applicant_id>', methods=['GET'])
-def enrollment_form_page(applicant_id):
-    if 'student_id' not in session:
-        flash("⚠️ Please log in to access the enrollment form.", "warning")
-        return redirect(url_for('auth.student_login_page'))
-
-    student_user_id = session['student_id']
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        if not conn:
-            flash("Database connection error.", "danger")
-            return redirect(url_for('views.application_status_page'))
-            
-        cursor = conn.cursor(dictionary=True)
-        # MODIFIED: Select * so every field used by enrollment_form.html is available
-        cursor.execute("""
-            SELECT * FROM applicants 
-            WHERE applicant_id = %s AND student_user_id = %s
-        """, (applicant_id, student_user_id))
-        application = cursor.fetchone()
-        
-        if not application:
-            flash("Application not found or you do not have permission.", "danger")
-            return redirect(url_for('views.application_status_page'))
-        
-        # MODIFIED LOGIC: Check if it's a re-enrollment or a first-time enrollment
-        is_re_enrollment = application.get('original_enrollment_status') == 'Enrolled'
-
-        if application['application_status'] not in ['Passed', 'Enrolling']:
-            flash(f"This application is not ready for enrollment (Status: {application['application_status']}).", "warning")
-            return redirect(url_for('views.application_status_page'))
-            
-
-        if is_re_enrollment:
-            # Fetch programs for the dropdown
-            all_programs = _get_program_list()
-            
-            active_term = _get_active_term()
-            return render_template('re_enrollment_form.html', 
-                                   application=application, 
-                                   programs=all_programs, # PASS PROGRAMS HERE
-                                   active_school_year=active_term['year_name'] if active_term else application.get('academic_year'),
-                                   student_logged_in=True)
-
-        # Original logic for first-time enrollment
-        docs_submitted = {
-            'diploma': bool(application.get('shs_diploma_file')),
-            'card': bool(application.get('shs_card_file')),  # Corresponds to Form 138
-            'birth_cert': bool(application.get('birth_certificate_file')),
-            'photo': bool(application.get('photo'))
-        }
-
-        all_programs = _get_program_list()
-        active_term = _get_active_term()
-
-        age_val = ''
-        if application.get('date_of_birth'):
-            today = datetime.date.today()
-            dob = application['date_of_birth']
-            age_val = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-
-        return render_template('enrollment_form.html', application=application, docs_submitted=docs_submitted,
-                               programs=all_programs, active_term=active_term, calculated_age=age_val,
-                               student_logged_in=True)
-
-    except Exception as e:
-        flash(f"An error occurred: {e}", "danger")
-        traceback.print_exc()
-        return redirect(url_for('views.application_status_page'))
-    finally:
-        if cursor: cursor.close()
-        if conn and conn.is_connected(): conn.close()
+# P1-09: the duplicate auth.enrollment_form_page view (same URL as
+# views.enrollment_form_page, never reachable because views registers first)
+# was removed; all links now use views.enrollment_form_page.
 
 # Helper to get Program ID from Title (needed because applicants table stores Title)
 def _get_program_id_by_title(cursor, title):
@@ -9635,7 +9536,8 @@ def admin_manage_sections():
                     cursor.execute("""
                         INSERT INTO sections (program_id, year_level, section_name, section_letter, max_students, semester, school_year)
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        ON DUPLICATE KEY UPDATE max_students = %s, is_active = TRUE
+                        ON DUPLICATE KEY UPDATE max_students = %s,
+                            is_active = IF(id IN (SELECT section_id FROM section_archives WHERE is_archived = 1), is_active, TRUE)
                     """, (program_id, year_level, section_name, letter, max_students, semester, school_year, max_students))
                 conn.commit()
                 flash(f"Generated {num_sections} sections.", "success")
@@ -9645,20 +9547,36 @@ def admin_manage_sections():
                 section_id = request.form.get('section_id')
                 max_students = request.form.get('max_students_edit')
                 is_active = True if request.form.get('is_active_edit') else False
-                cursor.execute("UPDATE sections SET max_students = %s, is_active = %s WHERE id = %s", (max_students, is_active, section_id))
-                conn.commit()
-                flash("Section updated.", "success")
+                cursor.execute("SELECT 1 FROM section_archives WHERE section_id = %s AND is_archived = 1", (section_id,))
+                if is_active and cursor.fetchone():
+                    flash("This section is archived. Restore it before making it active.", "danger")
+                else:
+                    cursor.execute("UPDATE sections SET max_students = %s, is_active = %s WHERE id = %s", (max_students, is_active, section_id))
+                    conn.commit()
+                    flash("Section updated.", "success")
 
             # 3. DELETE SECTION
-            elif action == 'delete_section':
+            # Phase 8: delete only unused sections; archive the others (website/sections/protection.py)
+            elif action in ('delete_section', 'archive_section', 'restore_section'):
+                from website import db as _db
+                from website.sections import protection
+                actor = _checkin_actor()
                 section_id = request.form.get('section_id')
-                cursor.execute("SELECT COUNT(*) as count FROM applicants WHERE section_id = %s", (section_id,))
-                if cursor.fetchone()['count'] > 0:
-                    flash("Cannot delete section with assigned students.", "danger")
-                else:
-                    cursor.execute("DELETE FROM sections WHERE id = %s", (section_id,))
-                    conn.commit()
-                    flash("Section deleted.", "success")
+                try:
+                    if action == 'delete_section':
+                        name = protection.delete(actor, section_id)
+                        msg = f'Section "{name}" deleted.'
+                    elif action == 'archive_section':
+                        sec = protection.archive(actor, section_id, request.form.get('reason'))
+                        msg = f'Section "{protection.display_name(sec)}" archived. Its records are kept; it no longer takes new students.'
+                    else:
+                        sec = protection.restore(actor, section_id, request.form.get('reason'))
+                        msg = f'Section "{protection.display_name(sec)}" restored.'
+                    _db.session.commit()
+                    flash(msg, "success")
+                except protection.SectionError as e:
+                    _db.session.rollback()
+                    flash(' '.join(e.messages), "danger")
 
             # 4. EQUALIZE / DISTRIBUTE STUDENTS
             elif action == 'distribute_year_level':
@@ -9740,7 +9658,9 @@ def admin_manage_sections():
         # 3. Fetch All Sections with Student Counts
         cursor.execute("""
             SELECT s.*, p.title as program_title,
-            (SELECT COUNT(*) FROM applicants a WHERE a.section_id = s.id) as current_students
+            (SELECT COUNT(*) FROM applicants a WHERE a.section_id = s.id) as current_students,
+            (SELECT sa.is_archived FROM section_archives sa WHERE sa.section_id = s.id) as is_archived,
+            (SELECT sa.reason FROM section_archives sa WHERE sa.section_id = s.id AND sa.is_archived = 1) as archive_reason
             FROM sections s
             JOIN programs p ON s.program_id = p.program_id
             ORDER BY p.title, s.year_level, s.section_letter
@@ -9820,6 +9740,20 @@ def submit_enrollment(applicant_id):
         if not application:
             flash("Application not found or unauthorized.", "danger")
             return redirect(url_for('views.application_status_page'))
+
+        # Phase 9: the same gate as the GET form (views.enrollment_form_page). Without it a
+        # Pending / Rejected / Failed applicant, or an already enrolled student, could POST
+        # this form directly and become 'Enrolling' with a permanent ID and fees.
+        if application['application_status'] not in ('Passed', 'Enrolling', 'Eligible for Enrollment'):
+            flash(f"This application is not ready for enrollment (Status: {application['application_status']}).", "warning")
+            return redirect(url_for('views.application_status_page'))
+        _active = _get_active_term()
+        if _active:
+            cursor.execute("SELECT 1 FROM enrollment_checkins WHERE student_user_id = %s AND academic_term_id = %s AND active = 1",
+                           (student_user_id, _active['id']))
+            if cursor.fetchone():
+                flash("You are already officially enrolled for this term. Contact the Registrar's Office for changes.", "warning")
+                return redirect(url_for('views.application_status_page'))
 
         # Check User Type (New vs Old)
         cursor.execute("SELECT student_type FROM student_users WHERE id = %s", (student_user_id,))
@@ -10180,6 +10114,9 @@ def admin_update_application_status(applicant_id):
     new_status = request.form.get('status')
     valid_statuses = ['Pending', 'In Review', 'Approved', 'Scheduled', 'Rejected', 'Passed', 'Failed', 'Enrolling', 'Dropped', 'Enrolled', 'Not Enrolled']
     if not new_status or new_status not in valid_statuses: return jsonify({"success": False, "message": "Invalid status"}), 400
+    # Phase 5: 'Enrolled' is only reachable through the registrar check-in (checklist enforced).
+    if new_status == 'Enrolled':
+        return _check_in_json(applicant_id, None)
 
     conn = None; cursor = None 
     try:
@@ -10302,10 +10239,12 @@ def admin_update_application_status(applicant_id):
 
         return jsonify({"success": True, "message": msg, "new_status": new_status, "applicant_id": applicant_id, "permit_control_no": effective_pcn })
 
-    except mysql.connector.Error as db_err: 
+    except mysql.connector.Error as db_err:
+        if conn: conn.rollback()
         print(f"Database error updating status for {applicant_id}: {db_err}"); traceback.print_exc()
         return jsonify({"success": False, "message": f"Database error: {db_err.msg}"}), 500
     except Exception as e:
+        if conn: conn.rollback()
         print(f"Error updating status for {applicant_id}: {e}"); traceback.print_exc()
         return jsonify({"success": False, "message": "Server error"}), 500
     finally:
@@ -10397,6 +10336,28 @@ def admin_bulk_update_status():
 
     if not ids or not isinstance(ids, list) or not action:
         return jsonify({"success": False, "message": "Invalid request. Missing IDs or action."}), 400
+
+    # Phase 5: bulk 'Enrolled' = one registrar check-in per student, each with its
+    # own checklist check and transaction. Students who are not ready are listed.
+    if action_type == 'status' and action == 'Enrolled':
+        from website import db as _db
+        from website.checkin import service as checkin_service
+        from website.checkin.routes import notify_enrolled
+        done, failed = [], []
+        for raw_id in ids:
+            try:
+                res = checkin_service.check_in(_checkin_actor(), int(raw_id), None)
+                _db.session.commit()
+                done.append(res)
+            except (checkin_service.CheckinError, ValueError) as e:
+                _db.session.rollback()
+                failed.append({'id': raw_id, 'reason': ' '.join(getattr(e, 'messages', [str(e)]))})
+        for res in done:
+            notify_enrolled(res)
+        msg = f"{len(done)} student(s) checked in and enrolled."
+        if failed:
+            msg += f" {len(failed)} not checked in: " + ' | '.join(f"#{f['id']}: {f['reason']}" for f in failed[:10])
+        return jsonify({"success": bool(done) or not failed, "message": msg, "failed": failed})
 
     conn = None
     cursor = None
@@ -10799,33 +10760,14 @@ def view_student_grades():
             flash("No application found for your account. Cannot display grades.", "info")
             return redirect(url_for('views.application_status_page'))
         
-        # --- NEW LOGIC: Query for all existing grades and group them by term ---
-        cursor.execute("""
-            SELECT 
-                sg.academic_year, 
-                sg.semester, 
-                s.subject_code, 
-                s.subject_title, 
-                sg.grade, 
-                sg.remarks
-            FROM student_grades sg
-            JOIN subjects s ON sg.subject_id = s.id
-            WHERE sg.student_user_id = %s
-            ORDER BY sg.academic_year DESC, sg.semester ASC, s.subject_code ASC
-        """, (student_user_id,))
-        
-        all_grades = cursor.fetchall()
-        
-        # Group grades by term using a dictionary
-        grades_by_term = defaultdict(list)
-        for grade in all_grades:
-            term_key = f"{grade['academic_year']} - {grade['semester']}"
-            grades_by_term[term_key].append(grade)
+        # Phase 7: only released terms without a hold (see website/grades/visibility.py)
+        from website.grades import visibility
+        grade_terms = visibility.student_terms(student_user_id)
 
         return render_template('student_grades.html',
                                student=student_info,
                                application=student_info, # <--- FIX: Added this line
-                               grades_by_term=grades_by_term,
+                               grade_terms=grade_terms,
                                student_logged_in=True)
 
     except Exception as e:
@@ -10834,4 +10776,4 @@ def view_student_grades():
         return redirect(url_for('views.application_status_page'))
     finally:
         if cursor: cursor.close()
-        if conn and conn.is_connected(): conn.close()
+        if conn and conn.is_connected(): conn.close()

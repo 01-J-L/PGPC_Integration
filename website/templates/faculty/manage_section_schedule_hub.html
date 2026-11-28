@@ -74,12 +74,24 @@
                                     <ul class="space-y-2">
                                     {% for section, section_display in sections_in_year %}
                                         <li class="flex justify-between items-center p-2 bg-black/5 dark:bg-white/5 rounded-lg">
-                                            <span class="font-medium text-slate-700 dark:text-slate-200">{{ section.program.program_code }} {{ section_display }}</span>
+                                            <span class="font-medium text-slate-700 dark:text-slate-200">{{ section.program.program_code }} {{ section_display }}{% if section.id in archived_ids %} <span class="ml-1 px-2 py-0.5 text-xs rounded-full bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300">Archived</span>{% endif %}</span>
                                             <div class="flex items-center space-x-3">
                                                 <a href="{{ url_for('faculty_main.section_schedule_grid', program_id=section.program.id, section_name=section.name, semester=1) }}" class="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline">Manage Schedule</a>
-                                                <form action="{{ url_for('faculty_main.delete_section', section_id=section.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this section?');">
+                                                {% if section.id in archived_ids %}
+                                                <form action="{{ url_for('faculty_main.restore_section', section_id=section.id) }}" method="POST">
                                                     {{ delete_form.hidden_tag() }}
-                                                    <button type="submit" class="text-slate-400 hover:text-rose-500 dark:text-slate-500 dark:hover:text-rose-500 transition-colors"><i class="ri-delete-bin-line"></i></button>
+                                                    <button type="submit" class="text-sm text-slate-500 hover:text-indigo-600 dark:text-slate-400" title="Restore section">Restore</button>
+                                                </form>
+                                                {% else %}
+                                                <form action="{{ url_for('faculty_main.archive_section', section_id=section.id) }}" method="POST"
+                                                      onsubmit="var r = prompt('Reason for archiving this section (its schedules and records are kept; it takes no new students):'); if (!r) return false; this.reason.value = r; return true;">
+                                                    {{ delete_form.hidden_tag() }}<input type="hidden" name="reason" value="">
+                                                    <button type="submit" class="text-slate-400 hover:text-amber-600 dark:text-slate-500 transition-colors" title="Archive section" aria-label="Archive section"><i class="ri-archive-line"></i></button>
+                                                </form>
+                                                {% endif %}
+                                                <form action="{{ url_for('faculty_main.delete_section', section_id=section.id) }}" method="POST" onsubmit="return confirm('Delete this section? Only possible when no schedule, student, class record or registration form uses it.');">
+                                                    {{ delete_form.hidden_tag() }}
+                                                    <button type="submit" class="text-slate-400 hover:text-rose-500 dark:text-slate-500 dark:hover:text-rose-500 transition-colors" title="Delete section" aria-label="Delete section"><i class="ri-delete-bin-line"></i></button>
                                                 </form>
                                             </div>
                                         </li>
@@ -105,12 +117,24 @@
                                     <ul class="space-y-2">
                                     {% for section, section_display in sections_in_year %}
                                         <li class="flex justify-between items-center p-2 bg-black/5 dark:bg-white/5 rounded-lg">
-                                            <span class="font-medium text-slate-700 dark:text-slate-200">{{ section.program.program_code }} {{ section_display }}</span>
+                                            <span class="font-medium text-slate-700 dark:text-slate-200">{{ section.program.program_code }} {{ section_display }}{% if section.id in archived_ids %} <span class="ml-1 px-2 py-0.5 text-xs rounded-full bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300">Archived</span>{% endif %}</span>
                                             <div class="flex items-center space-x-3">
                                                 <a href="{{ url_for('faculty_main.section_schedule_grid', program_id=section.program.id, section_name=section.name, semester=2) }}" class="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline">Manage Schedule</a>
-                                                <form action="{{ url_for('faculty_main.delete_section', section_id=section.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this section?');">
+                                                {% if section.id in archived_ids %}
+                                                <form action="{{ url_for('faculty_main.restore_section', section_id=section.id) }}" method="POST">
                                                     {{ delete_form.hidden_tag() }}
-                                                    <button type="submit" class="text-slate-400 hover:text-rose-500 dark:text-slate-500 dark:hover:text-rose-500 transition-colors"><i class="ri-delete-bin-line"></i></button>
+                                                    <button type="submit" class="text-sm text-slate-500 hover:text-indigo-600 dark:text-slate-400" title="Restore section">Restore</button>
+                                                </form>
+                                                {% else %}
+                                                <form action="{{ url_for('faculty_main.archive_section', section_id=section.id) }}" method="POST"
+                                                      onsubmit="var r = prompt('Reason for archiving this section (its schedules and records are kept; it takes no new students):'); if (!r) return false; this.reason.value = r; return true;">
+                                                    {{ delete_form.hidden_tag() }}<input type="hidden" name="reason" value="">
+                                                    <button type="submit" class="text-slate-400 hover:text-amber-600 dark:text-slate-500 transition-colors" title="Archive section" aria-label="Archive section"><i class="ri-archive-line"></i></button>
+                                                </form>
+                                                {% endif %}
+                                                <form action="{{ url_for('faculty_main.delete_section', section_id=section.id) }}" method="POST" onsubmit="return confirm('Delete this section? Only possible when no schedule, student, class record or registration form uses it.');">
+                                                    {{ delete_form.hidden_tag() }}
+                                                    <button type="submit" class="text-slate-400 hover:text-rose-500 dark:text-slate-500 dark:hover:text-rose-500 transition-colors" title="Delete section" aria-label="Delete section"><i class="ri-delete-bin-line"></i></button>
                                                 </form>
                                             </div>
                                         </li>
@@ -134,4 +158,4 @@
         </div>
     {% endif %}
 
-{% endblock %}
+{% endblock %}

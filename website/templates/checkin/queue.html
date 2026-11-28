@@ -1,0 +1,53 @@
+{% extends 'admin_base.html' %}
+{% block title %}Enrollment Check-in{% endblock %}
+{% block breadcrumb %}Enrollment Check-in{% endblock %}
+{% block page_title %}Enrollment Check-in{% if term %} &middot; {{ term.year_name }} {{ term.semester }}{% endif %}{% endblock %}
+{% block content %}
+{% if not term %}
+<p class="p-6 bg-white rounded-xl border text-gray-600">There is no active academic term.</p>
+{% else %}
+<div class="flex flex-wrap items-center gap-2 mb-4" role="tablist">
+    {% for key, label in [('', 'All'), ('pending', 'Missing items'), ('ready', 'Ready for check-in'), ('checked_in', 'Checked in')] %}
+    <a href="{{ url_for('checkin.queue', state=key or None, q=q or None) }}" class="px-3 py-1.5 text-sm rounded-full border {{ 'bg-primary text-white border-primary' if state == key else 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' }}">{{ label }}</a>
+    {% endfor %}
+    <form method="GET" class="flex items-center gap-2">{% if state %}<input type="hidden" name="state" value="{{ state }}">{% endif %}
+        <label for="q-q" class="sr-only">Student ID or name</label>
+        <input id="q-q" name="q" value="{{ q }}" placeholder="Student ID or name" class="px-3 py-1.5 text-sm border border-gray-300 rounded-md w-56">
+        <button class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50">Search</button></form>
+    {% if session.user_role == 'admin' %}<a href="{{ url_for('checkin.requirements') }}" class="ml-auto text-sm text-primary hover:underline"><i class="ri-settings-3-line"></i> Checklist settings</a>{% endif %}
+</div>
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 relative overflow-x-auto">
+    <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 text-xs uppercase text-gray-500"><tr>
+            <th scope="col" class="px-4 py-2 text-left">Student</th><th scope="col" class="px-3 py-2 text-left">Program</th>
+            <th scope="col" class="px-3 py-2 text-left">Checklist</th><th scope="col" class="px-3 py-2 text-left">Still needed</th>
+            <th scope="col" class="px-3 py-2 text-right">Balance</th><th scope="col" class="px-4 py-2"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody class="divide-y divide-gray-100">
+        {% for r in rows %}
+            <tr class="align-top">
+                <td class="px-4 py-2 font-medium text-gray-900">{{ r.applicant.last_name }}, {{ r.applicant.first_name }}
+                    <div class="text-xs text-gray-500 font-normal">{{ r.applicant.old_student_id or r.applicant.control_number or '' }} &middot; {{ r.cl.kind|title }}</div></td>
+                <td class="px-3 py-2">{{ r.applicant.program_choice }}<div class="text-xs text-gray-500">{{ r.applicant.enrollment_year_level or '' }}</div></td>
+                <td class="px-3 py-2 whitespace-nowrap">
+                    {% if r.state == 'checked_in' %}<span class="text-green-700 font-medium"><i class="ri-shield-check-line"></i> Checked in</span>
+                    <div class="text-xs text-gray-500">{{ r.checkin.checked_in_by }}, {{ r.checkin.checked_in_at.strftime('%b %d') }}</div>
+                    {% if r.cl.control_number %}<div class="text-xs font-mono text-gray-700">{{ r.cl.control_number }}</div>{% endif %}
+                    {% else %}<span class="{{ 'text-green-700 font-medium' if r.state == 'ready' else 'text-gray-700' }}">{{ r.done }} / {{ r.total }}</span>{% endif %}</td>
+                <td class="px-3 py-2 text-xs text-orange-700">{{ r.cl.blockers|join('; ') if r.state == 'pending' else '' }}</td>
+                <td class="px-3 py-2 text-right whitespace-nowrap">{{ r.cl.summary.remaining|peso }}<div class="text-xs text-gray-500">{{ r.cl.summary.payment_status }}</div></td>
+                <td class="px-4 py-2 text-right whitespace-nowrap">
+                    <a class="text-blue-600 text-xs font-medium hover:underline" href="{{ url_for('auth.admin_enrollment_review_page', applicant_id=r.applicant.applicant_id, term_id=term.id) }}#checklist">Review</a>
+                    {% if r.state == 'ready' %}
+                    <form method="POST" action="{{ url_for('checkin.do_check_in', applicant_id=r.applicant.applicant_id) }}" class="inline ml-2"
+                          onsubmit="return confirm('Check in {{ r.applicant.first_name|e }} {{ r.applicant.last_name|e }} and mark as Enrolled?')">
+                        <input type="hidden" name="term_id" value="{{ term.id }}">
+                        <button class="px-2.5 py-1 text-xs font-medium rounded-md bg-green-600 text-white hover:bg-green-700">Check in</button></form>
+                    {% endif %}
+                </td>
+            </tr>
+        {% else %}<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">No students in this list.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

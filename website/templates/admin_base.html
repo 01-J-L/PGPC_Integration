@@ -289,6 +289,7 @@
             font-weight: 500;
         }
     </style>
+    {% include '_csrf.html' %}
 </head>
 
 <body class="flex">
@@ -413,6 +414,35 @@
                 <span class="ml-auto bg-purple-100 text-purple-800 text-xs font-medium px-2 py-0.5 rounded-full"
                     id="enrollingCountSide">{{ stats.enrolling if stats else '0' }}</span>
             </a>
+            {% if session.user_role in ['admin', 'registrar'] %}
+            <a href="{{ url_for('registration.index') }}" id="regformMenu"
+                class="sidebar-link flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded {% if active_page == 'registration_forms' %}active{% endif %}">
+                <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-file-list-3-line"></i></div>
+                Registration Forms
+            </a>
+            <a href="{{ url_for('checkin.queue') }}" id="checkinMenu"
+                class="sidebar-link flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded {% if active_page == 'checkin_queue' %}active{% endif %}">
+                <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-shield-check-line"></i></div>
+                Enrollment Check-in
+            </a>
+            <a href="{{ url_for('checkin.control_numbers') }}" id="controlNumbersMenu"
+                class="sidebar-link flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded {% if active_page == 'control_numbers' %}active{% endif %}">
+                <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-hashtag"></i></div>
+                Control Numbers
+            </a>
+            <a href="{{ url_for('grade_release.index') }}" id="gradeReleaseMenu"
+                class="sidebar-link flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded {% if active_page == 'grade_release' %}active{% endif %}">
+                <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-eye-line"></i></div>
+                Grade Release
+            </a>
+            {% if session.user_role == 'admin' %}
+            <a href="{{ url_for('checkin.requirements') }}" id="checklistSettingsMenu"
+                class="sidebar-link flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded {% if active_page == 'checkin_requirements' %}active{% endif %}">
+                <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-list-check-3"></i></div>
+                Enrollment Checklist
+            </a>
+            {% endif %}
+            {% endif %}
             {% endif %}
 
             <!-- ENROLLED: Visible to Admin, Registrar, Guidance, OSA -->
@@ -423,6 +453,13 @@
                 Enrolled Students
                 <span class="ml-auto bg-green-100 text-green-800 text-xs font-medium px-2 py-0.5 rounded-full"
                     id="enrolledCountSide">{{ stats.enrolled if stats else '' }}</span>
+            </a>
+            {% endif %}
+            {% if session.user_role in ['admin', 'registrar', 'guidance', 'osa', 'secretary'] %}
+            <a href="{{ url_for('checkin.approvals') }}" id="checklistApprovalsMenu"
+                class="sidebar-link flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded {% if active_page == 'checklist_approvals' %}active{% endif %}">
+                <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-checkbox-multiple-line"></i></div>
+                Checklist Approvals
             </a>
             {% endif %}
 
@@ -484,6 +521,11 @@
                 <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-layout-grid-line"></i></div>
                 Manage Sections
             </a>
+            <a href="{{ url_for('curriculum.index') }}" id="curriculumMenu"
+                class="sidebar-link flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded {% if active_page == 'curriculum' %}active{% endif %}">
+                <div class="w-5 h-5 flex items-center justify-center mr-3"><i class="ri-book-2-line"></i></div>
+                Curriculum
+            </a>
             {% endif %}
             {% endif %}
 
@@ -527,7 +569,7 @@
     </aside>
     <div id="sidebarBackdrop" class="fixed inset-0 bg-black/30 z-30 hidden sm:hidden"></div>
 
-    <div class="flex-1 sm:ml-64 transition-all duration-300 ease-in-out" id="mainContentArea">
+    <div class="flex-1 min-w-0 sm:ml-64 transition-all duration-300 ease-in-out" id="mainContentArea">
         <header class="bg-white shadow-sm">
             <div class="flex items-center justify-between px-4 sm:px-6 h-16 border-b border-gray-200">
                 <div class="flex items-center">
@@ -1248,4 +1290,4 @@
 
 </body>
 
-</html>
+</html>

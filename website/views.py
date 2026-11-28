@@ -535,6 +535,11 @@ def application_status_page():
                     active_term['semester']
                 ))
                 current_term_grades = cursor.fetchall()
+                # Phase 7: hide the term's grades unless released and not on hold
+                from website.grades import visibility as _gv
+                if current_term_grades and not _gv.visibility(application_data['student_user_id'],
+                                                               active_term['year_name'], active_term['semester'])[0]:
+                    current_term_grades = []
             except Exception as e_grades:
                 print(f"Error fetching grades: {e_grades}")
                 traceback.print_exc()
@@ -550,9 +555,22 @@ def application_status_page():
         if cursor: cursor.close()
         if conn and conn.is_connected(): conn.close()
 
+    # What Accounting requires before check-in (Phase 4 policy), shown while enrolling
+    enrollment_payment = None
+    try:
+        if application_data and active_term and application_data.get('student_user_id') and \
+                application_data.get('application_status') in ('Passed', 'Eligible for Enrollment', 'Enrolling'):
+            from website.finance import service as _fin
+            from website.checkin.service import is_checked_in as _checked_in
+            if not _checked_in(application_data['student_user_id'], active_term['id']):
+                enrollment_payment = _fin.enrollment_requirement(application_data['student_user_id'], active_term['id'])
+    except Exception as e_pay:
+        print(f"[WARN] enrollment payment requirement unavailable: {e_pay}")
+
     return render_template(
         "pending_application.html", 
         application=application_data, 
+        enrollment_payment=enrollment_payment,
         current_term_grades=current_term_grades,
         status_downloads=status_downloads,
         active_term=active_term,
@@ -762,4 +780,4 @@ def redirect_to_faculty_login():
 @views.route('/grading-admin')
 def shortcut_to_grading_admin():
     # Instantly redirects the user to the Grading System's admin page!
-    return redirect('/grading-system/admin')
+    return redirect('/grading-system/admin')

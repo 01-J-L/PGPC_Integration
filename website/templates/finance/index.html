@@ -1,0 +1,119 @@
+{% extends base_template %}
+{% block title %}Enrollment Assessments{% endblock %}
+{% block breadcrumb %}Enrollment Assessments{% endblock %}
+{% block page_title %}Enrollment Assessments &amp; Payment Verification{% endblock %}
+
+{% block content %}
+{% set ic = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500' %}
+<div class="grid grid-cols-1 2xl:grid-cols-4 gap-6">
+    <section class="2xl:col-span-1 bg-white p-5 rounded-xl shadow-sm border border-gray-200 self-start">
+        <h2 class="font-semibold text-gray-800 mb-1">Enrollment payment policy</h2>
+        <p class="text-xs text-gray-500 mb-3">What a student must pay before the Registrar can check them in (officially enroll them). The Registrar's checklist line "Accounting / enrollment payment policy" turns green when it is met.</p>
+        {% if can_edit_policy %}
+        <form method="POST" action="{{ url_for('finance.policy') }}" class="space-y-3 text-sm">
+            <fieldset class="space-y-1">
+                <legend class="sr-only">Policy</legend>
+                {% set help = {
+                    'clearance': 'Accounting decides per student with "Give clearance" below.',
+                    'full': 'The whole term assessment must be paid.',
+                    'partial': 'Any amount paid is enough.',
+                    'minimum': 'The student must pay at least the amount below (e.g. 1,500.00). Shown to the student and the cashier.'} %}
+                {% for key, label in modes.items() %}
+                <label class="flex items-start gap-2"><input type="radio" name="mode" value="{{ key }}" {% if policy.mode == key %}checked{% endif %} class="mt-1">
+                    <span>{{ label }}<span class="block text-xs text-gray-500">{{ help[key] }}</span></span></label>
+                {% endfor %}
+            </fieldset>
+            <div><label for="minpay" class="block text-xs text-gray-600 mb-1">Minimum down payment (&#8369;)</label>
+                <input id="minpay" name="min_down_payment" inputmode="decimal" value="{{ policy.min_down_payment if policy.min_down_payment is not none else '' }}" class="{{ ic }}" placeholder="Only for 'Minimum down payment'"></div>
+            <label class="flex items-start gap-2"><input type="checkbox" name="require_verification" value="1" {% if policy.require_verification %}checked{% endif %} class="mt-1"> Count only payments verified by Accounting</label>
+            <button class="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">Save policy</button>
+        </form>
+        {% else %}
+        <p class="text-sm"><strong>{{ policy.label }}</strong>{% if policy.mode == 'minimum' %}: {{ policy.min_down_payment|peso if policy.min_down_payment is not none else 'not set' }}{% endif %}</p>
+        <p class="text-xs text-gray-500 mt-1">{{ 'Verified payments only.' if policy.require_verification else 'All recorded payments count.' }}</p>
+        {% endif %}
+    </section>
+
+    <section class="2xl:col-span-3 space-y-4">
+        <form method="GET" class="flex flex-wrap items-end gap-3">
+            <div><label for="f-term" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Academic term</label>
+                <select id="f-term" name="term_id" class="{{ ic }} w-60">{% for t in terms %}<option value="{{ t.id }}" {% if t.id == term_id %}selected{% endif %}>{{ t.year_name }} &ndash; {{ t.semester }}{% if t.is_active %} (active){% endif %}</option>{% endfor %}</select></div>
+            <div><label for="f-status" class="block text-xs font-semibold text-gray-500 uppercase mb-1">Status</label>
+                <select id="f-status" name="status" class="{{ ic }} w-48"><option value="">All</option>
+                    {% for st in ['Unpaid', 'Partially Paid', 'Fully Paid', 'No Fees Assessed', 'For Verification', 'Payment Verified'] %}<option value="{{ st }}" {% if st == status %}selected{% endif %}>{{ st }}</option>{% endfor %}</select></div>
+            <button class="px-4 py-2 bg-white border border-gray-300 text-sm rounded-md hover:bg-gray-50">Filter</button>
+        </form>
+        {% if down %}
+        <div class="bg-white rounded-xl shadow-sm border border-indigo-200 relative overflow-x-auto" id="down-payments">
+            <h2 class="px-4 py-2 text-sm font-semibold text-indigo-800 bg-indigo-50">Down payments waiting for the Tuition Fee ({{ down|length }})</h2>
+            <table class="min-w-full text-sm">
+                <thead class="text-xs uppercase text-gray-500"><tr>
+                    <th scope="col" class="px-4 py-2 text-left">Student</th><th scope="col" class="px-3 py-2 text-left">Paid</th>
+                    <th scope="col" class="px-3 py-2 text-right">Amount</th><th scope="col" class="px-3 py-2 text-left">Verification</th>
+                    <th scope="col" class="px-4 py-2"><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody class="divide-y divide-gray-100">
+                {% for d in down %}
+                    <tr>
+                        <td class="px-4 py-2 font-medium text-gray-900">{{ d.applicant.last_name }}, {{ d.applicant.first_name }}<div class="text-xs text-gray-500 font-normal">{{ d.applicant.old_student_id or d.applicant.control_number or '' }}</div></td>
+                        <td class="px-3 py-2 text-xs">{{ d.p.payment_date }}{% if d.p.receipt_number %} &middot; O.R. {{ d.p.receipt_number }}{% endif %}<div class="text-gray-500">{{ d.p.cashier_username }}</div></td>
+                        <td class="px-3 py-2 text-right">{{ d.p.amount_paid|peso }}</td>
+                        <td class="px-3 py-2 text-xs">{% if d.p.verified_by %}<span class="text-green-700">Verified ({{ d.p.verified_by }})</span>{% else %}<span class="text-yellow-700">For verification</span>{% endif %}</td>
+                        <td class="px-4 py-2 text-right whitespace-nowrap">
+                            {% if not d.p.verified_by and session.user_role == 'accounting' and d.p.cashier_username != session.user_name %}
+                            <form method="POST" action="{{ url_for('finance.verify', payment_id=d.p.id) }}" class="inline"><button class="text-green-700 text-xs font-medium hover:underline">Verify</button></form>
+                            {% endif %}
+                            <a class="text-blue-600 text-xs font-medium hover:underline ml-2" href="{{ url_for('auth.update_payment', student_id_db=d.dp.applicant_id) }}#payments">Payments</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 relative overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50 text-xs uppercase text-gray-500"><tr>
+                    <th scope="col" class="px-4 py-2 text-left">Student</th><th scope="col" class="px-3 py-2 text-left">Program</th>
+                    <th scope="col" class="px-3 py-2 text-right">Assessment</th><th scope="col" class="px-3 py-2 text-right">Prev.</th>
+                    <th scope="col" class="px-3 py-2 text-right">Discounts</th><th scope="col" class="px-3 py-2 text-right">Paid</th>
+                    <th scope="col" class="px-3 py-2 text-right">Remaining</th><th scope="col" class="px-3 py-2 text-left">Status</th>
+                    <th scope="col" class="px-3 py-2 text-left">Policy</th><th scope="col" class="px-4 py-2"><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody class="divide-y divide-gray-100">
+                {% for r in rows %}
+                    <tr class="align-top">
+                        <td class="px-4 py-2 font-medium text-gray-900">{{ r.applicant.last_name }}, {{ r.applicant.first_name }}<div class="text-xs text-gray-500 font-normal">{{ r.applicant.old_student_id or r.applicant.control_number or '' }}</div></td>
+                        <td class="px-3 py-2">{{ r.ea.registration_form.program.program_code }} {{ years.get(r.ea.registration_form.year_level) }}<div class="text-xs text-gray-500">{{ r.ea.residency|replace('_', '-')|title }}</div></td>
+                        <td class="px-3 py-2 text-right">{{ r.s.total_assessment|peso }}</td>
+                        <td class="px-3 py-2 text-right">{{ r.s.previous_balance|peso }}</td>
+                        <td class="px-3 py-2 text-right">{{ r.s.discounts|peso }}</td>
+                        <td class="px-3 py-2 text-right">{{ r.s.payments|peso }}</td>
+                        <td class="px-3 py-2 text-right font-semibold {{ 'text-red-600' if r.s.remaining > 0 else 'text-green-700' }}">{{ r.s.remaining|peso }}</td>
+                        <td class="px-3 py-2 text-xs">{{ r.s.payment_status }}{% if r.s.verification_status %}<div class="{{ 'text-yellow-700' if r.s.verification_status == 'For Verification' else 'text-green-700' }}">{{ r.s.verification_status }}</div>{% endif %}</td>
+                        <td class="px-3 py-2 text-xs">{% if r.policy_ok %}<span class="text-green-700"><i class="ri-check-line"></i> Met</span>{% else %}<span class="text-gray-600">{{ r.policy_why }}</span>{% endif %}{% if r.checked_in %}<div class="text-green-700">Checked in</div>{% endif %}</td>
+                        <td class="px-4 py-2 text-right whitespace-nowrap">
+                            <a class="text-blue-600 text-xs font-medium hover:underline" href="{{ url_for('auth.update_payment', student_id_db=r.ea.applicant_id) }}#payments">Payments</a>
+                            {% if policy.mode == 'clearance' and session.user_role in ['accounting', 'admin'] and not r.checked_in %}
+                            {% if r.cleared %}
+                            <form method="POST" action="{{ url_for('checkin.revoke_item', applicant_id=r.ea.applicant_id, code='payment') }}" class="inline ml-2"
+                                  onsubmit="var x = prompt('Reason for withdrawing the accounting clearance:'); if (!x) return false; this.reason.value = x; return true;">
+                                <input type="hidden" name="term_id" value="{{ term_id }}"><input type="hidden" name="reason" value="">
+                                <button class="text-red-600 text-xs hover:underline">Withdraw clearance</button></form>
+                            {% else %}
+                            <form method="POST" action="{{ url_for('checkin.approve_item', applicant_id=r.ea.applicant_id, code='payment') }}" class="inline ml-2">
+                                <input type="hidden" name="term_id" value="{{ term_id }}">
+                                <button class="px-2 py-0.5 text-xs font-medium rounded bg-green-600 text-white hover:bg-green-700">Give clearance</button></form>
+                            {% endif %}
+                            {% endif %}
+                            {% if session.user_role == 'accounting' %}
+                            <form method="POST" action="{{ url_for('finance.regenerate', form_id=r.ea.registration_form_id) }}" class="inline ml-2" onsubmit="return confirm('Re-apply the current fee rules to this assessment? Existing charges are kept.')">
+                                <button class="text-gray-600 text-xs hover:underline">Re-apply fees</button></form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% else %}<tr><td colspan="10" class="px-4 py-8 text-center text-gray-500">No assessments for this filter. Assessments are created when the registrar finalizes a registration form.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

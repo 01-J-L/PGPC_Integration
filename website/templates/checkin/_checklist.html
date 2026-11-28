@@ -1,0 +1,53 @@
+{#- Expects: cl (checkin.service.checklist), applicant_id, term_id, user_role -#}
+<ul class="divide-y divide-gray-200" aria-label="Enrollment checklist">
+{% for it in cl['items'] %}
+    <li class="py-2.5 flex items-start gap-3" id="chk-{{ it.req.code }}">
+        <span class="mt-0.5 text-lg leading-none {{ 'text-green-600' if it.met else ('text-gray-300' if not it.required else 'text-orange-500') }}" aria-hidden="true">
+            <i class="{{ 'ri-checkbox-circle-fill' if it.met else 'ri-checkbox-blank-circle-line' }}"></i></span>
+        <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-gray-800">{{ it.req.label }}
+                {% if not it.required %}<span class="text-xs font-normal text-gray-500">(optional)</span>{% endif %}
+                <span class="sr-only">{{ 'met' if it.met else 'not met' }}</span></p>
+            <p class="text-xs text-gray-500 break-words">{{ it.detail }}
+                {% if it.approved and it.by %}{% if it.detail %}&middot; {% endif %}Approved by {{ it.by }}{% if it.at %}, {{ it.at.strftime('%b %d, %Y %I:%M %p') }}{% endif %}{% endif %}</p>
+            {% if not it.met and it.approvable and not it.can_act %}<p class="text-xs text-gray-400">Approved by: {{ it.req.roles|join(', ')|title }} &mdash; on their <em>Checklist Approvals</em> page{% if it.req.kind == 'payment' %} or Enrollment Assessments{% endif %}.</p>{% endif %}
+        </div>
+        {% if it.can_act and not cl.checkin %}
+            {% if it.approved %}
+            <form method="POST" action="{{ url_for('checkin.revoke_item', applicant_id=applicant_id, code=it.req.code) }}"
+                  onsubmit="var r = prompt('Reason for revoking “{{ it.req.label|e }}”:'); if (!r) return false; this.reason.value = r; return true;">
+                <input type="hidden" name="term_id" value="{{ term_id }}"><input type="hidden" name="reason" value="">
+                <button class="text-xs font-medium text-red-600 hover:underline">Revoke</button></form>
+            {% else %}
+            <form method="POST" action="{{ url_for('checkin.approve_item', applicant_id=applicant_id, code=it.req.code) }}">
+                <input type="hidden" name="term_id" value="{{ term_id }}">
+                <button class="px-2.5 py-1 text-xs font-medium rounded-md bg-primary text-white hover:bg-blue-700">Approve</button></form>
+            {% endif %}
+        {% endif %}
+    </li>
+{% else %}
+    <li class="py-2 text-sm text-gray-500">No checklist items are active. An administrator sets them up under Enrollment Checklist.</li>
+{% endfor %}
+</ul>
+{% if cl.checkin %}
+<div class="mt-3 p-3 rounded-md bg-green-50 border border-green-200 text-sm text-green-800" id="checkin-status">
+    <p class="font-semibold"><i class="ri-shield-check-line"></i> Checked in by {{ cl.checkin.checked_in_by }}, {{ cl.checkin.checked_in_at.strftime('%b %d, %Y %I:%M %p') }}</p>
+    {% if cl.control_number %}<p class="mt-1">Control No. <strong class="font-mono" id="control-number">{{ cl.control_number }}</strong></p>{% endif %}
+    {% if user_role in ['registrar', 'admin'] %}
+    <form method="POST" action="{{ url_for('checkin.undo', applicant_id=applicant_id) }}" class="mt-2"
+          onsubmit="var r = prompt('Reason for undoing this check-in (the student returns to Enrolling):'); if (!r) return false; this.reason.value = r; return true;">
+        <input type="hidden" name="term_id" value="{{ term_id }}"><input type="hidden" name="reason" value="">
+        <button class="text-xs font-medium text-red-700 hover:underline">Undo check-in</button></form>
+    {% endif %}
+</div>
+{% elif cl.ready %}
+<p class="mt-3 text-sm font-medium text-green-700" id="checkin-status"><i class="ri-check-double-line"></i> Ready for check-in.</p>
+{% else %}
+<p class="mt-3 text-sm text-orange-700" id="checkin-status">Still needed: {{ cl.blockers|join('; ') }}.</p>
+{% endif %}
+{% set undone = cl.history|selectattr('undone_at')|list %}
+{% if undone %}
+<details class="mt-2 text-xs text-gray-600"><summary class="cursor-pointer">Earlier check-ins ({{ undone|length }})</summary>
+    <ul class="mt-1 space-y-1">{% for h in undone %}<li>{{ h.checked_in_at.strftime('%b %d, %Y') }} by {{ h.checked_in_by }} &mdash; undone by {{ h.undone_by }} on {{ h.undone_at.strftime('%b %d, %Y') }}: {{ h.undo_reason }}</li>{% endfor %}</ul>
+</details>
+{% endif %}

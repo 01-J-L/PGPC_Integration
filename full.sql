@@ -571,15 +571,15 @@ CREATE TABLE IF NOT EXISTS applicants (
 	tertiary_course TEXT,
 	tertiary_year_from VARCHAR(10),
 	tertiary_year_to VARCHAR(10),
-	photo BLOB,
+	photo MEDIUMBLOB,
 	photo_mimetype VARCHAR(100),
-	shs_diploma_file BLOB,
+	shs_diploma_file MEDIUMBLOB,
 	shs_diploma_filename VARCHAR(255),
 	shs_diploma_mimetype VARCHAR(100),
-	shs_card_file BLOB,
+	shs_card_file MEDIUMBLOB,
 	shs_card_filename VARCHAR(255),
 	shs_card_mimetype VARCHAR(100),
-	birth_certificate_file BLOB,
+	birth_certificate_file MEDIUMBLOB,
 	birth_certificate_filename VARCHAR(255),
 	birth_certificate_mimetype VARCHAR(100),
 	application_status VARCHAR(50) NOT NULL DEFAULT 'Pending',
@@ -642,27 +642,33 @@ CREATE TABLE IF NOT EXISTS applicants (
 	inventory_emergency_contact_name VARCHAR(255),
 	inventory_emergency_contact_number VARCHAR(255),
 	inventory_emergency_contact_relationship VARCHAR(255),
-	enrollment_good_moral_file BLOB,
+	enrollment_good_moral_file MEDIUMBLOB,
 	enrollment_good_moral_filename VARCHAR(255),
 	enrollment_good_moral_mimetype VARCHAR(100),
-	enrollment_psa_birth_file BLOB,
+	enrollment_psa_birth_file MEDIUMBLOB,
 	enrollment_psa_birth_filename VARCHAR(255),
 	enrollment_psa_birth_mimetype VARCHAR(100),
-	enrollment_photos_2x2_file BLOB,
+	enrollment_photos_2x2_file MEDIUMBLOB,
 	enrollment_photos_2x2_filename VARCHAR(255),
 	enrollment_photos_2x2_mimetype VARCHAR(100),
-	enrollment_entrance_fee_proof_file BLOB,
+	enrollment_entrance_fee_proof_file MEDIUMBLOB,
 	enrollment_entrance_fee_proof_filename VARCHAR(255),
 	enrollment_entrance_fee_proof_mimetype VARCHAR(100),
-	enrollment_voters_id_file BLOB,
+	enrollment_voters_id_file MEDIUMBLOB,
 	enrollment_voters_id_filename VARCHAR(255),
 	enrollment_voters_id_mimetype VARCHAR(100),
-	enrollment_cbs_file BLOB,
+	enrollment_cbs_file MEDIUMBLOB,
 	enrollment_cbs_filename VARCHAR(255),
 	enrollment_cbs_mimetype VARCHAR(100),
-	enrollment_brgy_cert_file BLOB,
+	enrollment_brgy_cert_file MEDIUMBLOB,
 	enrollment_brgy_cert_filename VARCHAR(255),
 	enrollment_brgy_cert_mimetype VARCHAR(100),
+	enrollment_shs_card_file MEDIUMBLOB,
+	enrollment_shs_card_filename VARCHAR(255),
+	enrollment_shs_card_mimetype VARCHAR(100),
+	enrollment_shs_diploma_file MEDIUMBLOB,
+	enrollment_shs_diploma_filename VARCHAR(255),
+	enrollment_shs_diploma_mimetype VARCHAR(100),
 	is_approved_by_president BOOL NOT NULL DEFAULT 0,
 	president_approval_date DATETIME,
 	is_approved_by_accounting BOOL NOT NULL DEFAULT 0,
@@ -670,7 +676,7 @@ CREATE TABLE IF NOT EXISTS applicants (
 	is_approved_by_dean BOOL NOT NULL DEFAULT 0,
 	dean_approval_date DATETIME,
 	section_id INTEGER,
-	pwd_id_file BLOB,
+	pwd_id_file MEDIUMBLOB,
 	pwd_id_filename VARCHAR(255),
 	pwd_id_mimetype VARCHAR(100),
 	is_section_permanent BOOL DEFAULT 0,
@@ -961,6 +967,593 @@ CREATE TABLE IF NOT EXISTS payments (
 	FOREIGN KEY(assessment_id) REFERENCES assessments (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+
+-- =====================================================================
+--  PHASE 2: CURRICULUM MANAGEMENT (generated from website/models.py)
+-- =====================================================================
+-- ---- curriculum_versions -----------------------------------------
+CREATE TABLE IF NOT EXISTS curriculum_versions (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	program_id VARCHAR(50) NOT NULL, 
+	name VARCHAR(150) NOT NULL, 
+	effective_academic_year VARCHAR(20) NOT NULL, 
+	description TEXT, 
+	status VARCHAR(20) NOT NULL DEFAULT 'draft', 
+	is_default_for_new BOOL NOT NULL DEFAULT 0, 
+	max_year_level INTEGER NOT NULL DEFAULT 4, 
+	source_reference VARCHAR(255), 
+	created_by VARCHAR(150), 
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	activated_by VARCHAR(150), 
+	activated_at DATETIME, 
+	activation_note TEXT, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_curriculum_version_name UNIQUE (program_id, name), 
+	FOREIGN KEY(program_id) REFERENCES programs (program_id) ON DELETE RESTRICT,
+	INDEX ix_curriculum_versions_program_id (program_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- curriculum_subjects -----------------------------------------
+CREATE TABLE IF NOT EXISTS curriculum_subjects (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	curriculum_version_id INTEGER NOT NULL, 
+	year_level INTEGER NOT NULL, 
+	semester INTEGER NOT NULL, 
+	subject_code VARCHAR(30) NOT NULL, 
+	code_key VARCHAR(30) NOT NULL, 
+	description VARCHAR(500) NOT NULL, 
+	units NUMERIC(4, 1) NOT NULL, 
+	sort_order INTEGER NOT NULL DEFAULT 0, 
+	subject_id INTEGER, 
+	notes VARCHAR(255), 
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_curriculum_subject_code UNIQUE (curriculum_version_id, code_key), 
+	CONSTRAINT ck_curriculum_subject_semester CHECK (semester IN (1, 2, 3)), 
+	CONSTRAINT ck_curriculum_subject_year CHECK (year_level BETWEEN 1 AND 5), 
+	CONSTRAINT ck_curriculum_subject_units CHECK (units >= 0), 
+	FOREIGN KEY(curriculum_version_id) REFERENCES curriculum_versions (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(subject_id) REFERENCES subjects (id) ON DELETE RESTRICT,
+	INDEX ix_curriculum_subjects_curriculum_version_id (curriculum_version_id),
+	INDEX ix_curriculum_subjects_subject_id (subject_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- curriculum_prerequisites ------------------------------------
+CREATE TABLE IF NOT EXISTS curriculum_prerequisites (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	curriculum_subject_id INTEGER NOT NULL, 
+	kind VARCHAR(20) NOT NULL DEFAULT 'subject', 
+	prerequisite_subject_id INTEGER, 
+	min_year_level INTEGER, 
+	min_units NUMERIC(5, 1), 
+	requirement_text VARCHAR(255), 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_curriculum_prereq_pair UNIQUE (curriculum_subject_id, prerequisite_subject_id), 
+	FOREIGN KEY(curriculum_subject_id) REFERENCES curriculum_subjects (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(prerequisite_subject_id) REFERENCES curriculum_subjects (id) ON DELETE RESTRICT,
+	INDEX ix_curriculum_prerequisites_prerequisite_subject_id (prerequisite_subject_id),
+	INDEX ix_curriculum_prerequisites_curriculum_subject_id (curriculum_subject_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- student_curricula -------------------------------------------
+CREATE TABLE IF NOT EXISTS student_curricula (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	student_user_id INTEGER NOT NULL, 
+	curriculum_version_id INTEGER NOT NULL, 
+	assigned_by VARCHAR(150), 
+	assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	ended_at DATETIME, 
+	reason VARCHAR(255), 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(curriculum_version_id) REFERENCES curriculum_versions (id) ON DELETE RESTRICT,
+	INDEX ix_student_curricula_curriculum_version_id (curriculum_version_id),
+	INDEX ix_student_curricula_student_user_id (student_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- curriculum_import_batches -----------------------------------
+CREATE TABLE IF NOT EXISTS curriculum_import_batches (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	program_id VARCHAR(50) NOT NULL, 
+	source_filename VARCHAR(255) NOT NULL, 
+	source_kind VARCHAR(20) NOT NULL, 
+	source_sha256 VARCHAR(64) NOT NULL, 
+	status VARCHAR(20) NOT NULL DEFAULT 'pending_review', 
+	target_version_id INTEGER, 
+	payload MEDIUMTEXT NOT NULL, 
+	summary VARCHAR(500), 
+	uploaded_by VARCHAR(150), 
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	decided_by VARCHAR(150), 
+	decided_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(program_id) REFERENCES programs (program_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(target_version_id) REFERENCES curriculum_versions (id) ON DELETE RESTRICT,
+	INDEX ix_curriculum_import_batches_program_id (program_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- curriculum_audit_log ----------------------------------------
+CREATE TABLE IF NOT EXISTS curriculum_audit_log (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	curriculum_version_id INTEGER, 
+	entity VARCHAR(30) NOT NULL, 
+	entity_id INTEGER, 
+	action VARCHAR(30) NOT NULL, 
+	details TEXT, 
+	performed_by VARCHAR(150), 
+	performed_role VARCHAR(30), 
+	performed_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id),
+	INDEX ix_curriculum_audit_log_curriculum_version_id (curriculum_version_id),
+	INDEX ix_curriculum_audit_log_performed_at (performed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- =====================================================================
+--  PHASE 3: REGISTRATION FORMS (generated from website/models.py)
+-- =====================================================================
+-- ---- registration_forms ------------------------------------------
+CREATE TABLE IF NOT EXISTS registration_forms (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	student_user_id INTEGER NOT NULL, 
+	applicant_id INTEGER NOT NULL, 
+	academic_term_id INTEGER NOT NULL, 
+	curriculum_version_id INTEGER NOT NULL, 
+	program_id VARCHAR(50) NOT NULL, 
+	year_level INTEGER NOT NULL, 
+	semester INTEGER NOT NULL, 
+	classification VARCHAR(20) NOT NULL DEFAULT 'Regular', 
+	classification_reason VARCHAR(255), 
+	status VARCHAR(20) NOT NULL DEFAULT 'draft', 
+	section_id INTEGER, 
+	max_units NUMERIC(5, 1) NOT NULL, 
+	total_units NUMERIC(5, 1) NOT NULL DEFAULT 0, 
+	control_number VARCHAR(30), 
+	notes VARCHAR(500), 
+	created_by VARCHAR(150), 
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	finalized_by VARCHAR(150), 
+	finalized_at DATETIME, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_regform_student_term UNIQUE (student_user_id, academic_term_id), 
+	CONSTRAINT ck_regform_semester CHECK (semester IN (1, 2, 3)), 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(applicant_id) REFERENCES applicants (applicant_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(academic_term_id) REFERENCES academic_terms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(curriculum_version_id) REFERENCES curriculum_versions (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(program_id) REFERENCES programs (program_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(section_id) REFERENCES sections (id) ON DELETE RESTRICT,
+	INDEX ix_registration_forms_curriculum_version_id (curriculum_version_id),
+	INDEX ix_registration_forms_student_user_id (student_user_id),
+	INDEX ix_registration_forms_applicant_id (applicant_id),
+	INDEX ix_registration_forms_academic_term_id (academic_term_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- registration_form_subjects ----------------------------------
+CREATE TABLE IF NOT EXISTS registration_form_subjects (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	registration_form_id INTEGER NOT NULL, 
+	curriculum_subject_id INTEGER NOT NULL, 
+	subject_code VARCHAR(30) NOT NULL, 
+	code_key VARCHAR(30) NOT NULL, 
+	description VARCHAR(500) NOT NULL, 
+	units NUMERIC(4, 1) NOT NULL, 
+	year_level INTEGER NOT NULL, 
+	semester INTEGER NOT NULL, 
+	section_id INTEGER, 
+	schedule_text VARCHAR(500), 
+	source VARCHAR(20) NOT NULL DEFAULT 'curriculum', 
+	remarks VARCHAR(255), 
+	added_by VARCHAR(150), 
+	added_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_regform_line_code UNIQUE (registration_form_id, code_key), 
+	FOREIGN KEY(registration_form_id) REFERENCES registration_forms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(curriculum_subject_id) REFERENCES curriculum_subjects (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(section_id) REFERENCES sections (id) ON DELETE RESTRICT,
+	INDEX ix_registration_form_subjects_registration_form_id (registration_form_id),
+	INDEX ix_registration_form_subjects_curriculum_subject_id (curriculum_subject_id),
+	INDEX ix_registration_form_subjects_section_id (section_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- registration_form_changes -----------------------------------
+CREATE TABLE IF NOT EXISTS registration_form_changes (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	registration_form_id INTEGER NOT NULL, 
+	action VARCHAR(30) NOT NULL, 
+	subject_code VARCHAR(30), 
+	details TEXT, 
+	performed_by VARCHAR(150), 
+	performed_role VARCHAR(30), 
+	performed_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id),
+	INDEX ix_registration_form_changes_registration_form_id (registration_form_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- =====================================================================
+--  PHASE 4: ENROLLMENT FINANCE (generated from website/models.py)
+-- =====================================================================
+-- ---- enrollment_assessments --------------------------------------
+CREATE TABLE IF NOT EXISTS enrollment_assessments (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	registration_form_id INTEGER NOT NULL, 
+	student_user_id INTEGER NOT NULL, 
+	applicant_id INTEGER NOT NULL, 
+	academic_term_id INTEGER NOT NULL, 
+	residency VARCHAR(20) NOT NULL, 
+	total_units NUMERIC(5, 1) NOT NULL, 
+	total_assessment NUMERIC(12, 2) NOT NULL, 
+	generated_by VARCHAR(150), 
+	generated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	regenerated_at DATETIME, 
+	notes VARCHAR(500), 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_enrollment_assessment_term UNIQUE (student_user_id, academic_term_id), 
+	UNIQUE (registration_form_id), 
+	FOREIGN KEY(registration_form_id) REFERENCES registration_forms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(applicant_id) REFERENCES applicants (applicant_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(academic_term_id) REFERENCES academic_terms (id) ON DELETE RESTRICT,
+	INDEX ix_enrollment_assessments_student_user_id (student_user_id),
+	INDEX ix_enrollment_assessments_academic_term_id (academic_term_id),
+	INDEX ix_enrollment_assessments_applicant_id (applicant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- enrollment_assessment_items ---------------------------------
+CREATE TABLE IF NOT EXISTS enrollment_assessment_items (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	enrollment_assessment_id INTEGER NOT NULL, 
+	assessment_id INTEGER NOT NULL, 
+	batch_id INTEGER, 
+	description VARCHAR(255) NOT NULL, 
+	amount NUMERIC(12, 2) NOT NULL, 
+	adopted BOOL NOT NULL DEFAULT 0, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(enrollment_assessment_id) REFERENCES enrollment_assessments (id) ON DELETE RESTRICT, 
+	UNIQUE (assessment_id), 
+	FOREIGN KEY(assessment_id) REFERENCES assessments (id) ON DELETE RESTRICT,
+	INDEX ix_enrollment_assessment_items_batch_id (batch_id),
+	INDEX ix_enrollment_assessment_items_enrollment_assessment_id (enrollment_assessment_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- payment_verifications ---------------------------------------
+CREATE TABLE IF NOT EXISTS payment_verifications (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	payment_id INTEGER NOT NULL, 
+	status VARCHAR(20) NOT NULL DEFAULT 'verified', 
+	verified_by VARCHAR(150) NOT NULL, 
+	verified_role VARCHAR(30), 
+	verified_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	notes VARCHAR(255), 
+	PRIMARY KEY (id), 
+	UNIQUE (payment_id), 
+	FOREIGN KEY(payment_id) REFERENCES payments (id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- payment_reversals -------------------------------------------
+CREATE TABLE IF NOT EXISTS payment_reversals (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	payment_id INTEGER NOT NULL, 
+	reversal_payment_id INTEGER NOT NULL, 
+	reason VARCHAR(255) NOT NULL, 
+	reversed_by VARCHAR(150) NOT NULL, 
+	reversed_role VARCHAR(30), 
+	reversed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	UNIQUE (payment_id), 
+	FOREIGN KEY(payment_id) REFERENCES payments (id) ON DELETE RESTRICT, 
+	UNIQUE (reversal_payment_id), 
+	FOREIGN KEY(reversal_payment_id) REFERENCES payments (id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- payment_submissions -----------------------------------------
+CREATE TABLE IF NOT EXISTS payment_submissions (
+	token VARCHAR(64) NOT NULL, 
+	payment_id INTEGER, 
+	submitted_by VARCHAR(150), 
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (token), 
+	FOREIGN KEY(payment_id) REFERENCES payments (id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- finance_audit_log -------------------------------------------
+CREATE TABLE IF NOT EXISTS finance_audit_log (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	action VARCHAR(40) NOT NULL, 
+	applicant_id INTEGER, 
+	payment_id INTEGER, 
+	enrollment_assessment_id INTEGER, 
+	details TEXT, 
+	performed_by VARCHAR(150), 
+	performed_role VARCHAR(30), 
+	performed_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id),
+	INDEX ix_finance_audit_log_enrollment_assessment_id (enrollment_assessment_id),
+	INDEX ix_finance_audit_log_performed_at (performed_at),
+	INDEX ix_finance_audit_log_payment_id (payment_id),
+	INDEX ix_finance_audit_log_applicant_id (applicant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- =====================================================================
+--  PHASE 5: APPROVAL CHECKLIST AND CHECK-IN (generated from website/models.py)
+-- =====================================================================
+-- ---- enrollment_checklist_requirements ---------------------------
+CREATE TABLE IF NOT EXISTS enrollment_checklist_requirements (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	code VARCHAR(40) NOT NULL, 
+	label VARCHAR(150) NOT NULL, 
+	description VARCHAR(500), 
+	kind VARCHAR(20) NOT NULL DEFAULT 'manual', 
+	approver_roles VARCHAR(200) NOT NULL DEFAULT 'registrar,admin', 
+	applies_to VARCHAR(20) NOT NULL DEFAULT 'all', 
+	is_required BOOL NOT NULL DEFAULT 1, 
+	is_active BOOL NOT NULL DEFAULT 1, 
+	sort_order INTEGER NOT NULL DEFAULT 100, 
+	updated_by VARCHAR(150), 
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	UNIQUE (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- enrollment_checklist_items ----------------------------------
+CREATE TABLE IF NOT EXISTS enrollment_checklist_items (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	student_user_id INTEGER NOT NULL, 
+	academic_term_id INTEGER NOT NULL, 
+	requirement_id INTEGER NOT NULL, 
+	status VARCHAR(20) NOT NULL DEFAULT 'approved', 
+	notes VARCHAR(500), 
+	approved_by VARCHAR(150), 
+	approved_role VARCHAR(30), 
+	approved_at DATETIME, 
+	revoked_by VARCHAR(150), 
+	revoked_at DATETIME, 
+	revoke_reason VARCHAR(500), 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_checklist_item UNIQUE (student_user_id, academic_term_id, requirement_id), 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(academic_term_id) REFERENCES academic_terms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(requirement_id) REFERENCES enrollment_checklist_requirements (id) ON DELETE RESTRICT,
+	INDEX ix_enrollment_checklist_items_requirement_id (requirement_id),
+	INDEX ix_enrollment_checklist_items_academic_term_id (academic_term_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- enrollment_checkins -----------------------------------------
+CREATE TABLE IF NOT EXISTS enrollment_checkins (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	student_user_id INTEGER NOT NULL, 
+	applicant_id INTEGER NOT NULL, 
+	academic_term_id INTEGER NOT NULL, 
+	registration_form_id INTEGER, 
+	active BOOL, 
+	checklist_snapshot TEXT, 
+	checked_in_by VARCHAR(150) NOT NULL, 
+	checked_in_role VARCHAR(30) NOT NULL, 
+	checked_in_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	undone_by VARCHAR(150), 
+	undone_role VARCHAR(30), 
+	undone_at DATETIME, 
+	undo_reason VARCHAR(500), 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_checkin_active UNIQUE (student_user_id, academic_term_id, active), 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(applicant_id) REFERENCES applicants (applicant_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(academic_term_id) REFERENCES academic_terms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(registration_form_id) REFERENCES registration_forms (id) ON DELETE RESTRICT,
+	INDEX ix_enrollment_checkins_applicant_id (applicant_id),
+	INDEX ix_enrollment_checkins_registration_form_id (registration_form_id),
+	INDEX ix_enrollment_checkins_academic_term_id (academic_term_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- enrollment_audit_log ----------------------------------------
+CREATE TABLE IF NOT EXISTS enrollment_audit_log (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	action VARCHAR(40) NOT NULL, 
+	student_user_id INTEGER, 
+	applicant_id INTEGER, 
+	academic_term_id INTEGER, 
+	details TEXT, 
+	performed_by VARCHAR(150), 
+	performed_role VARCHAR(30), 
+	performed_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id),
+	INDEX ix_enrollment_audit_log_academic_term_id (academic_term_id),
+	INDEX ix_enrollment_audit_log_applicant_id (applicant_id),
+	INDEX ix_enrollment_audit_log_performed_at (performed_at),
+	INDEX ix_enrollment_audit_log_student_user_id (student_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Default enrollment checklist (same rows as migration 0006)
+INSERT IGNORE INTO enrollment_checklist_requirements (code, label, description, kind, approver_roles, applies_to, is_required, is_active, sort_order, updated_by) VALUES
+  ('regform', 'Registration form finalized', 'Met automatically when the registrar finalizes this term''s registration form.', 'regform', 'registrar,admin', 'all', 1, 1, 10, 'migration 0006'),
+  ('documents', 'Enrollment documents reviewed', 'The registrar has checked the uploaded documents on the Documents tab.', 'manual', 'registrar,admin', 'all', 1, 1, 20, 'migration 0006'),
+  ('payment', 'Accounting / enrollment payment policy', 'Met when the policy set on Enrollment Assessments is met. Under ''Accounting clearance'', Accounting gives the clearance.', 'payment', 'accounting,admin', 'all', 1, 1, 30, 'migration 0006'),
+  ('dean', 'Dean approval', 'Inactive by default (removed from the review screen of the uploaded system).', 'manual', 'admin', 'all', 0, 0, 40, 'migration 0006'),
+  ('president', 'President approval', 'Inactive by default (removed from the review screen of the uploaded system).', 'manual', 'admin', 'all', 0, 0, 50, 'migration 0006');
+
+
+-- =====================================================================
+--  PHASE 6: ENROLLMENT CONTROL NUMBERS (generated from website/models.py)
+-- =====================================================================
+-- ---- control_number_sequences ------------------------------------
+CREATE TABLE IF NOT EXISTS control_number_sequences (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	prefix VARCHAR(10) NOT NULL DEFAULT 'PGPC', 
+	year_code VARCHAR(2) NOT NULL, 
+	school_year VARCHAR(9), 
+	last_number INTEGER NOT NULL DEFAULT 0, 
+	updated_by VARCHAR(150), 
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_control_sequence UNIQUE (prefix, year_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- control_numbers ---------------------------------------------
+CREATE TABLE IF NOT EXISTS control_numbers (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	number VARCHAR(30) NOT NULL, 
+	sequence_id INTEGER NOT NULL, 
+	seq INTEGER NOT NULL, 
+	student_user_id INTEGER NOT NULL, 
+	applicant_id INTEGER NOT NULL, 
+	academic_term_id INTEGER NOT NULL, 
+	registration_form_id INTEGER, 
+	issued_by VARCHAR(150) NOT NULL, 
+	issued_role VARCHAR(30), 
+	issued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	source VARCHAR(20) NOT NULL DEFAULT 'check_in', 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_control_number_term UNIQUE (student_user_id, academic_term_id), 
+	CONSTRAINT uq_control_number_seq UNIQUE (sequence_id, seq), 
+	UNIQUE (number), 
+	FOREIGN KEY(sequence_id) REFERENCES control_number_sequences (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(applicant_id) REFERENCES applicants (applicant_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(academic_term_id) REFERENCES academic_terms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(registration_form_id) REFERENCES registration_forms (id) ON DELETE RESTRICT,
+	INDEX ix_control_numbers_registration_form_id (registration_form_id),
+	INDEX ix_control_numbers_academic_term_id (academic_term_id),
+	INDEX ix_control_numbers_applicant_id (applicant_id),
+	INDEX ix_control_numbers_sequence_id (sequence_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- =====================================================================
+--  PHASE 7: GRADE VISIBILITY (generated from website/models.py)
+-- =====================================================================
+-- ---- grade_releases ----------------------------------------------
+CREATE TABLE IF NOT EXISTS grade_releases (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	academic_year VARCHAR(20) NOT NULL, 
+	semester VARCHAR(50) NOT NULL, 
+	program_key VARCHAR(50) NOT NULL DEFAULT '', 
+	is_released BOOL NOT NULL DEFAULT 0, 
+	released_by VARCHAR(150), 
+	released_at DATETIME, 
+	withheld_by VARCHAR(150), 
+	withheld_at DATETIME, 
+	reason VARCHAR(500), 
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_grade_release UNIQUE (academic_year, semester, program_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---- grade_holds -------------------------------------------------
+CREATE TABLE IF NOT EXISTS grade_holds (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	student_user_id INTEGER NOT NULL, 
+	academic_year VARCHAR(20) NOT NULL DEFAULT '', 
+	semester VARCHAR(50) NOT NULL DEFAULT '', 
+	reason VARCHAR(500) NOT NULL, 
+	placed_by VARCHAR(150) NOT NULL, 
+	placed_role VARCHAR(30), 
+	placed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	lifted_by VARCHAR(150), 
+	lifted_at DATETIME, 
+	lift_reason VARCHAR(500), 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT,
+	INDEX ix_grade_holds_student_user_id (student_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- =====================================================================
+--  PHASE 8: SECTION ARCHIVES (generated from website/models.py)
+-- =====================================================================
+-- ---- section_archives --------------------------------------------
+CREATE TABLE IF NOT EXISTS section_archives (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	section_id INTEGER NOT NULL, 
+	is_archived BOOL NOT NULL DEFAULT 1, 
+	was_active BOOL, 
+	reason VARCHAR(500) NOT NULL, 
+	archived_by VARCHAR(150) NOT NULL, 
+	archived_role VARCHAR(30), 
+	archived_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	restored_by VARCHAR(150), 
+	restored_at DATETIME, 
+	restore_reason VARCHAR(500), 
+	PRIMARY KEY (id), 
+	UNIQUE (section_id), 
+	FOREIGN KEY(section_id) REFERENCES sections (id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- =====================================================================
+--  ENROLLMENT DOWN PAYMENTS (generated from website/models.py)
+-- =====================================================================
+-- ---- down_payments -----------------------------------------------
+CREATE TABLE IF NOT EXISTS down_payments (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	payment_id INTEGER NOT NULL, 
+	student_user_id INTEGER NOT NULL, 
+	applicant_id INTEGER NOT NULL, 
+	academic_term_id INTEGER NOT NULL, 
+	amount NUMERIC(12, 2) NOT NULL, 
+	status VARCHAR(20) NOT NULL DEFAULT 'held', 
+	applied_assessment_id INTEGER, 
+	applied_by VARCHAR(150), 
+	applied_at DATETIME, 
+	created_by VARCHAR(150) NOT NULL, 
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	UNIQUE (payment_id), 
+	FOREIGN KEY(payment_id) REFERENCES payments (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(applicant_id) REFERENCES applicants (applicant_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(academic_term_id) REFERENCES academic_terms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(applied_assessment_id) REFERENCES assessments (id) ON DELETE RESTRICT,
+	INDEX ix_down_payments_applicant_id (applicant_id),
+	INDEX ix_down_payments_student_user_id (student_user_id),
+	INDEX ix_down_payments_academic_term_id (academic_term_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- =====================================================================
+--  FEE DESCRIPTIONS (generated from website/models.py)
+-- =====================================================================
+-- ---- fee_descriptions --------------------------------------------
+CREATE TABLE IF NOT EXISTS fee_descriptions (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	name VARCHAR(150) NOT NULL, 
+	is_active BOOL NOT NULL DEFAULT 1, 
+	created_by VARCHAR(150) NOT NULL, 
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	updated_by VARCHAR(150), 
+	updated_at DATETIME, 
+	PRIMARY KEY (id), 
+	UNIQUE (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
+--  Schema migration ledger (website/schema_migrations.py).
+--  A database built from THIS file already contains every change below, so
+--  they are recorded as applied. Existing databases: python scripts/migrate.py
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS schema_migrations (
+	id VARCHAR(100) NOT NULL PRIMARY KEY,
+	description VARCHAR(500),
+	applied_at DATETIME NOT NULL
+) DEFAULT CHARSET=utf8mb4;
+INSERT IGNORE INTO schema_migrations (id, description, applied_at) VALUES
+  ('0001_enrollment_shs_document_columns', 'built into full.sql', NOW()),
+  ('0002_document_columns_mediumblob', 'built into full.sql', NOW()),
+  ('0003_curriculum_management', 'built into full.sql', NOW()),
+  ('0004_registration_forms', 'built into full.sql', NOW()),
+  ('0005_enrollment_finance', 'built into full.sql', NOW()),
+  ('0006_enrollment_checkin', 'built into full.sql', NOW()),
+  ('0007_control_numbers', 'built into full.sql', NOW()),
+  ('0008_grade_visibility', 'built into full.sql', NOW()),
+  ('0009_section_archives', 'built into full.sql', NOW()),
+  ('0010_down_payments', 'built into full.sql', NOW()),
+  ('0011_fee_descriptions', 'built into full.sql', NOW());
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =====================================================================
@@ -1086,4 +1679,4 @@ INSERT INTO grading_settings (active_school_year, active_semester)
 -- To pre-create one, generate the hash first:
 --   python -c "from werkzeug.security import generate_password_hash as g; print(g('adminpgpc@2025', method='pbkdf2:sha256'))"
 -- INSERT INTO users (username, email, password_hash, role, status, full_name, `system`, can_edit)
---   VALUES ('admin', 'admin@example.com', '<PASTE_HASH>', 'admin', 'active', 'System Administrator', 'admission', 1);
+--   VALUES ('admin', 'admin@example.com', '<PASTE_HASH>', 'admin', 'active', 'System Administrator', 'admission', 1);

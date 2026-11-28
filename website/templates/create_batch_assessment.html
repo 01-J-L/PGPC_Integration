@@ -22,9 +22,14 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div class="md:col-span-2">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Assessment Description</label>
-                    <input type="text" name="description" placeholder="e.g., Computer Laboratory Fee" required
-                        class="w-full px-4 py-2 border border-gray-300 rounded-button focus:ring-primary focus:border-primary">
+                    <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Assessment Description</label>
+                    <select id="description" name="description" required
+                        class="w-full px-4 py-2 border border-gray-300 bg-white rounded-button focus:ring-primary focus:border-primary">
+                        <option value="">-- Choose a fee --</option>
+                        {% for fd in fee_descriptions %}<option value="{{ fd.name }}">{{ fd.name }}</option>{% endfor %}
+                    </select>
+                    {% if not fee_descriptions %}<p class="text-xs text-orange-700 mt-1">The list is empty. {{ 'Add descriptions under Fee descriptions below.' if session.user_role == 'accounting' else 'Ask Accounting to add fee descriptions.' }}</p>
+                    {% elif session.user_role == 'accounting' %}<p class="text-xs text-gray-500 mt-1">Not in the list? Add it under <a href="#fee-descriptions" class="text-primary hover:underline">Fee descriptions</a> below.</p>{% endif %}
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Amount (₱)</label>
@@ -92,6 +97,35 @@
     </div>
 
     <!-- MANAGE TABLE -->
+    {% if session.user_role == 'accounting' %}
+    <!-- FEE DESCRIPTIONS: the dropdown list, maintained by Accounting -->
+    <div class="bg-white rounded-card shadow-lg p-6 border border-gray-100" id="fee-descriptions">
+        <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
+            <div>
+                <h2 class="text-lg font-bold text-gray-800">Fee descriptions</h2>
+                <p class="text-sm text-gray-500">The choices of the Assessment Description dropdown. Hiding a name removes it from the dropdown only; existing assessments keep their names.</p>
+            </div>
+            <form method="POST" action="{{ url_for('finance.add_fee_description') }}" class="flex items-end gap-2">
+                <div><label for="new-fee" class="block text-xs font-medium text-gray-600 mb-1">New description</label>
+                    <input id="new-fee" name="name" maxlength="150" required placeholder="e.g., Computer Laboratory Fee"
+                        class="w-72 px-3 py-2 border border-gray-300 rounded-button text-sm focus:ring-primary focus:border-primary"></div>
+                <button class="px-4 py-2 bg-primary text-white rounded-button text-sm font-medium hover:bg-blue-700"><i class="ri-add-line"></i> Add</button>
+            </form>
+        </div>
+        <ul class="flex flex-wrap gap-2" aria-label="Fee descriptions">
+            {% for fd in all_fee_descriptions %}
+            <li class="flex items-center gap-2 pl-3 pr-1 py-1 rounded-full border text-sm {{ 'bg-white border-gray-300 text-gray-800' if fd.is_active else 'bg-gray-100 border-dashed border-gray-300 text-gray-400' }}">
+                <span>{{ fd.name }}{% if not fd.is_active %} <span class="sr-only">(hidden)</span>{% endif %}</span>
+                <form method="POST" action="{{ url_for('finance.toggle_fee_description', fd_id=fd.id, action='hide' if fd.is_active else 'show') }}">
+                    <button class="px-2 py-0.5 rounded-full text-xs {{ 'text-gray-500 hover:bg-gray-100' if fd.is_active else 'text-primary hover:bg-blue-50' }}"
+                        title="{{ 'Hide from the dropdown' if fd.is_active else 'Show in the dropdown again' }}">{{ 'Hide' if fd.is_active else 'Show' }}</button>
+                </form>
+            </li>
+            {% else %}<li class="text-sm text-gray-500">No descriptions yet.</li>{% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
     <div class="bg-white rounded-card shadow-lg p-6 border border-gray-100">
         <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
             <i class="ri-edit-box-line text-blue-600"></i> Manage Active Assessments
@@ -127,15 +161,10 @@
                         </td>
                         <td class="px-4 py-4 text-right">
                             <div class="flex items-center justify-end gap-2">
-                                <button type="button" onclick="openEditModal(
-                                        '{{ log.id }}', 
-                                        '{{ log.description }}', 
-                                        '{{ log.amount }}',
-                                        '{{ log.semester or '' }}',
-                                        '{{ log.scope or '' }}',
-                                        '{{ log.course or '' }}',
-                                        '{{ log.year_level or '' }}'
-                                    )"
+                                <button type="button" onclick="openEditModal(this)" aria-label="Edit"
+                                    data-id="{{ log.id }}" data-description="{{ log.description }}" data-amount="{{ log.amount }}"
+                                    data-semester="{{ log.semester or '' }}" data-scope="{{ log.scope or '' }}"
+                                    data-course="{{ log.course or '' }}" data-year-level="{{ log.year_level or '' }}"
                                     class="text-blue-600 hover:text-blue-800 p-1">
                                     <i class="ri-pencil-line text-lg"></i>
                                 </button>
@@ -169,8 +198,10 @@
         <form id="editBatchForm" method="POST" class="p-6 space-y-4">
             <div class="grid grid-cols-2 gap-4">
                 <div class="col-span-2">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                    <input type="text" id="edit_description" name="description" required class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <label for="edit_description" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <select id="edit_description" name="description" required class="w-full px-3 py-2 border border-gray-300 bg-white rounded-md">
+                        {% for fd in fee_descriptions %}<option value="{{ fd.name }}">{{ fd.name }}</option>{% endfor %}
+                    </select>
                 </div>
                 <div class="col-span-2">
                     <label class="block text-sm font-medium text-gray-700 mb-1">Amount (₱)</label>
@@ -230,9 +261,17 @@
 </div>
 
 <script>
-    function openEditModal(id, desc, amount, sem, scope, course, level) {
+    function openEditModal(btn) {
+        const d = btn.dataset;
+        const id = d.id, desc = d.description, amount = d.amount, sem = d.semester, scope = d.scope, course = d.course, level = d.yearLevel;
         document.getElementById('editBatchForm').action = "/cashier/batch-assessment/edit/" + id;
-        document.getElementById('edit_description').value = desc;
+        // the rule keeps its current name even if it was hidden from the list since
+        const descSel = document.getElementById('edit_description');
+        descSel.querySelectorAll('option[data-current]').forEach(o => o.remove());
+        if (![...descSel.options].some(o => o.value === desc)) {
+            const o = new Option(desc + ' (current)', desc); o.dataset.current = '1'; descSel.add(o, 0);
+        }
+        descSel.value = desc;
         document.getElementById('edit_amount').value = amount;
         document.getElementById('edit_semester').value = (sem === 'None' || sem === 'null') ? '' : sem;
         document.getElementById('edit_scope').value = (scope === 'None' || scope === 'null') ? '' : scope;
@@ -242,4 +281,4 @@
     }
     function closeEditModal() { document.getElementById('editBatchModal').classList.add('hidden'); }
 </script>
-{% endblock %}
+{% endblock %}

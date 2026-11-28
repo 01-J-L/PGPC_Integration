@@ -28,6 +28,7 @@
             .main-content { margin-left: 0 !important; width: 100% !important; }
         }
     </style>
+    {% include '_csrf.html' %}
 </head>
 
 <body class="flex h-screen overflow-hidden">
@@ -47,6 +48,8 @@
             <a href="{{ url_for('auth.cashier_dashboard') }}" class="flex items-center gap-3 px-4 py-2.5 text-gray-600 rounded-btn hover:bg-blue-50 hover:text-primary transition-colors"><i class="ri-dashboard-line"></i> Dashboard</a>
             <a href="{{ url_for('auth.student_records') }}" class="flex items-center gap-3 px-4 py-2.5 text-gray-600 rounded-btn hover:bg-blue-50 hover:text-primary transition-colors"><i class="ri-bank-card-line"></i> Payments</a>
             <a href="{{ url_for('auth.create_batch_assessment') }}" class="flex items-center gap-3 px-4 py-2.5 text-gray-600 rounded-btn hover:bg-blue-50 hover:text-primary transition-colors"><i class="ri-group-line"></i> Assessments</a>
+            <a href="{{ url_for('finance.index') }}" class="flex items-center gap-3 px-4 py-2.5 text-gray-600 rounded-btn hover:bg-blue-50 hover:text-primary transition-colors"><i class="ri-shield-check-line"></i> Enrollment Assessments</a>
+            <a href="{{ url_for('checkin.approvals') }}" class="flex items-center gap-3 px-4 py-2.5 text-gray-600 rounded-btn hover:bg-blue-50 hover:text-primary transition-colors"><i class="ri-checkbox-multiple-line"></i> Checklist Approvals</a>
             <a href="{{ url_for('auth.student_discount') }}" class="flex items-center gap-3 px-4 py-2.5 text-gray-600 rounded-btn hover:bg-blue-50 hover:text-primary transition-colors"><i class="ri-price-tag-3-line"></i> Discounts</a>
             <a href="{{ url_for('auth.return_voucher') }}" class="flex items-center gap-3 px-4 py-2.5 text-gray-600 rounded-btn hover:bg-blue-50 hover:text-primary transition-colors"><i class="ri-coupon-3-line"></i> Vouchers</a>
             
@@ -126,4 +129,4 @@
     {% include '_live_sync.html' %}
     {% block extra_scripts %}{% endblock %}
 </body>
-</html>
+</html>

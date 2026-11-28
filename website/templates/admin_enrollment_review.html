@@ -29,6 +29,7 @@
 {% block content %}
 <style>
     .tab-nav-link {
+        flex-shrink: 0;
         cursor: pointer;
         padding: 0.75rem 1.25rem;
         border-bottom: 3px solid transparent;
@@ -175,6 +176,31 @@
                 </div>
             </div>
 
+            <!-- START: Registration Form (Phase 3) -->
+            <div class="mt-6 p-4 border border-indigo-200 rounded-lg bg-indigo-50" id="regform-panel">
+                <h4 class="text-md font-semibold text-indigo-900 mb-2">Registration Form</h4>
+                {% if regform %}
+                <p class="text-sm text-indigo-900">{{ regform.classification }} &middot; {{ regform.subjects }} subject(s) &middot; {{ regform.total_units|fmt_units }} units &middot;
+                    {% if regform.status == 'finalized' %}<span class="font-semibold text-green-700">Finalized</span>{% else %}<span class="font-semibold text-yellow-700">{{ regform.status|title }}</span>{% endif %}</p>
+                <a href="{{ url_for('registration.form', form_id=regform.id) }}" class="inline-flex items-center mt-2 text-sm font-medium text-primary hover:underline"><i class="ri-file-list-3-line mr-1"></i>Open registration form</a>
+                {% else %}
+                <p class="text-sm text-indigo-900">No registration form for this term yet.</p>
+                <a href="{{ url_for('registration.student', applicant_id=application.applicant_id, term_id=selected_term_id) }}" class="inline-flex items-center mt-2 text-sm font-medium text-primary hover:underline"><i class="ri-file-add-line mr-1"></i>Prepare registration form</a>
+                {% endif %}
+            </div>
+            <!-- END: Registration Form -->
+
+            {% if term_summary %}
+            <!-- START: Financial status (Phase 4) -->
+            <div class="mt-4 p-4 border border-gray-200 rounded-lg bg-white" id="finance-panel">
+                <div class="flex justify-between items-center mb-2"><h4 class="text-md font-semibold text-gray-800">Financial Status</h4>
+                    <span class="text-xs font-semibold">{{ term_summary.payment_status }}{% if term_summary.verification_status %} &middot; {{ term_summary.verification_status }}{% endif %}</span></div>
+                {% include 'finance/_balance_table.html' %}
+                <p class="text-xs mt-2"><span class="text-gray-600">Payment policy:</span> {% if policy_ok %}<span class="text-green-700 font-medium">{{ policy_why }}</span>{% else %}<span class="text-orange-700 font-medium">{{ policy_why }}</span>{% endif %}</p>
+            </div>
+            <!-- END: Financial status -->
+            {% endif %}
+
             <!-- START: Section Management (Admin Override) -->
             <div class="mt-6 mb-4 p-4 border border-blue-200 rounded-lg bg-blue-50">
                 <h4 class="text-md font-semibold text-blue-800 mb-2">Section Assignment</h4>
@@ -211,66 +237,25 @@
             </div>
             <!-- END: Section Management -->
 
-            <!-- START: Approval Checklist -->
-            <div class="mt-6 mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
-                <h4 class="text-md font-semibold text-gray-800 mb-3">Approval Checklist for {{ selected_term_id and
-                    all_academic_terms | selectattr('id', 'equalto', selected_term_id) | first | attr('year_name') }}
-                </h4>
-                <div class="space-y-3" id="approval-checklist">
-                    <!-- President -->
-                    <label class="flex items-center justify-between cursor-pointer">
-                        <span class="text-sm font-medium text-gray-700">President's Office</span>
-                        <div class="flex items-center">
-                            <span class="text-xs text-gray-500 mr-2">
-                                {% if enrollment_record and enrollment_record.president_approval_date %}
-                                {{ enrollment_record.president_approval_date.strftime('%b %d, %Y') }}
-                                {% endif %}
-                            </span>
-                            <input type="checkbox" data-role="president"
-                                class="approval-checkbox h-5 w-5 text-primary rounded border-gray-300 focus:ring-primary"
-                                {% if enrollment_record and enrollment_record.is_approved_by_president %}checked{% endif
-                                %}>
-                        </div>
-                    </label>
-                    <!-- Accounting -->
-                    <label class="flex items-center justify-between cursor-pointer">
-                        <span class="text-sm font-medium text-gray-700">Accounting</span>
-                        <div class="flex items-center">
-                            <span class="text-xs text-gray-500 mr-2">
-                                {% if enrollment_record and enrollment_record.accounting_approval_date %}
-                                {{ enrollment_record.accounting_approval_date.strftime('%b %d, %Y') }}
-                                {% endif %}
-                            </span>
-                            <input type="checkbox" data-role="accounting"
-                                class="approval-checkbox h-5 w-5 text-primary rounded border-gray-300 focus:ring-primary"
-                                {% if enrollment_record and enrollment_record.is_approved_by_accounting %}checked{%
-                                endif %}>
-                        </div>
-                    </label>
-                    <!-- Dean -->
-                    <label class="flex items-center justify-between cursor-pointer">
-                        <span class="text-sm font-medium text-gray-700">College Dean</span>
-                        <div class="flex items-center">
-                            <span class="text-xs text-gray-500 mr-2">
-                                {% if enrollment_record and enrollment_record.dean_approval_date %}
-                                {{ enrollment_record.dean_approval_date.strftime('%b %d, %Y') }}
-                                {% endif %}
-                            </span>
-                            <input type="checkbox" data-role="dean"
-                                class="approval-checkbox h-5 w-5 text-primary rounded border-gray-300 focus:ring-primary"
-                                {% if enrollment_record and enrollment_record.is_approved_by_dean %}checked{% endif %}>
-                        </div>
-                    </label>
-                </div>
+            <!-- START: Approval Checklist (Phase 5) -->
+            <div class="mt-6 mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50" id="checklist">
+                <h4 class="text-md font-semibold text-gray-800 mb-1">Approval Checklist{% set _t = all_academic_terms | selectattr('id', 'equalto', selected_term_id) | first %}{% if _t %} &middot; {{ _t.year_name }} {{ _t.semester }}{% endif %}</h4>
+                {% if cl %}
+                {% with applicant_id=application.applicant_id, term_id=selected_term_id %}{% include 'checkin/_checklist.html' %}{% endwith %}
+                {% else %}
+                <p class="text-sm text-gray-500">This application is not linked to a student account, so no checklist can be kept.</p>
+                {% endif %}
             </div>
             <!-- END: Approval Checklist -->
 
             <div class="space-y-3">
 
-                <button id="approveBtn" title="Mark this student as officially enrolled."
+                {% set can_checkin = cl and cl.ready and not cl.checkin and is_active_term %}
+                <button id="approveBtn"
+                    title="{% if not is_active_term %}Check-in is only possible for the active term.{% elif cl and cl.checkin %}Already checked in for this term.{% elif cl and not cl.ready %}Complete the required checklist items first.{% else %}Check the student in and mark as officially enrolled.{% endif %}"
                     class="w-full flex items-center justify-center px-4 py-2.5 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed"
-                    disabled>
-                    <i class="ri-check-double-line mr-2"></i> Approve Enrollment
+                    {% if not can_checkin %}disabled{% endif %}>
+                    <i class="ri-check-double-line mr-2"></i> Check in &amp; Enroll
                 </button>
                 <button id="rejectBtn" {% if application.enrollment_student_type=='Existing' %}
                     title="Reject and move to 'Dropped'. Use if student is no longer continuing." {% else %}
@@ -294,10 +279,10 @@
     </div>
 
     <!-- Right Column: Details in Tabs -->
-    <div class="flex-1">
+    <div class="flex-1 min-w-0">
         <div class="bg-white rounded-lg shadow-md border border-gray-100">
             <div class="border-b border-gray-200">
-                <nav class="flex space-x-2 px-4" id="tab-navigation">
+                <nav class="flex space-x-2 px-4 overflow-x-auto whitespace-nowrap" id="tab-navigation">
                     <a class="tab-nav-link active" data-target="enrollment-details">Enrollment Details</a>
                     <a class="tab-nav-link" data-target="student-inventory">Student Inventory</a>
                     <a class="tab-nav-link" data-target="documents">Documents</a>
@@ -688,48 +673,7 @@
         }
 
         // --- START: Approval Checklist & Document Viewer Logic ---
-        const approvalCheckboxes = document.querySelectorAll('.approval-checkbox');
-
-        function checkAllApprovals() {
-            const allChecked = Array.from(approvalCheckboxes).every(cb => cb.checked);
-            approveBtn.disabled = !allChecked;
-        }
-
-        approvalCheckboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', async function () {
-                const role = this.dataset.role;
-                const isChecked = this.checked;
-                const originalState = !isChecked; // for reverting on failure
-
-                // Disable all checkboxes to prevent race conditions
-                approvalCheckboxes.forEach(cb => cb.disabled = true);
-
-                try {
-                    const response = await fetch(`/admin/enrollment/${applicantId}/toggle-approval`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ role: role, status: isChecked, term_id: selectedTermId })
-                    });
-                    const data = await response.json();
-                    if (data.success) {
-                        showToast(data.message, 'success');
-                        // Reload to get updated dates from server
-                        setTimeout(() => location.reload(), 1000);
-                    } else {
-                        throw new Error(data.message);
-                    }
-                } catch (error) {
-                    showToast(error.message || 'Failed to update status.', 'error');
-                    this.checked = originalState; // Revert checkbox on error
-                    // Re-enable checkboxes on failure
-                    approvalCheckboxes.forEach(cb => cb.disabled = false);
-                }
-
-                checkAllApprovals(); // Update button state based on new checkbox state
-            });
-        });
-
-        checkAllApprovals(); // Initial check on page load
+        // Phase 5: the Check-in button state comes from the server-side checklist.
 
         const docViewerModal = document.getElementById('document-viewer-modal');
         const modalDocTitle = document.getElementById('modal-doc-title');
@@ -789,4 +733,4 @@
         // --- END: Approval Checklist & Document Viewer Logic ---
     });
 </script>
-{% endblock %}
+{% endblock %}

@@ -1,0 +1,278 @@
+{% extends 'admin_base.html' %}
+{% from 'curriculum/_macros.html' import status_badge, input_class, btn_primary, btn_secondary, btn_danger %}
+
+{% block title %}{{ v.name }} - Curriculum{% endblock %}
+{% block breadcrumb %}
+<a href="{{ url_for('curriculum.index', program=v.program_id) }}" class="text-gray-500 hover:text-primary">Curriculum Management</a>
+<i class="ri-arrow-right-s-line mx-1 text-gray-400"></i><span>{{ v.name }}</span>
+{% endblock %}
+{% block page_title %}{{ v.program.program_code or v.program_id|upper }} &middot; {{ v.name }}{% endblock %}
+
+{% block content %}
+{% set editable = not lock_reason %}
+
+<!-- Header / actions -->
+<div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
+    <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+        <div class="space-y-1 min-w-0">
+            <div class="flex flex-wrap items-center gap-2">{{ status_badge(v) }}
+                {% if lock_reason %}<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700"><i class="ri-lock-line mr-1"></i>Locked</span>{% endif %}
+            </div>
+            <p class="text-sm text-gray-600">{{ v.program.title }} &middot; effective A.Y. <strong>{{ v.effective_academic_year }}</strong> &middot; {{ v.max_year_level }} year levels</p>
+            {% if v.description %}<p class="text-sm text-gray-500">{{ v.description }}</p>{% endif %}
+            <p class="text-xs text-gray-400 break-words [overflow-wrap:anywhere]">Created by {{ v.created_by or '—' }}{% if v.source_reference %} from <em>{{ v.source_reference }}</em>{% endif %}{% if v.activated_at %} &middot; activated {{ v.activated_at.strftime('%b %d, %Y %I:%M %p') }} by {{ v.activated_by }}{% endif %}</p>
+        </div>
+        <div class="grid grid-cols-3 gap-2 sm:gap-4 text-center shrink-0">
+            <div class="px-3 sm:px-4 py-2 bg-gray-50 rounded-lg"><p class="text-xs text-gray-500 uppercase">Subjects</p><p class="text-xl font-bold text-gray-800">{{ summary.subjects }}</p></div>
+            <div class="px-3 sm:px-4 py-2 bg-gray-50 rounded-lg"><p class="text-xs text-gray-500 uppercase">Units</p><p class="text-xl font-bold text-gray-800">{{ summary.units|units }}</p></div>
+            <div class="px-3 sm:px-4 py-2 bg-gray-50 rounded-lg"><p class="text-xs text-gray-500 uppercase">Students</p><p class="text-xl font-bold text-gray-800">{{ summary.students }}</p></div>
+        </div>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-5 pt-4 border-t border-gray-100">
+        {% if v.status != 'archived' %}
+        <button type="button" class="{{ btn_secondary() }}" onclick="document.getElementById('edit-version-dialog').showModal()"><i class="ri-edit-line mr-2"></i>Edit details</button>
+        {% endif %}
+        {% if v.status != 'active' and v.status != 'archived' %}
+        <button type="button" class="{{ btn_primary() }}" onclick="document.getElementById('activate-dialog').showModal()"><i class="ri-checkbox-circle-line mr-2"></i>Activate</button>
+        {% endif %}
+        {% if v.status == 'active' %}
+        <a href="{{ url_for('curriculum.students', version_id=v.id) }}" class="{{ btn_primary() }}"><i class="ri-group-line mr-2"></i>Assign students</a>
+        {% if not v.is_default_for_new %}
+        <form method="POST" action="{{ url_for('curriculum.set_default', version_id=v.id) }}" onsubmit="return confirm('Make this the curriculum given to new first-year students of this program?')">
+            <button class="{{ btn_secondary() }}"><i class="ri-star-line mr-2"></i>Set as default for new students</button>
+        </form>
+        {% endif %}
+        <form method="POST" action="{{ url_for('curriculum.archive', version_id=v.id) }}" onsubmit="return confirm('Archive this curriculum? Students already assigned keep it; it can no longer be assigned or edited.')">
+            <button class="{{ btn_secondary() }}"><i class="ri-archive-line mr-2"></i>Archive</button>
+        </form>
+        {% endif %}
+        <button type="button" class="{{ btn_secondary() }}" onclick="document.getElementById('clone-dialog').showModal()"><i class="ri-file-copy-line mr-2"></i>Clone as new version</button>
+        <form method="POST" action="{{ url_for('curriculum.link_legacy', version_id=v.id) }}">
+            <button class="{{ btn_secondary() }}" title="Match subjects to the existing grading subject list by code"><i class="ri-links-line mr-2"></i>Link existing subjects</button>
+        </form>
+        {% if v.status == 'draft' and summary.students == 0 %}
+        <form method="POST" action="{{ url_for('curriculum.delete_version', version_id=v.id) }}" class="ml-auto" onsubmit="return confirm('Delete this draft and all its subjects? This cannot be undone.')">
+            <button class="{{ btn_danger() }}"><i class="ri-delete-bin-line mr-2"></i>Delete draft</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if lock_reason %}
+<div class="mb-6 p-4 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700" role="status"><i class="ri-lock-line mr-1"></i>{{ lock_reason }}</div>
+{% endif %}
+
+{% if v.status == 'draft' and (report.blocking or report.warnings) %}
+<div class="mb-6 p-4 rounded-lg border {{ 'border-red-200 bg-red-50' if report.blocking else 'border-yellow-200 bg-yellow-50' }}" role="status">
+    <p class="text-sm font-semibold {{ 'text-red-800' if report.blocking else 'text-yellow-800' }} mb-1">Before activating</p>
+    <ul class="list-disc ml-5 text-sm {{ 'text-red-800' if report.blocking else 'text-yellow-900' }} space-y-0.5">
+        {% for m in report.blocking %}<li>{{ m }}</li>{% endfor %}
+        {% for m in report.warnings %}<li>{{ m }}</li>{% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<!-- Subjects by year / semester -->
+{% set ns = namespace(year=None) %}
+{% for year, sem, subs, total in terms %}
+{% if year != ns.year %}{% set ns.year = year %}
+<h2 class="text-lg font-semibold text-gray-800 mt-8 mb-3">{{ years.get(year, 'Year ' ~ year) }}</h2>
+{% endif %}
+<section class="bg-white rounded-xl shadow-sm border border-gray-200 mb-4" aria-label="{{ years.get(year) }} {{ semesters.get(sem) }}">
+    <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="font-medium text-gray-800">{{ semesters.get(sem) }}</h3>
+        <span class="text-sm text-gray-500">{{ subs|length }} subject(s) &middot; <strong>{{ total|units }}</strong> units</span>
+    </div>
+    <div class="relative overflow-x-auto">
+    <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+            <tr>
+                <th scope="col" class="px-5 py-2 text-left w-32">Code</th>
+                <th scope="col" class="px-3 py-2 text-left">Description</th>
+                <th scope="col" class="px-3 py-2 text-right w-16">Units</th>
+                <th scope="col" class="px-3 py-2 text-left w-72">Prerequisites</th>
+                <th scope="col" class="px-5 py-2 text-right w-40"><span class="sr-only">Actions</span></th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+        {% for s in subs %}
+            {% if edit_id == s.id and editable %}
+            <tr id="subject-{{ s.id }}" class="bg-indigo-50/40">
+                <td colspan="5" class="px-5 py-3">
+                    <form method="POST" action="{{ url_for('curriculum.update_subject', subject_id=s.id) }}" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        <div class="md:col-span-2"><label class="block text-xs text-gray-500 mb-1" for="e-code-{{ s.id }}">Code</label><input id="e-code-{{ s.id }}" name="subject_code" value="{{ s.subject_code }}" required maxlength="30" class="{{ input_class() }}"></div>
+                        <div class="md:col-span-4"><label class="block text-xs text-gray-500 mb-1" for="e-desc-{{ s.id }}">Description</label><input id="e-desc-{{ s.id }}" name="description" value="{{ s.description }}" required maxlength="500" class="{{ input_class() }}"></div>
+                        <div class="md:col-span-1"><label class="block text-xs text-gray-500 mb-1" for="e-units-{{ s.id }}">Units</label><input id="e-units-{{ s.id }}" name="units" value="{{ s.units|units }}" required inputmode="decimal" class="{{ input_class() }}"></div>
+                        <div class="md:col-span-2"><label class="block text-xs text-gray-500 mb-1" for="e-year-{{ s.id }}">Year</label>
+                            <select id="e-year-{{ s.id }}" name="year_level" class="{{ input_class() }}">{% for y in range(1, v.max_year_level + 1) %}<option value="{{ y }}" {% if y == s.year_level %}selected{% endif %}>{{ years.get(y) }}</option>{% endfor %}</select></div>
+                        <div class="md:col-span-2"><label class="block text-xs text-gray-500 mb-1" for="e-sem-{{ s.id }}">Semester</label>
+                            <select id="e-sem-{{ s.id }}" name="semester" class="{{ input_class() }}">{% for k, lbl in semesters.items() %}<option value="{{ k }}" {% if k == s.semester %}selected{% endif %}>{{ lbl }}</option>{% endfor %}</select></div>
+                        <div class="md:col-span-1 flex gap-2"><button class="{{ btn_primary() }} px-3">Save</button></div>
+                        <input type="hidden" name="notes" value="{{ s.notes or '' }}">
+                    </form>
+                    <a href="{{ url_for('curriculum.version_detail', version_id=v.id) }}#subject-{{ s.id }}" class="text-xs text-gray-500 hover:underline">Cancel</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr id="subject-{{ s.id }}" class="align-top">
+                <td class="px-5 py-3 font-medium text-gray-900 whitespace-nowrap">{{ s.subject_code }}
+                    {% if s.subject_id %}<i class="ri-links-line text-green-600" title="Linked to existing grading subject"></i>{% endif %}</td>
+                <td class="px-3 py-3 text-gray-700">{{ s.description }}</td>
+                <td class="px-3 py-3 text-right">{{ s.units|units }}</td>
+                <td class="px-3 py-3">
+                    <div class="flex flex-wrap gap-1">
+                    {% for p in s.prerequisites %}
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs {{ 'bg-blue-50 text-blue-800' if p.kind == 'subject' else ('bg-purple-100 text-purple-800' if p.kind in ['standing','units'] else 'bg-yellow-100 text-yellow-800') }}" title="{{ p.requirement_text or '' }}">
+                            {{ p.label() }}
+                            {% if editable %}
+                            <form method="POST" action="{{ url_for('curriculum.delete_prerequisite', prereq_id=p.id) }}" class="inline">
+                                <button class="opacity-60 hover:opacity-100" aria-label="Remove prerequisite {{ p.label() }}">&times;</button>
+                            </form>
+                            {% endif %}
+                        </span>
+                    {% else %}<span class="text-xs text-gray-400">None</span>{% endfor %}
+                    </div>
+                    {% if editable %}
+                    <details class="mt-1">
+                        <summary class="text-xs text-primary cursor-pointer">Add prerequisite</summary>
+                        <form method="POST" action="{{ url_for('curriculum.add_prerequisite', subject_id=s.id) }}" class="mt-2 space-y-2 prereq-form">
+                            <select name="kind" class="{{ input_class() }} prereq-kind" aria-label="Prerequisite type">
+                                <option value="subject">Subject passed</option>
+                                <option value="standing">Year standing</option>
+                                <option value="units">Units completed</option>
+                                <option value="other">Other (note)</option>
+                            </select>
+                            <select name="prerequisite_subject_id" class="{{ input_class() }}" data-kind="subject" aria-label="Prerequisite subject">
+                                {% for o in all_subjects if (o.year_level, o.semester) < (s.year_level, s.semester) %}
+                                <option value="{{ o.id }}">{{ o.subject_code }} &ndash; {{ o.description[:40] }}</option>
+                                {% else %}<option value="">No earlier subjects</option>{% endfor %}
+                            </select>
+                            <select name="min_year_level" class="{{ input_class() }} hidden" data-kind="standing" aria-label="Year standing">
+                                {% for y in range(1, v.max_year_level + 1) %}<option value="{{ y }}" {% if y == v.max_year_level %}selected{% endif %}>{{ years.get(y) }} standing</option>{% endfor %}
+                            </select>
+                            <input name="min_units" class="{{ input_class() }} hidden" data-kind="units" inputmode="decimal" placeholder="e.g. 110" aria-label="Units completed">
+                            <input name="requirement_text" class="{{ input_class() }} hidden" data-kind="other" maxlength="255" placeholder="Describe the requirement" aria-label="Requirement">
+                            <button class="{{ btn_primary() }} px-3 py-1.5 text-xs">Add</button>
+                        </form>
+                    </details>
+                    {% endif %}
+                </td>
+                <td class="px-5 py-3 text-right whitespace-nowrap">
+                    {% if editable %}
+                    <a href="{{ url_for('curriculum.version_detail', version_id=v.id, edit=s.id) }}#subject-{{ s.id }}" class="text-primary text-sm hover:underline mr-3">Edit</a>
+                    <form method="POST" action="{{ url_for('curriculum.delete_subject', subject_id=s.id) }}" class="inline" onsubmit="return confirm('Remove {{ s.subject_code }} from this curriculum?')">
+                        <button class="text-red-600 text-sm hover:underline">Remove</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endif %}
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+{% else %}
+<div class="bg-white p-10 rounded-xl border border-gray-200 text-center text-gray-500 mb-6">No subjects yet. Add them below or <a href="{{ url_for('curriculum.import_upload') }}" class="text-primary underline">import a plan of study</a>.</div>
+{% endfor %}
+
+{% if editable %}
+<section id="add-subject" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mt-6">
+    <h3 class="font-semibold text-gray-800 mb-4">Add subject</h3>
+    <form method="POST" action="{{ url_for('curriculum.add_subject', version_id=v.id) }}" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+        <div class="md:col-span-2"><label for="a-code" class="block text-xs text-gray-500 mb-1">Code</label><input id="a-code" name="subject_code" required maxlength="30" placeholder="GE 105" class="{{ input_class() }}"></div>
+        <div class="md:col-span-4"><label for="a-desc" class="block text-xs text-gray-500 mb-1">Description</label><input id="a-desc" name="description" required maxlength="500" placeholder="Purposive Communication" class="{{ input_class() }}"></div>
+        <div class="md:col-span-1"><label for="a-units" class="block text-xs text-gray-500 mb-1">Units</label><input id="a-units" name="units" required inputmode="decimal" placeholder="3" class="{{ input_class() }}"></div>
+        <div class="md:col-span-2"><label for="a-year" class="block text-xs text-gray-500 mb-1">Year</label>
+            <select id="a-year" name="year_level" class="{{ input_class() }}">{% for y in range(1, v.max_year_level + 1) %}<option value="{{ y }}">{{ years.get(y) }}</option>{% endfor %}</select></div>
+        <div class="md:col-span-2"><label for="a-sem" class="block text-xs text-gray-500 mb-1">Semester</label>
+            <select id="a-sem" name="semester" class="{{ input_class() }}">{% for k, lbl in semesters.items() %}<option value="{{ k }}">{{ lbl }}</option>{% endfor %}</select></div>
+        <div class="md:col-span-1"><button class="{{ btn_primary() }} w-full">Add</button></div>
+    </form>
+</section>
+{% endif %}
+
+<!-- Audit trail -->
+<section class="bg-white rounded-xl shadow-sm border border-gray-200 mt-8">
+    <div class="px-5 py-3 border-b border-gray-100"><h3 class="font-medium text-gray-800">Change history</h3></div>
+    {% if log %}
+    <div class="relative overflow-x-auto max-h-96 overflow-y-auto">
+    <table class="min-w-full text-xs">
+        <thead class="bg-gray-50 text-gray-500 uppercase sticky top-0"><tr>
+            <th scope="col" class="px-5 py-2 text-left">When</th><th scope="col" class="px-3 py-2 text-left">Who</th>
+            <th scope="col" class="px-3 py-2 text-left">Action</th><th scope="col" class="px-3 py-2 text-left">Details</th></tr></thead>
+        <tbody class="divide-y divide-gray-100">
+        {% for e in log %}
+            <tr><td class="px-5 py-2 whitespace-nowrap text-gray-600">{{ e.performed_at.strftime('%b %d, %Y %I:%M %p') if e.performed_at }}</td>
+                <td class="px-3 py-2 text-gray-700">{{ e.performed_by }}{% if e.performed_role %} <span class="text-gray-400">({{ e.performed_role }})</span>{% endif %}</td>
+                <td class="px-3 py-2 text-gray-800">{{ e.entity }} &middot; {{ e.action|replace('_', ' ') }}</td>
+                <td class="px-3 py-2 text-gray-500 break-all">{{ e.details|truncate(220) }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}<p class="px-5 py-4 text-sm text-gray-500">No changes recorded yet.</p>{% endif %}
+</section>
+
+<!-- Dialogs -->
+<dialog id="edit-version-dialog" class="rounded-xl p-0 w-full max-w-lg backdrop:bg-black/40">
+    <form method="POST" action="{{ url_for('curriculum.update_version', version_id=v.id) }}" class="p-6 space-y-4">
+        <h3 class="text-lg font-semibold text-gray-800">Curriculum details</h3>
+        <div><label for="ev-name" class="block text-sm font-medium text-gray-700 mb-1">Name</label><input id="ev-name" name="name" value="{{ v.name }}" required maxlength="150" class="{{ input_class() }}"></div>
+        <div class="grid grid-cols-2 gap-4">
+            <div><label for="ev-ay" class="block text-sm font-medium text-gray-700 mb-1">Effective academic year</label><input id="ev-ay" name="effective_academic_year" value="{{ v.effective_academic_year }}" required pattern="\d{4}-\d{4}" class="{{ input_class() }}"></div>
+            <div><label for="ev-years" class="block text-sm font-medium text-gray-700 mb-1">Year levels</label>
+                <select id="ev-years" name="max_year_level" class="{{ input_class() }}" {% if not editable %}disabled{% endif %}>{% for y in range(1, 6) %}<option value="{{ y }}" {% if y == v.max_year_level %}selected{% endif %}>{{ y }}</option>{% endfor %}</select>
+                {% if not editable %}<input type="hidden" name="max_year_level" value="{{ v.max_year_level }}">{% endif %}</div>
+        </div>
+        <div><label for="ev-desc" class="block text-sm font-medium text-gray-700 mb-1">Description</label><textarea id="ev-desc" name="description" rows="2" class="{{ input_class() }}">{{ v.description or '' }}</textarea></div>
+        <div class="flex justify-end gap-2"><button type="button" class="{{ btn_secondary() }}" onclick="this.closest('dialog').close()">Cancel</button><button class="{{ btn_primary() }}">Save</button></div>
+    </form>
+</dialog>
+
+<dialog id="activate-dialog" class="rounded-xl p-0 w-full max-w-lg backdrop:bg-black/40">
+    <form method="POST" action="{{ url_for('curriculum.activate', version_id=v.id) }}" class="p-6 space-y-4">
+        <h3 class="text-lg font-semibold text-gray-800">Activate curriculum</h3>
+        <p class="text-sm text-gray-600">An active curriculum can be assigned to students. Once students are assigned, its subjects are locked; later changes need a new version.</p>
+        {% if report.blocking %}
+        <ul class="list-disc ml-5 text-sm text-red-700">{% for m in report.blocking %}<li>{{ m }}</li>{% endfor %}</ul>
+        {% elif report.warnings %}
+        <div class="p-3 rounded border border-yellow-200 bg-yellow-50 text-sm text-yellow-900">
+            <p class="font-medium mb-1">This curriculum is incomplete:</p>
+            <ul class="list-disc ml-5 space-y-0.5">{% for m in report.warnings %}<li>{{ m }}</li>{% endfor %}</ul>
+        </div>
+        <label class="flex items-start gap-2 text-sm text-gray-700"><input type="checkbox" name="confirm_incomplete" value="1" required class="mt-0.5">I reviewed these items and confirm activation anyway.</label>
+        <div><label for="act-note" class="block text-sm font-medium text-gray-700 mb-1">Reason (recorded)</label><textarea id="act-note" name="note" rows="2" required class="{{ input_class() }}" placeholder="e.g. 4th-year subjects will be added before A.Y. 2029-2030"></textarea></div>
+        {% else %}
+        <div><label for="act-note2" class="block text-sm font-medium text-gray-700 mb-1">Note <span class="text-gray-400">(optional)</span></label><textarea id="act-note2" name="note" rows="2" class="{{ input_class() }}"></textarea></div>
+        {% endif %}
+        <div class="flex justify-end gap-2"><button type="button" class="{{ btn_secondary() }}" onclick="this.closest('dialog').close()">Cancel</button>
+            <button class="{{ btn_primary() }}" {% if report.blocking %}disabled{% endif %}>Activate</button></div>
+    </form>
+</dialog>
+
+<dialog id="clone-dialog" class="rounded-xl p-0 w-full max-w-lg backdrop:bg-black/40">
+    <form method="POST" action="{{ url_for('curriculum.clone', version_id=v.id) }}" class="p-6 space-y-4">
+        <h3 class="text-lg font-semibold text-gray-800">Clone as a new draft</h3>
+        <p class="text-sm text-gray-600">Copies every subject and prerequisite into a new draft. This curriculum and its students are not changed.</p>
+        <div><label for="cl-name" class="block text-sm font-medium text-gray-700 mb-1">New name</label><input id="cl-name" name="name" required maxlength="150" value="{{ v.name }} (revised)" class="{{ input_class() }}"></div>
+        <div><label for="cl-ay" class="block text-sm font-medium text-gray-700 mb-1">Effective academic year</label><input id="cl-ay" name="effective_academic_year" required pattern="\d{4}-\d{4}" value="{{ v.effective_academic_year }}" class="{{ input_class() }}"></div>
+        <div class="flex justify-end gap-2"><button type="button" class="{{ btn_secondary() }}" onclick="this.closest('dialog').close()">Cancel</button><button class="{{ btn_primary() }}">Create draft</button></div>
+    </form>
+</dialog>
+
+<script>
+document.querySelectorAll('.prereq-form').forEach(function (form) {
+    var kind = form.querySelector('.prereq-kind');
+    function sync() {
+        form.querySelectorAll('[data-kind]').forEach(function (el) {
+            var on = el.dataset.kind === kind.value;
+            el.classList.toggle('hidden', !on);
+            el.disabled = !on;
+        });
+    }
+    kind.addEventListener('change', sync);
+    sync();
+});
+</script>
+{% endblock %}

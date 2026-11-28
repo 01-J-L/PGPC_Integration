@@ -111,13 +111,18 @@
                         <p class="text-gray-500 text-sm">Program: <span class="text-blue-600 font-medium">{{ student.program_choice }}</span></p>
                     </div>
 
-                    {% if grades_by_term %}
+                    {% if grade_terms %}
                         <div class="space-y-8">
-                            {% for term, grades in grades_by_term.items() %}
+                            {% for t in grade_terms %}{% set grades = t.grades %}
                             <div class="term-section">
                                 <h2 class="text-sm font-bold text-blue-800 bg-blue-50 border-l-4 border-blue-600 px-4 py-2 rounded-r-lg mb-4 uppercase tracking-wide">
-                                    {{ term }}
+                                    {{ t.label }}
                                 </h2>
+                                {% if not t.visible %}
+                                <div class="p-4 rounded-lg border border-yellow-200 bg-yellow-50 text-sm text-yellow-900 flex items-start gap-2 grade-withheld">
+                                    <i class="ri-lock-line mt-0.5" aria-hidden="true"></i><span>{{ t.message }}</span>
+                                </div>
+                                {% else %}
                                 <div class="overflow-x-auto border border-gray-200 rounded-lg">
                                     <table class="min-w-full text-sm text-left">
                                         <thead class="bg-gray-50 text-gray-500 uppercase font-semibold text-xs border-b border-gray-200">
@@ -133,7 +138,7 @@
                                             <tr class="hover:bg-gray-50">
                                                 <td class="px-4 py-3 font-mono text-gray-600">{{ grade.subject_code }}</td>
                                                 <td class="px-4 py-3 text-gray-900 font-medium">{{ grade.subject_title }}</td>
-                                                <td class="px-4 py-3 text-center font-bold {{ 'text-red-600' if grade.grade > 3.0 or grade.grade == 5.0 else 'text-gray-800' }}">
+                                                <td class="px-4 py-3 text-center font-bold {{ 'text-red-600' if grade.grade and grade.grade > 3.0 else 'text-gray-800' }}">
                                                     {% if grade.grade and grade.grade > 0 %}
                                                         {{ '%.2f'|format(grade.grade) }}
                                                     {% else %}
@@ -148,6 +153,7 @@
                                         </tbody>
                                     </table>
                                 </div>
+                                {% endif %}
                             </div>
                             {% endfor %}
                         </div>
@@ -172,4 +178,4 @@
         if (sidebarOverlay) sidebarOverlay.addEventListener('click', toggleSidebar);
     });
 </script>
-{% endblock %}
+{% endblock %}

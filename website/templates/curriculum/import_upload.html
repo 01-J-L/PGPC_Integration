@@ -1,0 +1,56 @@
+{% extends 'admin_base.html' %}
+{% from 'curriculum/_macros.html' import input_class, btn_primary %}
+
+{% block title %}Import curriculum reference{% endblock %}
+{% block breadcrumb %}
+<a href="{{ url_for('curriculum.index') }}" class="text-gray-500 hover:text-primary">Curriculum Management</a>
+<i class="ri-arrow-right-s-line mx-1 text-gray-400"></i><span>Import</span>
+{% endblock %}
+{% block page_title %}Import curriculum reference{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <section class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 lg:col-span-1">
+        <h2 class="font-semibold text-gray-800 mb-1">Upload</h2>
+        <p class="text-sm text-gray-500 mb-4">Nothing is saved until you review the rows on the next screen.</p>
+        <form method="POST" enctype="multipart/form-data" class="space-y-4" id="upload-form">
+            <div><label for="im-program" class="block text-sm font-medium text-gray-700 mb-1">Program</label>
+                <select id="im-program" name="program_id" required class="{{ input_class() }}"><option value="">Choose&hellip;</option>
+                    {% for p in programs %}<option value="{{ p.id }}">{{ p.program_code or p.id|upper }} &ndash; {{ p.title }}</option>{% endfor %}</select></div>
+            <div><label for="im-file" class="block text-sm font-medium text-gray-700 mb-1">File</label>
+                <input id="im-file" type="file" name="file" required accept=".docx,.xlsx" class="block w-full text-sm text-gray-700 file:mr-3 file:px-3 file:py-2 file:rounded-md file:border-0 file:bg-gray-100 file:text-gray-700">
+                <ul class="text-xs text-gray-500 mt-2 space-y-1 list-disc ml-4">
+                    <li><strong>Plan of study (.docx)</strong>: the whole curriculum, all years, with prerequisites.</li>
+                    <li><strong>Registration form (.xlsx)</strong>: one term's subjects; use it to cross-check an existing curriculum.</li>
+                </ul></div>
+            <button class="{{ btn_primary() }} w-full" id="upload-btn"><i class="ri-upload-2-line mr-2"></i>Read file</button>
+        </form>
+    </section>
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 lg:col-span-2">
+        <div class="px-5 py-3 border-b border-gray-100"><h2 class="font-semibold text-gray-800">Recent imports</h2></div>
+        <div class="relative overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50 text-xs uppercase text-gray-500"><tr>
+                <th scope="col" class="px-5 py-2 text-left">#</th><th scope="col" class="px-3 py-2 text-left">File</th><th scope="col" class="px-3 py-2 text-left">Program</th>
+                <th scope="col" class="px-3 py-2 text-left">Status</th><th scope="col" class="px-3 py-2 text-left">Into</th><th scope="col" class="px-3 py-2 text-left">By</th></tr></thead>
+            <tbody class="divide-y divide-gray-100">
+            {% for b in batches %}
+                <tr><td class="px-5 py-2 text-gray-500">{{ b.id }}</td>
+                    <td class="px-3 py-2"><a class="text-primary hover:underline" href="{{ url_for('curriculum.import_review', batch_id=b.id) }}">{{ b.source_filename }}</a>
+                        <div class="text-xs text-gray-400">{{ 'Plan of study' if b.source_kind == 'plan_of_study' else 'Registration form' }}</div></td>
+                    <td class="px-3 py-2">{{ b.program.program_code or b.program_id|upper }}</td>
+                    <td class="px-3 py-2">{% if b.status == 'pending_review' %}<span class="text-yellow-700 font-medium">Waiting for review</span>{% elif b.status == 'imported' %}<span class="text-green-700">Imported</span>{% else %}<span class="text-gray-500">Discarded</span>{% endif %}</td>
+                    <td class="px-3 py-2">{% if b.target_version %}<a class="hover:underline" href="{{ url_for('curriculum.version_detail', version_id=b.target_version.id) }}">{{ b.target_version.name }}</a>{% else %}—{% endif %}</td>
+                    <td class="px-3 py-2 text-gray-600">{{ b.uploaded_by }}</td></tr>
+            {% else %}<tr><td colspan="6" class="px-5 py-6 text-center text-gray-500">No imports yet.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </section>
+</div>
+<script>
+document.getElementById('upload-form').addEventListener('submit', function () {
+    var b = document.getElementById('upload-btn'); b.disabled = true; b.innerHTML = '<i class="ri-loader-4-line animate-spin mr-2"></i>Reading&hellip;';
+});
+</script>
+{% endblock %}

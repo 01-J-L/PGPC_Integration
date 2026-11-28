@@ -1,0 +1,97 @@
+{% extends 'admin_base.html' %}
+{% block title %}Grade Release{% endblock %}
+{% block breadcrumb %}Grade Release{% endblock %}
+{% block page_title %}Grade Release &amp; Holds{% endblock %}
+{% block content %}
+{% set ic = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500' %}
+<p class="text-sm text-gray-600 mb-4 max-w-3xl">Students see a term's grades on <em>My Grades</em>, their class card and their dashboard only when the term is <strong>released</strong> for their program and their grades are not on hold. Staff screens always show every grade.</p>
+
+<section class="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
+    <h2 class="px-5 py-3 border-b border-gray-100 font-semibold text-gray-800">Terms</h2>
+    <div class="relative overflow-x-auto">
+    <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 text-xs uppercase text-gray-500"><tr>
+            <th scope="col" class="px-5 py-2 text-left">Term</th><th scope="col" class="px-3 py-2 text-right">Grades</th>
+            <th scope="col" class="px-3 py-2 text-left">All programs</th><th scope="col" class="px-3 py-2 text-left">Program exceptions</th>
+            <th scope="col" class="px-5 py-2"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody class="divide-y divide-gray-100">
+        {% for t in terms %}
+            <tr class="align-top" id="term-{{ loop.index }}">
+                <td class="px-5 py-3 font-medium text-gray-900 whitespace-nowrap">{{ t.label }}</td>
+                <td class="px-3 py-3 text-right whitespace-nowrap">{{ t.grades }}<div class="text-xs text-gray-500">{{ t.students }} student(s)</div></td>
+                <td class="px-3 py-3 text-xs">
+                    {% if t.released %}<span class="inline-flex items-center gap-1 font-semibold text-green-700"><i class="ri-eye-line"></i> Released</span>
+                        <div class="text-gray-500">{{ t.general.released_by }}{% if t.general.released_at %}, {{ t.general.released_at.strftime('%b %d, %Y') }}{% endif %}</div>
+                    {% else %}<span class="inline-flex items-center gap-1 font-semibold text-gray-700"><i class="ri-eye-off-line"></i> Not released</span>
+                        {% if t.general and t.general.withheld_by %}<div class="text-gray-500">Withheld by {{ t.general.withheld_by }}: {{ t.general.reason }}</div>{% endif %}
+                    {% endif %}
+                </td>
+                <td class="px-3 py-3 text-xs">
+                    {% for o in t.overrides %}<div>{{ o.program_key|upper }}: <span class="{{ 'text-green-700' if o.is_released else 'text-gray-700' }} font-medium">{{ 'released' if o.is_released else 'withheld' }}</span></div>{% else %}<span class="text-gray-400">—</span>{% endfor %}
+                </td>
+                <td class="px-5 py-3 text-right">
+                    <form method="POST" action="{{ url_for('grade_release.release') }}" class="flex flex-wrap justify-end items-center gap-2"
+                          onsubmit="if (event.submitter && event.submitter.value === 'withhold') { var r = prompt('Reason for withholding these grades:'); if (!r) return false; this.reason.value = r; } return true;">
+                        <input type="hidden" name="academic_year" value="{{ t.academic_year }}"><input type="hidden" name="semester" value="{{ t.semester }}"><input type="hidden" name="reason" value="">
+                        <label class="sr-only" for="prog-{{ loop.index }}">Program</label>
+                        <select id="prog-{{ loop.index }}" name="program_id" class="text-xs border border-gray-300 rounded-md px-2 py-1 max-w-[11rem]">
+                            <option value="">All programs</option>{% for p in programs %}<option value="{{ p.id }}">{{ p.program_code or p.id }}</option>{% endfor %}</select>
+                        <button name="action" value="release" class="px-2.5 py-1 text-xs font-medium rounded-md bg-green-600 text-white hover:bg-green-700">Release</button>
+                        <button name="action" value="withhold" class="px-2.5 py-1 text-xs font-medium rounded-md bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">Withhold</button>
+                    </form>
+                </td>
+            </tr>
+        {% else %}<tr><td colspan="5" class="px-5 py-8 text-center text-gray-500">No terms yet.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+    <section class="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200">
+        <h2 class="px-5 py-3 border-b border-gray-100 font-semibold text-gray-800">Student holds</h2>
+        <form method="POST" action="{{ url_for('grade_release.place_hold') }}" class="p-5 grid grid-cols-1 md:grid-cols-4 gap-3 border-b border-gray-100">
+            <div><label for="h-student" class="block text-xs text-gray-600 mb-1">Student no., control no. or e-mail</label>
+                <input id="h-student" name="student" class="{{ ic }}" required></div>
+            <div><label for="h-term" class="block text-xs text-gray-600 mb-1">Term</label>
+                <select id="h-term" name="term" class="{{ ic }}"><option value="">All terms</option>{% for t in terms %}<option value="{{ t.academic_year }}|{{ t.semester }}">{{ t.label }}</option>{% endfor %}</select></div>
+            <div><label for="h-reason" class="block text-xs text-gray-600 mb-1">Reason (not shown to the student)</label>
+                <input id="h-reason" name="reason" class="{{ ic }}" required maxlength="500"></div>
+            <div class="flex items-end"><button class="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">Place hold</button></div>
+        </form>
+        <div class="relative overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50 text-xs uppercase text-gray-500"><tr>
+                <th scope="col" class="px-5 py-2 text-left">Student</th><th scope="col" class="px-3 py-2 text-left">Term</th>
+                <th scope="col" class="px-3 py-2 text-left">Reason</th><th scope="col" class="px-3 py-2 text-left">Placed</th>
+                <th scope="col" class="px-5 py-2"><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody class="divide-y divide-gray-100">
+            {% for x in holds %}
+                <tr class="align-top {{ 'text-gray-400' if x.h.lifted_at }}">
+                    <td class="px-5 py-2">{% if x.a %}{{ x.a.last_name }}, {{ x.a.first_name }}<div class="text-xs">{{ x.a.old_student_id or x.a.control_number or '' }}</div>{% else %}#{{ x.h.student_user_id }}{% endif %}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">{{ (x.h.academic_year ~ ' - ' ~ x.h.semester) if x.h.academic_year else 'All terms' }}</td>
+                    <td class="px-3 py-2">{{ x.h.reason }}{% if x.h.lifted_at %}<div class="text-xs">Lifted by {{ x.h.lifted_by }}, {{ x.h.lifted_at.strftime('%b %d, %Y') }}: {{ x.h.lift_reason }}</div>{% endif %}</td>
+                    <td class="px-3 py-2 text-xs whitespace-nowrap">{{ x.h.placed_by }}<div>{{ x.h.placed_at.strftime('%b %d, %Y') }}</div></td>
+                    <td class="px-5 py-2 text-right">{% if not x.h.lifted_at %}
+                        <form method="POST" action="{{ url_for('grade_release.lift_hold', hold_id=x.h.id) }}"
+                              onsubmit="var r = prompt('Reason for lifting the hold:'); if (!r) return false; this.reason.value = r; return true;">
+                            <input type="hidden" name="reason" value=""><button class="text-xs font-medium text-blue-600 hover:underline">Lift</button></form>{% endif %}</td>
+                </tr>
+            {% else %}<tr><td colspan="5" class="px-5 py-6 text-center text-gray-500">No holds.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </section>
+
+    <section class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 self-start">
+        <h2 class="font-semibold text-gray-800 mb-1">Unpaid balance</h2>
+        <p class="text-sm text-gray-600 mb-3">{% if unpaid_rule %}<strong>On:</strong> a student who still owes on a term's assessment does not see that term's grades.{% else %}<strong>Off:</strong> balances do not affect what students see.{% endif %}</p>
+        {% if session.user_role == 'admin' %}
+        <form method="POST" action="{{ url_for('grade_release.settings') }}">
+            <input type="hidden" name="unpaid_rule" value="{{ '0' if unpaid_rule else '1' }}">
+            <button class="px-4 py-2 text-sm font-medium rounded-md {{ 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50' if unpaid_rule else 'bg-blue-600 text-white hover:bg-blue-700' }}">{{ 'Turn off' if unpaid_rule else 'Turn on' }}</button>
+        </form>
+        {% else %}<p class="text-xs text-gray-500">An administrator can change this.</p>{% endif %}
+    </section>
+</div>
+{% endblock %}

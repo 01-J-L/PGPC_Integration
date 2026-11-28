@@ -48,6 +48,7 @@
         <link rel="icon" href="{{ url_for('static', filename='logopgpc.png') }}" type="image/x-icon">
 
         
+    {% include '_csrf.html' %}
     {% block head %}{% endblock%}
     {% block style %}{% endblock%}
 <body>

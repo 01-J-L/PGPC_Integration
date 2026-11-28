@@ -5,15 +5,17 @@ from flask_login import LoginManager, current_user
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
 import os
-from flask import request, session, render_template
+from flask import request, session, render_template, flash, redirect, jsonify
+from flask_wtf.csrf import CSRFProtect, CSRFError
 
 # Load environment variables
 load_dotenv()
 
 # Initialize Extensions
 mail = Mail()
-db = SQLAlchemy()           
-login_manager = LoginManager() 
+db = SQLAlchemy()
+login_manager = LoginManager()
+csrf = CSRFProtect()
 
 def create_app():
     app = Flask(__name__)
@@ -24,6 +26,15 @@ def create_app():
     if not app.config['SECRET_KEY']:
         raise RuntimeError("FLASK_SECRET_KEY is not set. Add it to the .env file.")
     app.debug = os.getenv('FLASK_DEBUG', 'False').lower() in ('true', '1', 't')
+
+    # --- 1b. Session cookie / CSRF hardening (Phase 1, P1-01) ---
+    # Tokens stay valid for the whole login session so long-open registrar and
+    # cashier pages do not fail on submit. Set SESSION_COOKIE_SECURE=True in
+    # .env once the site is served over HTTPS.
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False').lower() in ('true', '1', 't')
+    app.config['WTF_CSRF_TIME_LIMIT'] = None
 
     # --- 2. File Upload Configuration ---
     upload_folder = os.path.join(app.root_path, 'static', 'images', 'uploads')
@@ -77,7 +88,22 @@ def create_app():
     mail.init_app(app)
     db.init_app(app)
     login_manager.init_app(app)
-    
+    csrf.init_app(app)
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(e):
+        # JSON callers (fetch) get a JSON error; normal form posts go back to
+        # the page they came from with a readable message instead of a bare 400.
+        wants_json = request.is_json or 'application/json' in (request.headers.get('Accept') or '')
+        message = 'Your session security token is missing or expired. Please reload the page and try again.'
+        if wants_json:
+            return jsonify({'success': False, 'message': message}), 400
+        flash(message, 'danger')
+        from urllib.parse import urlparse
+        ref = request.referrer or ''
+        back = ref if ref and urlparse(ref).netloc == request.host else '/'
+        return redirect(back), 302
+
     # Login Manager Setup for Faculty
     login_manager.login_view = 'faculty_auth.login'
     login_manager.login_message_category = 'info'
@@ -90,6 +116,27 @@ def create_app():
 
     app.register_blueprint(views, url_prefix='/')
     app.register_blueprint(auth, url_prefix='/')
+
+    # Phase 2: registrar curriculum management
+    from .curriculum.routes import curriculum
+    app.register_blueprint(curriculum, url_prefix='/admin/curriculum')
+
+    # Phase 3: registration forms (registrar) + student's own finalized form
+    from .registration.routes import registration, student_registration
+    app.register_blueprint(registration, url_prefix='/admin/registration')
+    app.register_blueprint(student_registration, url_prefix='/')
+
+    # Phase 4: enrollment assessments, payment verification and policy
+    from .finance.routes import finance
+    app.register_blueprint(finance, url_prefix='/accounting/enrollment-finance')
+
+    # Phase 5: approval checklist and registrar check-in
+    from .checkin.routes import checkin
+    app.register_blueprint(checkin, url_prefix='/admin/enrollment-checkin')
+
+    # Phase 7: grade visibility (release per term / program, holds)
+    from .grades.routes import grade_release
+    app.register_blueprint(grade_release, url_prefix='/admin/grade-release')
 
     # B. FACULTY SYSTEM BLUEPRINTS (Imported from the pasted 'faculty' folder)
     # Note: We wrap this in try/except so the app doesn't crash if files are missing
@@ -156,4 +203,21 @@ def create_app():
     except Exception as e:
         print(f"[WARN] Database auto-create failed: {e}")
 
-    return app
+    # --- 7. REPORT PENDING SCHEMA MIGRATIONS (never applied automatically) ---
+    try:
+        from .schema_migrations import pending as _pending_migrations
+        with app.app_context():
+            raw = db.engine.raw_connection()
+            try:
+                todo = _pending_migrations(raw)
+                raw.commit()
+            finally:
+                raw.close()
+        if todo:
+            print(f"[WARN] {len(todo)} database migration(s) pending: "
+                  f"{', '.join(m['id'] for m in todo)}. Back up the database, then run: "
+                  f"python scripts/migrate.py apply --backup-done")
+    except Exception as e:
+        print(f"[WARN] Could not check schema migrations: {e}")
+
+    return app

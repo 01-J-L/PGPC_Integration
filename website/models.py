@@ -9,6 +9,11 @@
 
 import sqlalchemy as _sa
 from website import db, login_manager
+from sqlalchemy.dialects import mysql as _mysql
+
+# Uploaded documents/photos: uploads are capped at 5 MB, plain BLOB holds only
+# 64 KB on MySQL/MariaDB (P1-12, migration 0002), so use MEDIUMBLOB (16 MB).
+_DOC_BLOB = db.LargeBinary().with_variant(_mysql.MEDIUMBLOB(), 'mysql', 'mariadb')
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
@@ -210,6 +215,678 @@ class Prerequisite(db.Model):
     __table_args__ = (
         db.UniqueConstraint('subject_id', 'prerequisite_subject_id'),
     )
+
+
+# =========================================================
+# CURRICULUM MANAGEMENT (Phase 2)
+# ---------------------------------------------------------
+# A curriculum version is one plan of study of one program (e.g. "BSCS
+# Curriculum 2026" for the cohort entering AY 2026-2027). Several versions
+# of the same program can be active at once because each cohort keeps the
+# plan it entered with. Subjects inside a version are version-scoped, so the
+# same code (GE105) can appear in every program and every version without
+# touching the legacy `subjects` table (whose subject_code is globally
+# UNIQUE and is used by grading). `subject_id` links a curriculum subject to
+# the legacy subject with the same code in the same program, when one exists.
+# =========================================================
+
+CURRICULUM_STATUSES = ('draft', 'active', 'archived')
+# Same storage options as full.sql so FOREIGN KEYs to programs / student_users match.
+_INNODB = {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+SEMESTER_LABELS = {1: '1st Semester', 2: '2nd Semester', 3: 'Summer'}
+YEAR_LABELS = {1: '1st Year', 2: '2nd Year', 3: '3rd Year', 4: '4th Year', 5: '5th Year'}
+
+
+class CurriculumVersion(db.Model):
+    __tablename__ = 'curriculum_versions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    program_id = db.Column(db.String(50), db.ForeignKey('programs.program_id', ondelete='RESTRICT'), nullable=False, index=True)
+    name = db.Column(db.String(150), nullable=False)
+    # Academic year the cohort using this plan entered (e.g. '2026-2027').
+    effective_academic_year = db.Column(db.String(20), nullable=False)
+    description = db.Column(db.Text)
+    status = db.Column(db.String(20), nullable=False, default='draft', server_default='draft')
+    # The version new first-year students of the program are given automatically.
+    is_default_for_new = db.Column(db.Boolean, nullable=False, default=False, server_default=_sa.text('0'))
+    max_year_level = db.Column(db.Integer, nullable=False, default=4, server_default=_sa.text('4'))
+    source_reference = db.Column(db.String(255))
+    created_by = db.Column(db.String(150))
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+    activated_by = db.Column(db.String(150))
+    activated_at = db.Column(db.DateTime)
+    activation_note = db.Column(db.Text)
+
+    program = db.relationship('Program', backref=db.backref('curriculum_versions', lazy='dynamic', passive_deletes='all'))
+    subjects = db.relationship('CurriculumSubject', backref='version', lazy='dynamic',
+                               order_by='(CurriculumSubject.year_level, CurriculumSubject.semester, CurriculumSubject.sort_order, CurriculumSubject.id)',
+                               passive_deletes='all')
+
+    __table_args__ = (
+        db.UniqueConstraint('program_id', 'name', name='uq_curriculum_version_name'),
+        _INNODB,
+    )
+
+    def __repr__(self):
+        return f'<CurriculumVersion {self.program_id} {self.name} ({self.status})>'
+
+
+class CurriculumSubject(db.Model):
+    __tablename__ = 'curriculum_subjects'
+
+    id = db.Column(db.Integer, primary_key=True)
+    curriculum_version_id = db.Column(db.Integer, db.ForeignKey('curriculum_versions.id', ondelete='RESTRICT'), nullable=False, index=True)
+    year_level = db.Column(db.Integer, nullable=False)
+    semester = db.Column(db.Integer, nullable=False)      # 1, 2, 3 (= Summer)
+    subject_code = db.Column(db.String(30), nullable=False)  # as written officially, e.g. "GE 105"
+    code_key = db.Column(db.String(30), nullable=False)      # upper-case, no spaces, e.g. "GE105"
+    description = db.Column(db.String(500), nullable=False)
+    units = db.Column(db.Numeric(4, 1), nullable=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=0, server_default=_sa.text('0'))
+    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id', ondelete='RESTRICT'), index=True)
+    notes = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+    legacy_subject = db.relationship('Subject')
+    prerequisites = db.relationship('CurriculumPrerequisite', backref='subject', lazy='select',
+                                    foreign_keys='CurriculumPrerequisite.curriculum_subject_id',
+                                    order_by='CurriculumPrerequisite.id', passive_deletes='all')
+
+    __table_args__ = (
+        db.UniqueConstraint('curriculum_version_id', 'code_key', name='uq_curriculum_subject_code'),
+        db.CheckConstraint('semester IN (1, 2, 3)', name='ck_curriculum_subject_semester'),
+        db.CheckConstraint('year_level BETWEEN 1 AND 5', name='ck_curriculum_subject_year'),
+        db.CheckConstraint('units >= 0', name='ck_curriculum_subject_units'),
+        _INNODB,
+    )
+
+    @property
+    def term_key(self):
+        return (self.year_level, self.semester)
+
+    def __repr__(self):
+        return f'<CurriculumSubject {self.subject_code} Y{self.year_level}S{self.semester}>'
+
+
+class CurriculumPrerequisite(db.Model):
+    """One requirement of a curriculum subject.
+
+    kind = 'subject'  -> prerequisite_subject_id must be passed first
+    kind = 'standing' -> min_year_level reached (e.g. "4th Year Standing")
+    kind = 'units'    -> min_units earned (e.g. "Completed 110 Academic units")
+    kind = 'other'    -> free text kept from the plan for the registrar to apply
+    """
+    __tablename__ = 'curriculum_prerequisites'
+
+    id = db.Column(db.Integer, primary_key=True)
+    curriculum_subject_id = db.Column(db.Integer, db.ForeignKey('curriculum_subjects.id', ondelete='RESTRICT'), nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False, default='subject', server_default='subject')
+    prerequisite_subject_id = db.Column(db.Integer, db.ForeignKey('curriculum_subjects.id', ondelete='RESTRICT'), index=True)
+    min_year_level = db.Column(db.Integer)
+    min_units = db.Column(db.Numeric(5, 1))
+    requirement_text = db.Column(db.String(255))
+
+    prerequisite = db.relationship('CurriculumSubject', foreign_keys=[prerequisite_subject_id])
+
+    __table_args__ = (
+        db.UniqueConstraint('curriculum_subject_id', 'prerequisite_subject_id', name='uq_curriculum_prereq_pair'),
+        _INNODB,
+    )
+
+    def label(self):
+        if self.kind == 'subject' and self.prerequisite is not None:
+            return self.prerequisite.subject_code
+        if self.kind == 'standing' and self.min_year_level:
+            return f"{YEAR_LABELS.get(self.min_year_level, str(self.min_year_level))} standing"
+        if self.kind == 'units' and self.min_units is not None:
+            u = self.min_units
+            return f"{int(u) if u == int(u) else u} units completed"
+        return self.requirement_text or ''
+
+
+class StudentCurriculum(db.Model):
+    """Which curriculum version a student follows (history kept: ended_at)."""
+    __tablename__ = 'student_curricula'
+    __table_args__ = (_INNODB,)
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False, index=True)
+    curriculum_version_id = db.Column(db.Integer, db.ForeignKey('curriculum_versions.id', ondelete='RESTRICT'), nullable=False, index=True)
+    assigned_by = db.Column(db.String(150))
+    assigned_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+    ended_at = db.Column(db.DateTime)
+    reason = db.Column(db.String(255))
+
+    version = db.relationship('CurriculumVersion')
+
+
+class CurriculumImportBatch(db.Model):
+    """A parsed reference file waiting for (or finished with) registrar review."""
+    __tablename__ = 'curriculum_import_batches'
+    __table_args__ = (_INNODB,)
+
+    id = db.Column(db.Integer, primary_key=True)
+    program_id = db.Column(db.String(50), db.ForeignKey('programs.program_id', ondelete='RESTRICT'), nullable=False, index=True)
+    source_filename = db.Column(db.String(255), nullable=False)
+    source_kind = db.Column(db.String(20), nullable=False)        # 'plan_of_study' | 'registration_form'
+    source_sha256 = db.Column(db.String(64), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='pending_review', server_default='pending_review')
+    target_version_id = db.Column(db.Integer, db.ForeignKey('curriculum_versions.id', ondelete='RESTRICT'))
+    payload = db.Column(db.Text().with_variant(_mysql.MEDIUMTEXT(), 'mysql', 'mariadb'), nullable=False)  # JSON rows + issues
+    summary = db.Column(db.String(500))
+    uploaded_by = db.Column(db.String(150))
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+    decided_by = db.Column(db.String(150))
+    decided_at = db.Column(db.DateTime)
+
+    program = db.relationship('Program')
+    target_version = db.relationship('CurriculumVersion')
+
+
+class CurriculumAuditLog(db.Model):
+    __tablename__ = 'curriculum_audit_log'
+    __table_args__ = (_INNODB,)
+
+    id = db.Column(db.Integer, primary_key=True)
+    curriculum_version_id = db.Column(db.Integer, index=True)   # no FK: the log outlives anything
+    entity = db.Column(db.String(30), nullable=False)
+    entity_id = db.Column(db.Integer)
+    action = db.Column(db.String(30), nullable=False)
+    details = db.Column(db.Text)
+    performed_by = db.Column(db.String(150))
+    performed_role = db.Column(db.String(30))
+    performed_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), index=True)
+
+
+CURRICULUM_TABLES = ['curriculum_versions', 'curriculum_subjects', 'curriculum_prerequisites',
+                     'student_curricula', 'curriculum_import_batches', 'curriculum_audit_log']
+
+
+# =========================================================
+# REGISTRATION FORMS / REGFORM (Phase 3)
+# ---------------------------------------------------------
+# One registration form per student per academic term. Lines are SNAPSHOTS
+# (code, description, units, schedule) of the curriculum subject at the time
+# they were added, so later curriculum edits never change a past REGFORM.
+# =========================================================
+
+REGFORM_STATUSES = ('draft', 'finalized', 'cancelled')
+REGFORM_CLASSIFICATIONS = ('Regular', 'Irregular')
+
+
+class RegistrationForm(db.Model):
+    __tablename__ = 'registration_forms'
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False, index=True)
+    applicant_id = db.Column(db.Integer, db.ForeignKey('applicants.applicant_id', ondelete='RESTRICT'), nullable=False, index=True)
+    academic_term_id = db.Column(db.Integer, db.ForeignKey('academic_terms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    curriculum_version_id = db.Column(db.Integer, db.ForeignKey('curriculum_versions.id', ondelete='RESTRICT'), nullable=False, index=True)
+    program_id = db.Column(db.String(50), db.ForeignKey('programs.program_id', ondelete='RESTRICT'), nullable=False)
+    year_level = db.Column(db.Integer, nullable=False)
+    semester = db.Column(db.Integer, nullable=False)
+    classification = db.Column(db.String(20), nullable=False, default='Regular', server_default='Regular')
+    classification_reason = db.Column(db.String(255))
+    status = db.Column(db.String(20), nullable=False, default='draft', server_default='draft')
+    section_id = db.Column(db.Integer, db.ForeignKey('sections.id', ondelete='RESTRICT'))   # block / home section
+    max_units = db.Column(db.Numeric(5, 1), nullable=False)
+    total_units = db.Column(db.Numeric(5, 1), nullable=False, default=0, server_default=_sa.text('0'))
+    control_number = db.Column(db.String(30))          # filled in Phase 6
+    notes = db.Column(db.String(500))
+    created_by = db.Column(db.String(150))
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+    finalized_by = db.Column(db.String(150))
+    finalized_at = db.Column(db.DateTime)
+
+    term = db.relationship('AcademicTerm')
+    curriculum = db.relationship('CurriculumVersion')
+    program = db.relationship('Program')
+    section = db.relationship('Section')
+    applicant = db.relationship('Applicant')
+    lines = db.relationship('RegistrationFormSubject', backref='form', lazy='select', passive_deletes='all',
+                            order_by='(RegistrationFormSubject.year_level, RegistrationFormSubject.semester, RegistrationFormSubject.id)')
+
+    __table_args__ = (
+        db.UniqueConstraint('student_user_id', 'academic_term_id', name='uq_regform_student_term'),
+        db.CheckConstraint('semester IN (1, 2, 3)', name='ck_regform_semester'),
+        _INNODB,
+    )
+
+
+class RegistrationFormSubject(db.Model):
+    __tablename__ = 'registration_form_subjects'
+
+    id = db.Column(db.Integer, primary_key=True)
+    registration_form_id = db.Column(db.Integer, db.ForeignKey('registration_forms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    curriculum_subject_id = db.Column(db.Integer, db.ForeignKey('curriculum_subjects.id', ondelete='RESTRICT'), nullable=False, index=True)
+    subject_code = db.Column(db.String(30), nullable=False)
+    code_key = db.Column(db.String(30), nullable=False)
+    description = db.Column(db.String(500), nullable=False)
+    units = db.Column(db.Numeric(4, 1), nullable=False)
+    year_level = db.Column(db.Integer, nullable=False)     # term of the subject in the curriculum
+    semester = db.Column(db.Integer, nullable=False)
+    section_id = db.Column(db.Integer, db.ForeignKey('sections.id', ondelete='RESTRICT'), index=True)
+    schedule_text = db.Column(db.String(500))            # snapshot of the class schedule
+    source = db.Column(db.String(20), nullable=False, default='curriculum', server_default='curriculum')  # curriculum | added | back_subject
+    remarks = db.Column(db.String(255))
+    added_by = db.Column(db.String(150))
+    added_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+
+    curriculum_subject = db.relationship('CurriculumSubject')
+    section = db.relationship('Section')
+
+    __table_args__ = (
+        db.UniqueConstraint('registration_form_id', 'code_key', name='uq_regform_line_code'),
+        _INNODB,
+    )
+
+
+class RegistrationFormChange(db.Model):
+    """Every registrar change to a REGFORM, with the previous and new values."""
+    __tablename__ = 'registration_form_changes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    registration_form_id = db.Column(db.Integer, nullable=False, index=True)   # no FK: log outlives anything
+    action = db.Column(db.String(30), nullable=False)
+    subject_code = db.Column(db.String(30))
+    details = db.Column(db.Text)
+    performed_by = db.Column(db.String(150))
+    performed_role = db.Column(db.String(30))
+    performed_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+
+    __table_args__ = (_INNODB,)
+
+
+REGISTRATION_TABLES = ['registration_forms', 'registration_form_subjects', 'registration_form_changes']
+
+
+# =========================================================
+# ENROLLMENT FINANCE (Phase 4)
+# ---------------------------------------------------------
+# The existing ledger stays the source of truth: `assessments` (charges) and
+# `payments` (money in, including 'Discount' / 'Voucher' credits). These
+# tables only ADD what was missing: which charges belong to which term's
+# registration form, payment verification, reversals instead of deletes,
+# double-submit protection and an audit trail.
+# =========================================================
+
+class EnrollmentAssessment(db.Model):
+    __tablename__ = 'enrollment_assessments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    registration_form_id = db.Column(db.Integer, db.ForeignKey('registration_forms.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False, index=True)
+    applicant_id = db.Column(db.Integer, db.ForeignKey('applicants.applicant_id', ondelete='RESTRICT'), nullable=False, index=True)
+    academic_term_id = db.Column(db.Integer, db.ForeignKey('academic_terms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    residency = db.Column(db.String(20), nullable=False)          # resident | non_resident (same rule as batch fees)
+    total_units = db.Column(db.Numeric(5, 1), nullable=False)
+    total_assessment = db.Column(db.Numeric(12, 2), nullable=False)
+    generated_by = db.Column(db.String(150))
+    generated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+    regenerated_at = db.Column(db.DateTime)
+    notes = db.Column(db.String(500))
+
+    registration_form = db.relationship('RegistrationForm', backref=db.backref('assessment', uselist=False))
+    items = db.relationship('EnrollmentAssessmentItem', backref='enrollment_assessment', lazy='select', passive_deletes='all')
+
+    __table_args__ = (
+        db.UniqueConstraint('student_user_id', 'academic_term_id', name='uq_enrollment_assessment_term'),
+        _INNODB,
+    )
+
+
+class EnrollmentAssessmentItem(db.Model):
+    __tablename__ = 'enrollment_assessment_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    enrollment_assessment_id = db.Column(db.Integer, db.ForeignKey('enrollment_assessments.id', ondelete='RESTRICT'), nullable=False, index=True)
+    assessment_id = db.Column(db.Integer, db.ForeignKey('assessments.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    batch_id = db.Column(db.Integer, index=True)
+    description = db.Column(db.String(255), nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    adopted = db.Column(db.Boolean, nullable=False, default=False, server_default=_sa.text('0'))  # charge already existed
+
+    __table_args__ = (_INNODB,)
+
+
+class PaymentVerification(db.Model):
+    __tablename__ = 'payment_verifications'
+
+    id = db.Column(db.Integer, primary_key=True)
+    payment_id = db.Column(db.Integer, db.ForeignKey('payments.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    status = db.Column(db.String(20), nullable=False, default='verified', server_default='verified')
+    verified_by = db.Column(db.String(150), nullable=False)
+    verified_role = db.Column(db.String(30))
+    verified_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+    notes = db.Column(db.String(255))
+
+    __table_args__ = (_INNODB,)
+
+
+class PaymentReversal(db.Model):
+    """A payment is never deleted: a reversal adds an equal negative payment
+    row (method 'Reversal') and links the two here."""
+    __tablename__ = 'payment_reversals'
+
+    id = db.Column(db.Integer, primary_key=True)
+    payment_id = db.Column(db.Integer, db.ForeignKey('payments.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    reversal_payment_id = db.Column(db.Integer, db.ForeignKey('payments.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    reason = db.Column(db.String(255), nullable=False)
+    reversed_by = db.Column(db.String(150), nullable=False)
+    reversed_role = db.Column(db.String(30))
+    reversed_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+
+    __table_args__ = (_INNODB,)
+
+
+class PaymentSubmission(db.Model):
+    """One row per payment form submission token: a double click or a browser
+    re-submit of the same form can never record the payment twice."""
+    __tablename__ = 'payment_submissions'
+
+    token = db.Column(db.String(64), primary_key=True)
+    payment_id = db.Column(db.Integer, db.ForeignKey('payments.id', ondelete='RESTRICT'))
+    submitted_by = db.Column(db.String(150))
+    created_at = db.Column(db.DateTime, server_default=db.func.current_timestamp())
+
+    __table_args__ = (_INNODB,)
+
+
+class FinanceAuditLog(db.Model):
+    __tablename__ = 'finance_audit_log'
+
+    id = db.Column(db.Integer, primary_key=True)
+    action = db.Column(db.String(40), nullable=False)
+    applicant_id = db.Column(db.Integer, index=True)
+    payment_id = db.Column(db.Integer, index=True)
+    enrollment_assessment_id = db.Column(db.Integer, index=True)
+    details = db.Column(db.Text)
+    performed_by = db.Column(db.String(150))
+    performed_role = db.Column(db.String(30))
+    performed_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), index=True)
+
+    __table_args__ = (_INNODB,)
+
+
+FINANCE_TABLES = ['enrollment_assessments', 'enrollment_assessment_items', 'payment_verifications',
+                  'payment_reversals', 'payment_submissions', 'finance_audit_log']
+
+
+# =========================================================
+# PHASE 5: APPROVAL CHECKLIST AND CHECK-IN
+# =========================================================
+
+class EnrollmentChecklistRequirement(db.Model):
+    """One line of the enrollment approval checklist (configurable by an administrator).
+
+    kind: 'regform' (met when the term's registration form is finalized),
+          'payment' (met when the Phase 4 enrollment payment policy is met),
+          'manual'  (met when an authorised office approves it for the student and term).
+    """
+    __tablename__ = 'enrollment_checklist_requirements'
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(40), nullable=False, unique=True)
+    label = db.Column(db.String(150), nullable=False)
+    description = db.Column(db.String(500))
+    kind = db.Column(db.String(20), nullable=False, default='manual', server_default='manual')
+    approver_roles = db.Column(db.String(200), nullable=False, default='registrar,admin', server_default='registrar,admin')
+    applies_to = db.Column(db.String(20), nullable=False, default='all', server_default='all')     # all / new / existing
+    is_required = db.Column(db.Boolean, nullable=False, default=True, server_default=_sa.text('1'))
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=_sa.text('1'))
+    sort_order = db.Column(db.Integer, nullable=False, default=100, server_default=_sa.text('100'))
+    updated_by = db.Column(db.String(150))
+    updated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+    __table_args__ = (_INNODB,)
+
+    @property
+    def roles(self):
+        return [r.strip() for r in (self.approver_roles or '').split(',') if r.strip()]
+
+
+class EnrollmentChecklistItem(db.Model):
+    """The current state of a manual checklist line for one student and term (history is in the audit log)."""
+    __tablename__ = 'enrollment_checklist_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False)
+    academic_term_id = db.Column(db.Integer, db.ForeignKey('academic_terms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    requirement_id = db.Column(db.Integer, db.ForeignKey('enrollment_checklist_requirements.id', ondelete='RESTRICT'), nullable=False, index=True)
+    status = db.Column(db.String(20), nullable=False, default='approved', server_default='approved')   # approved / revoked
+    notes = db.Column(db.String(500))
+    approved_by = db.Column(db.String(150))
+    approved_role = db.Column(db.String(30))
+    approved_at = db.Column(db.DateTime)
+    revoked_by = db.Column(db.String(150))
+    revoked_at = db.Column(db.DateTime)
+    revoke_reason = db.Column(db.String(500))
+
+    requirement = db.relationship('EnrollmentChecklistRequirement')
+
+    __table_args__ = (db.UniqueConstraint('student_user_id', 'academic_term_id', 'requirement_id', name='uq_checklist_item'), _INNODB)
+
+
+class EnrollmentCheckin(db.Model):
+    """Final registrar check-in of a student for a term. Undoing keeps the row (active becomes NULL)."""
+    __tablename__ = 'enrollment_checkins'
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False)
+    applicant_id = db.Column(db.Integer, db.ForeignKey('applicants.applicant_id', ondelete='RESTRICT'), nullable=False, index=True)
+    academic_term_id = db.Column(db.Integer, db.ForeignKey('academic_terms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    registration_form_id = db.Column(db.Integer, db.ForeignKey('registration_forms.id', ondelete='RESTRICT'), index=True)
+    active = db.Column(db.Boolean)                # 1 while in force, NULL once undone (lets the unique key keep one active row)
+    checklist_snapshot = db.Column(db.Text)       # JSON: every checklist line as it stood at check-in
+    checked_in_by = db.Column(db.String(150), nullable=False)
+    checked_in_role = db.Column(db.String(30), nullable=False)
+    checked_in_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+    undone_by = db.Column(db.String(150))
+    undone_role = db.Column(db.String(30))
+    undone_at = db.Column(db.DateTime)
+    undo_reason = db.Column(db.String(500))
+
+    __table_args__ = (db.UniqueConstraint('student_user_id', 'academic_term_id', 'active', name='uq_checkin_active'), _INNODB)
+
+
+class EnrollmentAuditLog(db.Model):
+    __tablename__ = 'enrollment_audit_log'
+
+    id = db.Column(db.Integer, primary_key=True)
+    action = db.Column(db.String(40), nullable=False)
+    student_user_id = db.Column(db.Integer, index=True)
+    applicant_id = db.Column(db.Integer, index=True)
+    academic_term_id = db.Column(db.Integer, index=True)
+    details = db.Column(db.Text)
+    performed_by = db.Column(db.String(150))
+    performed_role = db.Column(db.String(30))
+    performed_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), index=True)
+
+    __table_args__ = (_INNODB,)
+
+
+CHECKIN_TABLES = ['enrollment_checklist_requirements', 'enrollment_checklist_items', 'enrollment_checkins',
+                  'enrollment_audit_log']
+
+
+# =========================================================
+# PHASE 6: PGPC-YY-NNNN ENROLLMENT CONTROL NUMBERS
+# =========================================================
+
+class ControlNumberSequence(db.Model):
+    """One counter per prefix and school-year code (e.g. PGPC / 26). Locked with
+    SELECT ... FOR UPDATE while a number is issued, so numbers are never shared."""
+    __tablename__ = 'control_number_sequences'
+
+    id = db.Column(db.Integer, primary_key=True)
+    prefix = db.Column(db.String(10), nullable=False, default='PGPC', server_default='PGPC')
+    year_code = db.Column(db.String(2), nullable=False)            # '26' for 2026-2027
+    school_year = db.Column(db.String(9))                          # '2026-2027' (for display)
+    last_number = db.Column(db.Integer, nullable=False, default=0, server_default=_sa.text('0'))
+    updated_by = db.Column(db.String(150))
+    updated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+    __table_args__ = (db.UniqueConstraint('prefix', 'year_code', name='uq_control_sequence'), _INNODB)
+
+
+class ControlNumber(db.Model):
+    """Register of every control number issued. Rows are never deleted or reused:
+    one number per student and term, kept even if the check-in is undone."""
+    __tablename__ = 'control_numbers'
+
+    id = db.Column(db.Integer, primary_key=True)
+    number = db.Column(db.String(30), nullable=False, unique=True)
+    sequence_id = db.Column(db.Integer, db.ForeignKey('control_number_sequences.id', ondelete='RESTRICT'), nullable=False, index=True)
+    seq = db.Column(db.Integer, nullable=False)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False)
+    applicant_id = db.Column(db.Integer, db.ForeignKey('applicants.applicant_id', ondelete='RESTRICT'), nullable=False, index=True)
+    academic_term_id = db.Column(db.Integer, db.ForeignKey('academic_terms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    registration_form_id = db.Column(db.Integer, db.ForeignKey('registration_forms.id', ondelete='RESTRICT'), index=True)
+    issued_by = db.Column(db.String(150), nullable=False)
+    issued_role = db.Column(db.String(30))
+    issued_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+    source = db.Column(db.String(20), nullable=False, default='check_in', server_default='check_in')   # check_in / backfill
+
+    __table_args__ = (db.UniqueConstraint('student_user_id', 'academic_term_id', name='uq_control_number_term'),
+                      db.UniqueConstraint('sequence_id', 'seq', name='uq_control_number_seq'), _INNODB)
+
+
+CONTROL_TABLES = ['control_number_sequences', 'control_numbers']
+
+
+# =========================================================
+# PHASE 7: GRADE VISIBILITY (release per term / program, holds)
+# =========================================================
+
+class GradeRelease(db.Model):
+    """Whether students may see the registrar's grades (student_grades) of a term.
+
+    program_key '' = every program; a program id = an override for that program.
+    Terms are keyed by the same strings student_grades uses (academic_year, semester)."""
+    __tablename__ = 'grade_releases'
+
+    id = db.Column(db.Integer, primary_key=True)
+    academic_year = db.Column(db.String(20), nullable=False)
+    semester = db.Column(db.String(50), nullable=False)
+    program_key = db.Column(db.String(50), nullable=False, default='', server_default='')
+    is_released = db.Column(db.Boolean, nullable=False, default=False, server_default=_sa.text('0'))
+    released_by = db.Column(db.String(150))
+    released_at = db.Column(db.DateTime)
+    withheld_by = db.Column(db.String(150))
+    withheld_at = db.Column(db.DateTime)
+    reason = db.Column(db.String(500))
+    updated_at = db.Column(db.DateTime, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+    __table_args__ = (db.UniqueConstraint('academic_year', 'semester', 'program_key', name='uq_grade_release'), _INNODB)
+
+
+class GradeHold(db.Model):
+    """A registrar hold on one student's grades (one term, or every term when academic_year is '').
+    Lifting keeps the row."""
+    __tablename__ = 'grade_holds'
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False, index=True)
+    academic_year = db.Column(db.String(20), nullable=False, default='', server_default='')
+    semester = db.Column(db.String(50), nullable=False, default='', server_default='')
+    reason = db.Column(db.String(500), nullable=False)
+    placed_by = db.Column(db.String(150), nullable=False)
+    placed_role = db.Column(db.String(30))
+    placed_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+    lifted_by = db.Column(db.String(150))
+    lifted_at = db.Column(db.DateTime)
+    lift_reason = db.Column(db.String(500))
+
+    __table_args__ = (_INNODB,)
+
+
+GRADE_TABLES = ['grade_releases', 'grade_holds']
+
+
+# =========================================================
+# PHASE 8: SECTION ARCHIVING (instead of deleting sections that have history)
+# =========================================================
+
+class SectionArchive(db.Model):
+    """Archive state of a section. Archiving sets sections.is_active = 0 (hidden from
+    new enrollment and section pickers) and remembers who, when and why; restoring
+    puts back the previous is_active. One row per section; history is in the audit log."""
+    __tablename__ = 'section_archives'
+
+    id = db.Column(db.Integer, primary_key=True)
+    section_id = db.Column(db.Integer, db.ForeignKey('sections.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    is_archived = db.Column(db.Boolean, nullable=False, default=True, server_default=_sa.text('1'))
+    was_active = db.Column(db.Boolean)
+    reason = db.Column(db.String(500), nullable=False)
+    archived_by = db.Column(db.String(150), nullable=False)
+    archived_role = db.Column(db.String(30))
+    archived_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+    restored_by = db.Column(db.String(150))
+    restored_at = db.Column(db.DateTime)
+    restore_reason = db.Column(db.String(500))
+
+    __table_args__ = (_INNODB,)
+
+
+SECTION_TABLES = ['section_archives']
+
+
+# =========================================================
+# ENROLLMENT DOWN PAYMENTS (paid before the term's fees exist)
+# =========================================================
+
+class DownPayment(db.Model):
+    """A payment taken before enrollment, not yet on a charge (payments.assessment_id NULL).
+
+    It counts toward the enrollment payment policy and the term balance at once, and is
+    applied to the student's Tuition Fee charge as soon as that charge exists (form
+    finalized) and at the latest at check-in: the payment row then points to the charge
+    (same amount, same receipt, verification kept). status: held / applied / reversed."""
+    __tablename__ = 'down_payments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    payment_id = db.Column(db.Integer, db.ForeignKey('payments.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    student_user_id = db.Column(db.Integer, db.ForeignKey('student_users.id', ondelete='RESTRICT'), nullable=False, index=True)
+    applicant_id = db.Column(db.Integer, db.ForeignKey('applicants.applicant_id', ondelete='RESTRICT'), nullable=False, index=True)
+    academic_term_id = db.Column(db.Integer, db.ForeignKey('academic_terms.id', ondelete='RESTRICT'), nullable=False, index=True)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='held', server_default='held')
+    applied_assessment_id = db.Column(db.Integer, db.ForeignKey('assessments.id', ondelete='RESTRICT'))
+    applied_by = db.Column(db.String(150))
+    applied_at = db.Column(db.DateTime)
+    created_by = db.Column(db.String(150), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+
+    __table_args__ = (_INNODB,)
+
+
+DOWN_PAYMENT_TABLES = ['down_payments']
+
+
+# =========================================================
+# FEE DESCRIPTIONS (the dropdown of the batch assessment form)
+# =========================================================
+
+class FeeDescription(db.Model):
+    """Names Accounting allows for fee rules ("Tuition Fee", "Laboratory Fee", ...).
+    Hidden names stay for history; existing rules and charges are never renamed."""
+    __tablename__ = 'fee_descriptions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False, unique=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=_sa.text('1'))
+    created_by = db.Column(db.String(150), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
+    updated_by = db.Column(db.String(150))
+    updated_at = db.Column(db.DateTime)
+
+    __table_args__ = (_INNODB,)
+
+
+FEE_DESCRIPTION_TABLES = ['fee_descriptions']
 
 
 class ProgramObjective(db.Model):
@@ -458,15 +1135,15 @@ class Applicant(db.Model):
     tertiary_course = db.Column(db.Text)
     tertiary_year_from = db.Column(db.String(10))
     tertiary_year_to = db.Column(db.String(10))
-    photo = db.Column(db.LargeBinary)
+    photo = db.Column(_DOC_BLOB)
     photo_mimetype = db.Column(db.String(100))
-    shs_diploma_file = db.Column(db.LargeBinary)
+    shs_diploma_file = db.Column(_DOC_BLOB)
     shs_diploma_filename = db.Column(db.String(255))
     shs_diploma_mimetype = db.Column(db.String(100))
-    shs_card_file = db.Column(db.LargeBinary)
+    shs_card_file = db.Column(_DOC_BLOB)
     shs_card_filename = db.Column(db.String(255))
     shs_card_mimetype = db.Column(db.String(100))
-    birth_certificate_file = db.Column(db.LargeBinary)
+    birth_certificate_file = db.Column(_DOC_BLOB)
     birth_certificate_filename = db.Column(db.String(255))
     birth_certificate_mimetype = db.Column(db.String(100))
     application_status = db.Column(db.String(50), default='Pending', nullable=False)
@@ -529,27 +1206,33 @@ class Applicant(db.Model):
     inventory_emergency_contact_name = db.Column(db.String(255))
     inventory_emergency_contact_number = db.Column(db.String(255))
     inventory_emergency_contact_relationship = db.Column(db.String(255))
-    enrollment_good_moral_file = db.Column(db.LargeBinary)
+    enrollment_good_moral_file = db.Column(_DOC_BLOB)
     enrollment_good_moral_filename = db.Column(db.String(255))
     enrollment_good_moral_mimetype = db.Column(db.String(100))
-    enrollment_psa_birth_file = db.Column(db.LargeBinary)
+    enrollment_psa_birth_file = db.Column(_DOC_BLOB)
     enrollment_psa_birth_filename = db.Column(db.String(255))
     enrollment_psa_birth_mimetype = db.Column(db.String(100))
-    enrollment_photos_2x2_file = db.Column(db.LargeBinary)
+    enrollment_photos_2x2_file = db.Column(_DOC_BLOB)
     enrollment_photos_2x2_filename = db.Column(db.String(255))
     enrollment_photos_2x2_mimetype = db.Column(db.String(100))
-    enrollment_entrance_fee_proof_file = db.Column(db.LargeBinary)
+    enrollment_entrance_fee_proof_file = db.Column(_DOC_BLOB)
     enrollment_entrance_fee_proof_filename = db.Column(db.String(255))
     enrollment_entrance_fee_proof_mimetype = db.Column(db.String(100))
-    enrollment_voters_id_file = db.Column(db.LargeBinary)
+    enrollment_voters_id_file = db.Column(_DOC_BLOB)
     enrollment_voters_id_filename = db.Column(db.String(255))
     enrollment_voters_id_mimetype = db.Column(db.String(100))
-    enrollment_cbs_file = db.Column(db.LargeBinary)
+    enrollment_cbs_file = db.Column(_DOC_BLOB)
     enrollment_cbs_filename = db.Column(db.String(255))
     enrollment_cbs_mimetype = db.Column(db.String(100))
-    enrollment_brgy_cert_file = db.Column(db.LargeBinary)
+    enrollment_brgy_cert_file = db.Column(_DOC_BLOB)
     enrollment_brgy_cert_filename = db.Column(db.String(255))
     enrollment_brgy_cert_mimetype = db.Column(db.String(100))
+    # NOTE (P1-03): the columns enrollment_shs_card_{file,filename,mimetype} and
+    # enrollment_shs_diploma_{file,filename,mimetype} exist in the database
+    # (full.sql / migration 0001) but are intentionally NOT mapped here. They are
+    # read and written only by raw SQL in auth.py. Mapping them would make every
+    # Applicant ORM query fail on a database where `scripts/migrate.py apply`
+    # has not been run yet (deferred() does not cover Query.count()).
     is_approved_by_president = db.Column(db.Boolean, default=False, nullable=False)
     president_approval_date = db.Column(db.DateTime)
     is_approved_by_accounting = db.Column(db.Boolean, default=False, nullable=False)
@@ -557,7 +1240,7 @@ class Applicant(db.Model):
     is_approved_by_dean = db.Column(db.Boolean, default=False, nullable=False)
     dean_approval_date = db.Column(db.DateTime)
     section_id = db.Column(db.Integer, db.ForeignKey('sections.id'))
-    pwd_id_file = db.Column(db.LargeBinary)
+    pwd_id_file = db.Column(_DOC_BLOB)
     pwd_id_filename = db.Column(db.String(255))
     pwd_id_mimetype = db.Column(db.String(100))
     is_section_permanent = db.Column(db.Boolean, default=False)

@@ -1,0 +1,38 @@
+{% extends 'admin_base.html' %}
+{% block title %}Enrollment Checklist{% endblock %}
+{% block breadcrumb %}Enrollment Checklist{% endblock %}
+{% block page_title %}Enrollment Checklist Settings{% endblock %}
+{% block content %}
+{% set ic = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500' %}
+<p class="text-sm text-gray-600 mb-4 max-w-3xl">These lines make up the checklist on every enrollment review. A student can be checked in only when every <strong>required</strong> line that applies to them is met. Turning a line off never deletes approvals already given; they are kept in the history.</p>
+<div class="space-y-4">
+{% for r in reqs + [None] %}
+    <form method="POST" class="bg-white p-5 rounded-xl shadow-sm border {{ 'border-gray-200' if (r is none or r.is_active) else 'border-dashed border-gray-300 opacity-80' }}" aria-label="{{ r.label if r else 'New checklist item' }}">
+        {% if r %}<input type="hidden" name="id" value="{{ r.id }}">{% endif %}
+        <div class="flex flex-wrap justify-between gap-2 mb-3">
+            <h2 class="font-semibold text-gray-800">{{ r.label if r else 'Add a checklist item' }}</h2>
+            <span class="text-xs text-gray-500">{{ kinds[r.kind] if r else kinds['manual'] }}{% if r %} &middot; code {{ r.code }}{% endif %}</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div class="md:col-span-3"><label class="block text-xs text-gray-600 mb-1" for="label-{{ r.id if r else 'new' }}">Label</label>
+                <input id="label-{{ r.id if r else 'new' }}" name="label" value="{{ r.label if r else '' }}" class="{{ ic }}" required maxlength="150"></div>
+            <div class="md:col-span-2"><label class="block text-xs text-gray-600 mb-1" for="ap-{{ r.id if r else 'new' }}">Applies to</label>
+                <select id="ap-{{ r.id if r else 'new' }}" name="applies_to" class="{{ ic }}">{% for k, v in applies.items() %}<option value="{{ k }}" {% if r and r.applies_to == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+            <div><label class="block text-xs text-gray-600 mb-1" for="so-{{ r.id if r else 'new' }}">Order</label>
+                <input id="so-{{ r.id if r else 'new' }}" name="sort_order" inputmode="numeric" value="{{ r.sort_order if r else 100 }}" class="{{ ic }}"></div>
+            <div class="md:col-span-6"><label class="block text-xs text-gray-600 mb-1" for="de-{{ r.id if r else 'new' }}">Description</label>
+                <input id="de-{{ r.id if r else 'new' }}" name="description" value="{{ r.description or '' if r else '' }}" class="{{ ic }}" maxlength="500"></div>
+            {% if not r or r.kind != 'regform' %}
+            <fieldset class="md:col-span-4"><legend class="text-xs text-gray-600 mb-1">Approved by</legend>
+                <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm">{% for role in roles %}<label class="flex items-center gap-1.5"><input type="checkbox" name="approver_roles" value="{{ role }}" {% if r and role in r.roles %}checked{% endif %}> {{ role|title }}</label>{% endfor %}</div></fieldset>
+            {% else %}<p class="md:col-span-4 text-xs text-gray-500 self-center">Met automatically; no one approves it by hand.</p>{% endif %}
+            <div class="md:col-span-2 flex flex-wrap items-center gap-4 text-sm">
+                <label class="flex items-center gap-1.5"><input type="checkbox" name="is_required" value="1" {% if r is none or r.is_required %}checked{% endif %}> Required</label>
+                <label class="flex items-center gap-1.5"><input type="checkbox" name="is_active" value="1" {% if r is none or r.is_active %}checked{% endif %}> Active</label>
+                <button class="ml-auto px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">{{ 'Save' if r else 'Add item' }}</button>
+            </div>
+        </div>
+    </form>
+{% endfor %}
+</div>
+{% endblock %}

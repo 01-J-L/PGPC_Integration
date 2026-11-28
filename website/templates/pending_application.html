@@ -311,6 +311,14 @@ tailwind.config = {
                                     {% else %}Please check your email or contact the registrar.{% endif %}
                                 </div>
 
+                                {% if enrollment_payment %}
+                                <div class="mb-6 p-4 rounded-lg border text-sm {{ 'bg-green-50 border-green-200 text-green-800' if enrollment_payment.ok else 'bg-yellow-50 border-yellow-200 text-yellow-900' }}" id="enrollment-payment">
+                                    <p class="font-semibold mb-1"><i class="ri-wallet-3-line"></i> Payment for enrollment</p>
+                                    <p>{{ enrollment_payment.message }}</p>
+                                    {% if enrollment_payment.required is not none %}<p class="mt-1 text-xs">Required: {{ enrollment_payment.required|peso }} &middot; Paid: {{ enrollment_payment.paid|peso }}</p>{% endif %}
+                                </div>
+                                {% endif %}
+
                                 <!-- Requirements -->
                                 {% set req_key = 'status_msg_' ~ status.lower().replace(' ', '_') %}
                                 {% if status == 'Eligible for Enrollment' %}{% set req_key = 'status_msg_enrolling' %}{% endif %}
@@ -344,7 +352,7 @@ tailwind.config = {
                                     {% endif %}
 
                                     {% if status == 'Passed' %}
-                                    <a href="{{ url_for('auth.enrollment_form_page', applicant_id=application.applicant_id) }}" class="bg-green-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-green-700 transition-colors shadow-sm flex items-center gap-2">
+                                    <a href="{{ url_for('views.enrollment_form_page', applicant_id=application.applicant_id) }}" class="bg-green-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-green-700 transition-colors shadow-sm flex items-center gap-2">
                                         <i class="ri-file-edit-line"></i> Complete Enrollment Form
                                     </a>
                                     <button id="viewPassedConfirmationBtn" class="bg-white border border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-2">
@@ -747,4 +755,4 @@ tailwind.config = {
         }
     });
 </script>
-{% endblock %}
+{% endblock %}
