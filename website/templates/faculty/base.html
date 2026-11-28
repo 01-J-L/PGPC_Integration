@@ -298,6 +298,41 @@
             </main>
         </div>
     </div>
+
+    <!-- Keep the sidebar's scroll position across page navigations -->
+    <script>
+        (function () {
+            var KEY = 'sidebar-scroll-top';
+            var nav = document.querySelector('aside nav');
+            if (!nav) return;
+
+            function restore() {
+                var value = sessionStorage.getItem(KEY);
+                if (value !== null) nav.scrollTop = parseInt(value, 10) || 0;
+            }
+
+            // Try immediately, then again once Tailwind's CDN styles have been
+            // generated (the nav is not scrollable until then).
+            restore();
+            document.addEventListener('DOMContentLoaded', restore);
+
+            var ticking = false;
+            function save() {
+                if (ticking) return;
+                ticking = true;
+                requestAnimationFrame(function () {
+                    sessionStorage.setItem(KEY, nav.scrollTop);
+                    ticking = false;
+                });
+            }
+
+            nav.addEventListener('scroll', save, { passive: true });
+            window.addEventListener('pagehide', function () {
+                sessionStorage.setItem(KEY, nav.scrollTop);
+            });
+        })();
+    </script>
+
     {% block scripts %}{% endblock %}
 </body>
 </html>
