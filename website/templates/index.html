@@ -1,5 +1,9 @@
 {% extends 'base.html' %}
 
+{% block title %}Padre Garcia Polytechnic College | PGPC - Home{% endblock %}
+{% block meta_description %}Official website of Padre Garcia Polytechnic College (PGPC) in Padre Garcia, Batangas. Explore academic programs, admission and enrollment, announcements, and campus news.{% endblock %}
+{% block meta_keywords %}Padre Garcia Polytechnic College, PGPC, polytechnic college Padre Garcia, college in Batangas, PGPC admission, PGPC enrollment, PGPC programs{% endblock %}
+
 {% block style %}
 <style>
     /* --- General Styles & Theme Variables (Inspired by z.html) --- */
@@ -1183,7 +1187,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.2.0/remixicon.min.css">
 <link rel="stylesheet" href="https://unpkg.com/swiper/swiper-bundle.min.css" />
-<title>Padre Garcia Polytechnic College - Home</title>
 {% endblock %}
 
 {% block body %}
@@ -1323,7 +1326,7 @@
 <div class="programs section-container" id="programs">
     <div class="section-title-wrapper reveal-on-scroll">
         <p class="section-kicker">Explore Our Offerings</p>
-        <h1 class="section-title">Our Academic Programs</h1>
+        <h2 class="section-title">Our Academic Programs</h2>
         <p class="section-subtitle">Discover a wide range of programs designed to equip you with the skills for a
             successful future.</p>
     </div>
@@ -1382,7 +1385,7 @@
 <div class="announcements section-container" id="announcements">
     <div class="section-title-wrapper reveal-on-scroll">
         <p class="section-kicker">Stay Informed</p>
-        <h1 class="section-title">Latest Announcements</h1>
+        <h2 class="section-title">Latest Announcements</h2>
         <p class="section-subtitle">Keep up to date with important news, events, and deadlines from the administration.
         </p>
     </div>
@@ -1417,7 +1420,7 @@
     <div class="container" style="padding:0;">
         <div class="section-title-wrapper reveal-on-scroll">
             <p class="section-kicker">Campus Stories</p>
-            <h1 class="section-title">News & Features</h1>
+            <h2 class="section-title">News &amp; Features</h2>
             <p class="section-subtitle">Explore the latest stories, achievements, and highlights from our vibrant campus
                 community.</p>
         </div>
@@ -1505,7 +1508,7 @@
         alt="Padre Garcia Polytechnic College logo" class="footer-logo" />
 
     <!-- Dynamic Title & Slogan -->
-    <h1 class="footer-title">{{ global_content.footer_title or 'Padre Garcia Polytechnic College' }}</h1>
+    <h2 class="footer-title">{{ global_content.footer_title or 'Padre Garcia Polytechnic College' }}</h2>
     <h2 class="footer-subtitle">{{ global_content.footer_subtitle or 'THE FUTURE BEGINS HERE.' }}</h2>
 
     <!-- Dynamic Connect Text & Socials -->
