@@ -10776,4 +10776,4 @@ def view_student_grades():
         return redirect(url_for('views.application_status_page'))
     finally:
         if cursor: cursor.close()
-        if conn and conn.is_connected(): conn.close()
+        if conn and conn.is_connected(): conn.close()

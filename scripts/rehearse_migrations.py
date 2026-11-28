@@ -97,12 +97,23 @@ def apply_timed(conn):
 
 
 def compare(before, after, label):
+    """Existing data must not change. A table that was already there but EMPTY (made earlier by the
+    app's startup create_all, before its migration ran) may receive the migration's seed rows, and
+    a rollback may drop it again: no data is lost either way. Those cases are printed as notes."""
     problems = []
     for t, (rows, ids) in before.items():
+        if t == 'schema_migrations':
+            continue
         if t not in after:
-            problems.append(f'{label}: table {t} disappeared')
-        elif after[t] != (rows, ids) and t != 'schema_migrations':
-            problems.append(f'{label}: {t} changed from {rows} rows to {after[t][0]} rows (or its ids changed)')
+            if rows == 0:
+                print(f'   note ({label}): empty table {t} was dropped by a rollback')
+            else:
+                problems.append(f'{label}: table {t} disappeared')
+        elif after[t] != (rows, ids):
+            if rows == 0:
+                print(f'   note ({label}): empty table {t} now has {after[t][0]} row(s) (seed data)')
+            else:
+                problems.append(f'{label}: {t} changed from {rows} rows to {after[t][0]} rows (or its ids changed)')
     return problems
 
 

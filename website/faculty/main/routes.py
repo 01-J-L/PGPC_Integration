@@ -1289,7 +1289,7 @@ def section_schedule_grid(program_id, section_name, semester):
     edit_form.faculty.choices = faculty_choices
     edit_form.room.choices = room_choices
 
-    section_info = { 'program': program.program_name, 'section': section_name, 'semester_display': '1st Semester' if semester == 1 else '2nd Semester' }
+    section_info = { 'program': program.program_name or program.title or program.id, 'section': section_name, 'semester_display': '1st Semester' if semester == 1 else '2nd Semester' }
     
     # --- 9. DRAFT CHECK (FIXED) ---
     # We now JOIN explicitly on course_code because there is no relationship in models

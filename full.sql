@@ -1679,4 +1679,4 @@ INSERT INTO grading_settings (active_school_year, active_semester)
 -- To pre-create one, generate the hash first:
 --   python -c "from werkzeug.security import generate_password_hash as g; print(g('adminpgpc@2025', method='pbkdf2:sha256'))"
 -- INSERT INTO users (username, email, password_hash, role, status, full_name, `system`, can_edit)
---   VALUES ('admin', 'admin@example.com', '<PASTE_HASH>', 'admin', 'active', 'System Administrator', 'admission', 1);
+--   VALUES ('admin', 'admin@example.com', '<PASTE_HASH>', 'admin', 'active', 'System Administrator', 'admission', 1);
