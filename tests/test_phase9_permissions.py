@@ -19,7 +19,7 @@ WATCHED_TABLES = ['applicants', 'assessments', 'payments', 'student_grades', 'se
                   'curriculum_versions', 'curriculum_subjects', 'student_curricula', 'registration_forms',
                   'registration_form_subjects', 'enrollment_assessments', 'payment_verifications', 'payment_reversals',
                   'enrollment_checklist_requirements', 'enrollment_checklist_items', 'enrollment_checkins',
-                  'control_numbers', 'control_number_sequences', 'grade_releases', 'grade_holds', 'section_archives',
+                  'control_numbers', 'control_number_sequences', 'grade_releases', 'grade_holds', 'section_archives', 'down_payments',
                   'student_enrollment_records']
 
 

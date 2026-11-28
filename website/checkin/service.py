@@ -302,6 +302,8 @@ def check_in(actor, applicant_id, term_id=None, manual_section_id=None):
             _, rep = finance.generate_for_form(form, actor)
             if rep['created']:
                 fee_note = ' %d new charge(s) added.' % len(rep['created'])
+            for amt, charge in rep.get('down_payments_applied') or []:
+                fee_note += ' Down payment of %s deducted from %s.' % (finance.peso(amt), charge)
         else:
             cur.execute("""SELECT student_user_id, first_name, last_name, email_address, program_choice,
                                   enrollment_year_level, enrollment_semester, enrollment_student_type, section_id,
@@ -323,6 +325,11 @@ def check_in(actor, applicant_id, term_id=None, manual_section_id=None):
                     (applicant.student_user_id, term.id, applicant.enrollment_year_level, applicant.enrollment_semester))
     finally:
         cur.close()
+
+    # Down payments taken before enrollment go to the Tuition Fee now at the latest
+    from website.finance import service as _finance
+    for amt, charge in _finance.apply_down_payments(actor, applicant.student_user_id, term.id):
+        fee_note += ' Down payment of %s deducted from %s.' % (_finance.peso(amt), charge)
 
     # E. Phase 6: the PGPC-YY-NNNN enrollment control number (kept if the check-in is redone)
     from website.checkin import control

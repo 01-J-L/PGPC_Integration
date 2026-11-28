@@ -1484,6 +1484,36 @@ CREATE TABLE IF NOT EXISTS section_archives (
 	FOREIGN KEY(section_id) REFERENCES sections (id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- =====================================================================
+--  ENROLLMENT DOWN PAYMENTS (generated from website/models.py)
+-- =====================================================================
+-- ---- down_payments -----------------------------------------------
+CREATE TABLE IF NOT EXISTS down_payments (
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	payment_id INTEGER NOT NULL, 
+	student_user_id INTEGER NOT NULL, 
+	applicant_id INTEGER NOT NULL, 
+	academic_term_id INTEGER NOT NULL, 
+	amount NUMERIC(12, 2) NOT NULL, 
+	status VARCHAR(20) NOT NULL DEFAULT 'held', 
+	applied_assessment_id INTEGER, 
+	applied_by VARCHAR(150), 
+	applied_at DATETIME, 
+	created_by VARCHAR(150) NOT NULL, 
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+	PRIMARY KEY (id), 
+	UNIQUE (payment_id), 
+	FOREIGN KEY(payment_id) REFERENCES payments (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(student_user_id) REFERENCES student_users (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(applicant_id) REFERENCES applicants (applicant_id) ON DELETE RESTRICT, 
+	FOREIGN KEY(academic_term_id) REFERENCES academic_terms (id) ON DELETE RESTRICT, 
+	FOREIGN KEY(applied_assessment_id) REFERENCES assessments (id) ON DELETE RESTRICT,
+	INDEX ix_down_payments_applicant_id (applicant_id),
+	INDEX ix_down_payments_student_user_id (student_user_id),
+	INDEX ix_down_payments_academic_term_id (academic_term_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------
 --  Schema migration ledger (website/schema_migrations.py).
 --  A database built from THIS file already contains every change below, so
@@ -1503,7 +1533,8 @@ INSERT IGNORE INTO schema_migrations (id, description, applied_at) VALUES
   ('0006_enrollment_checkin', 'built into full.sql', NOW()),
   ('0007_control_numbers', 'built into full.sql', NOW()),
   ('0008_grade_visibility', 'built into full.sql', NOW()),
-  ('0009_section_archives', 'built into full.sql', NOW());
+  ('0009_section_archives', 'built into full.sql', NOW()),
+  ('0010_down_payments', 'built into full.sql', NOW());
 
 SET FOREIGN_KEY_CHECKS = 1;
 

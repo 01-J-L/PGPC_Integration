@@ -54,10 +54,22 @@ def index():
                 continue
             rows.append({'ea': ea, 'applicant': db.session.get(Applicant, ea.applicant_id), 's': s, 'policy_ok': ok, 'policy_why': why,
                          'cleared': _cleared(ea.student_user_id, term_id), 'checked_in': is_checked_in(ea.student_user_id, term_id)})
+    # down payments of the term that are not yet on a charge (the student may have no assessment yet)
+    down = []
+    if term_id:
+        from website.models import DownPayment
+        for dp in DownPayment.query.filter_by(academic_term_id=term_id, status='held').order_by(DownPayment.id).all():
+            p = db.session.execute(text(
+                "SELECT p.id, p.amount_paid, p.payment_date, p.receipt_number, p.cashier_username, pv.verified_by, "
+                "(pr.id IS NOT NULL) AS reversed FROM payments p LEFT JOIN payment_verifications pv ON pv.payment_id = p.id "
+                "LEFT JOIN payment_reversals pr ON pr.payment_id = p.id WHERE p.id = :p"), {'p': dp.payment_id}).mappings().first()
+            if p and not p['reversed']:
+                down.append({'dp': dp, 'p': p, 'applicant': db.session.get(Applicant, dp.applicant_id)})
     base = 'admin_base.html' if role == 'admin' else 'accounting_base.html'
     return render_template('finance/index.html', rows=rows, terms=terms, term_id=term_id, status=status,
                            policy=service.get_policy(), modes=service.POLICY_MODES, base_template=base,
-                           can_edit_policy=role in ('accounting', 'admin'), years=YEAR_LABELS, active_page='enrollment_finance')
+                           can_edit_policy=role in ('accounting', 'admin'), years=YEAR_LABELS, active_page='enrollment_finance',
+                           down=down)
 
 
 def _cleared(student_user_id, term_id):

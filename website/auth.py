@@ -2199,7 +2199,7 @@ def print_receipt(payment_id):
 
     try:
         # 1. Fetch Payment Data (your existing query)
-        cursor.execute("SELECT p.*, a.first_name, a.last_name, asm.description as fee_description FROM payments p JOIN applicants a ON p.student_id = a.applicant_id LEFT JOIN assessments asm ON p.assessment_id = asm.id WHERE p.id = %s", (payment_id,))
+        cursor.execute("SELECT p.*, a.first_name, a.last_name, COALESCE(asm.description, p.remark) as fee_description FROM payments p JOIN applicants a ON p.student_id = a.applicant_id LEFT JOIN assessments asm ON p.assessment_id = asm.id WHERE p.id = %s", (payment_id,))
         payment = cursor.fetchone()
 
         if not payment:
@@ -3004,10 +3004,18 @@ def update_payment(student_id_db):
     # one-time form token (no double recording), optional unique O.R. number.
     if request.method == 'POST':
         try:
-            payment_id, duplicate = finance.record_payment(
-                actor, student_id_db, request.form.get('assessment_id', type=int), request.form.get('amount'),
-                request.form.get('payment_date'), request.form.get('payment_method'), request.form.get('remark'),
-                request.form.get('receipt_number'), request.form.get('submission_token'))
+            if request.form.get('assessment_id') == 'down':
+                # enrollment down payment: before the fees exist; applied to the Tuition Fee later
+                _term = _get_active_term()
+                payment_id, duplicate = finance.record_down_payment(
+                    actor, student_id_db, _term['id'] if _term else None, request.form.get('amount'),
+                    request.form.get('payment_date'), request.form.get('payment_method'), request.form.get('remark'),
+                    request.form.get('receipt_number'), request.form.get('submission_token'))
+            else:
+                payment_id, duplicate = finance.record_payment(
+                    actor, student_id_db, request.form.get('assessment_id', type=int), request.form.get('amount'),
+                    request.form.get('payment_date'), request.form.get('payment_method'), request.form.get('remark'),
+                    request.form.get('receipt_number'), request.form.get('submission_token'))
             _db.session.commit()
         except finance.FinanceError as e:
             _db.session.rollback()
@@ -3072,6 +3080,8 @@ def update_payment(student_id_db):
             term_summary = finance.summary(student['student_user_id'], active['id'])
             term_summary['term_label'] = f"{active['year_name']} {active['semester']}"
             term_summary['requirement'] = finance.enrollment_requirement(student['student_user_id'], active['id'], term_summary)
+            from website.checkin.service import is_checked_in as _checked_in
+            term_summary['down_payment_allowed'] = not _checked_in(student['student_user_id'], active['id'])
 
     return render_template('update_payment.html',
                            student=student,

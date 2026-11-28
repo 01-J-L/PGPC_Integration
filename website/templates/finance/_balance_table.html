@@ -9,6 +9,9 @@
             <td class="py-2 text-right text-lg font-bold {{ 'text-red-600' if term_summary.remaining > 0 else 'text-green-700' }}">{{ term_summary.remaining|peso }}</td></tr>
     </tbody>
 </table>
+{% if term_summary.held_down_payments and term_summary.held_down_payments > 0 %}
+<p class="text-xs text-indigo-700 mt-2" id="held-down-payment">Includes a down payment of {{ term_summary.held_down_payments|peso }}, deducted from the Tuition Fee once the fees are prepared (at the latest at enrollment).</p>
+{% endif %}
 {% if term_summary.assessment is none %}
 <p class="text-xs text-gray-500 mt-2">No assessment for this term yet: it is generated when the registrar finalizes the registration form.</p>
 {% elif term_summary.latest_payment %}
